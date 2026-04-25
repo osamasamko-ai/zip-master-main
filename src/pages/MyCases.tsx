@@ -662,9 +662,17 @@ export default function MyCases() {
       const nextCases = response.data || [];
       if (nextCases.length > 0) {
         setCases((current) => mergeCasesWithPendingMessages(nextCases, current));
-        setActiveCaseId(nextActiveCaseId || nextCases[0].id);
+
+        // Robust selection of next active case:
+        // 1. Use suggested ID if it exists in the fresh list
+        // 2. Otherwise use the first available case
+        const targetId = nextCases.some(c => c.id === nextActiveCaseId)
+          ? nextActiveCaseId!
+          : nextCases[0].id;
+        setActiveCaseId(targetId);
       } else {
         setCases([]);
+        setActiveCaseId(''); // Ensure active ID is cleared when no cases remain
       }
     } catch (error) {
       console.error('Failed to refresh cases', error);
@@ -1037,9 +1045,15 @@ export default function MyCases() {
 
   const confirmDelete = async () => {
     if (!caseToDelete) return;
-    await apiClient.deleteWorkspaceCase(caseToDelete);
-    await refreshCases();
-    setCaseToDelete(null);
+    const idToDelete = caseToDelete;
+    setCaseToDelete(null); // Close modal immediately for better UX
+    try {
+      await apiClient.deleteWorkspaceCase(idToDelete);
+      await refreshCases();
+    } catch (error) {
+      console.error('Failed to delete case', error);
+      alert('تعذر حذف الملف. يرجى المحاولة مرة أخرى.');
+    }
   };
 
   const createFolder = async () => {
@@ -1137,17 +1151,17 @@ export default function MyCases() {
       current.map((item) =>
         item.id === caseId
           ? {
-              ...item,
-              messages: item.messages.map((message) =>
-                message.id === messageId
-                  ? {
-                      ...message,
-                      deliveryState,
-                      time: deliveryState === 'failed' ? 'فشل الإرسال' : 'الآن',
-                    }
-                  : message,
-              ),
-            }
+            ...item,
+            messages: item.messages.map((message) =>
+              message.id === messageId
+                ? {
+                  ...message,
+                  deliveryState,
+                  time: deliveryState === 'failed' ? 'فشل الإرسال' : 'الآن',
+                }
+                : message,
+            ),
+          }
           : item,
       ),
     );
@@ -1158,9 +1172,9 @@ export default function MyCases() {
       current.map((item) =>
         item.id === caseId
           ? {
-              ...item,
-              messages: [...item.messages, message],
-            }
+            ...item,
+            messages: [...item.messages, message],
+          }
           : item,
       ),
     );

@@ -374,7 +374,29 @@ export async function toggleCaseArchive(caseId: string) {
 }
 
 export async function deleteCaseWorkspace(caseId: string) {
-  await prisma.case.delete({ where: { id: caseId } });
+  // Delete in correct order due to foreign key constraints
+  await prisma.$transaction(async (tx) => {
+    // Delete chat messages and sessions
+    await tx.message.deleteMany({ where: { session: { caseId } } });
+    await tx.chatSession.deleteMany({ where: { caseId } });
+
+    // Delete documents and folders
+    await tx.document.deleteMany({ where: { caseId } });
+    await tx.folder.deleteMany({ where: { caseId } });
+
+    // Delete case-related data
+    await tx.caseCustomField.deleteMany({ where: { caseId } });
+    await tx.caseTimelineEntry.deleteMany({ where: { caseId } });
+    await tx.caseCollaborator.deleteMany({ where: { caseId } });
+    await tx.caseAccessLog.deleteMany({ where: { caseId } });
+
+    // Delete optional references
+    await tx.appointment.deleteMany({ where: { caseId } });
+    await tx.invoice.deleteMany({ where: { caseId } });
+
+    // Finally delete the case itself
+    await tx.case.delete({ where: { id: caseId } });
+  });
 }
 
 export async function addCaseCollaborator(caseId: string, payload: { email: string; role: string; permissions: string; }) {
