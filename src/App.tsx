@@ -18,6 +18,9 @@ import Settings from './pages/Settings';
 import MyCases from './pages/MyCases';
 import LegalDocs from './pages/LegalDocs';
 import Following from './pages/Following';
+import Lawyers from './pages/Lawyers';
+import Messages from './pages/Messages';
+import Billing from './pages/Billing';
 
 function getDefaultRoute(role: 'user' | 'pro' | 'admin' | null) {
   if (role === 'admin') return '/admin';
@@ -73,6 +76,9 @@ export default function App() {
               <Route index element={<Navigate to="/user" replace />} />
               <Route path="user" element={<UserDashboard />} />
               <Route path="cases" element={<MyCases />} />
+              <Route path="lawyers" element={<Lawyers />} />
+              <Route path="messages" element={<Messages />} />
+              <Route path="billing" element={<Billing />} />
               <Route path="aichat" element={<AiChat />} />
               <Route path="legal" element={<LegalDocs />} />
               <Route path="following" element={<Following />} />

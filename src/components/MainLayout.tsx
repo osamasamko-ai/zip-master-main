@@ -23,11 +23,14 @@ export default function MainLayout() {
 
   // Breadcrumb mapping
   const pathMap: Record<string, string> = {
-    'user': 'الرئيسية',
+    'user': 'لوحة التحكم',
     'cases': 'القضايا',
-    'following': 'المتابعون',
-    'legal': 'القوانين',
-    'aichat': 'المستشار الذكي',
+    'lawyers': 'المحامون',
+    'messages': 'الرسائل',
+    'billing': 'المدفوعات',
+    'following': 'المحفوظون',
+    'legal': 'المكتبة القانونية',
+    'aichat': 'المساعد الذكي',
     'pro': 'مكتب المحامي',
     'admin': 'الإدارة',
     'profile': 'الملف الشخصي',
@@ -77,10 +80,12 @@ export default function MainLayout() {
 
     // Common navigation shortcuts
     const items = [
-      { id: 'n1', type: 'ملاحة', title: 'القضايا النشطة', subtitle: 'متابعة سير العمل', icon: 'fa-folder-open', path: '/cases' },
-      { id: 'n2', type: 'ملاحة', title: 'البحث القانوني', subtitle: 'قاعدة القوانين العراقية', icon: 'fa-gavel', path: '/legal' },
-      { id: 'n3', type: 'ملاحة', title: 'المستشار الذكي', subtitle: 'توليد مسودات بالذكاء الاصطناعي', icon: 'fa-robot', path: '/aichat' },
-      { id: 'n4', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
+      { id: 'n1', type: 'ملاحة', title: 'لوحة التحكم', subtitle: 'أسرع طريق لما يحتاج انتباهك الآن', icon: 'fa-table-columns', path: '/user' },
+      { id: 'n2', type: 'ملاحة', title: 'القضايا', subtitle: 'متابعة سير العمل والمهام المطلوبة', icon: 'fa-folder-open', path: '/cases' },
+      { id: 'n3', type: 'ملاحة', title: 'المحامون', subtitle: 'ابحث وتواصل وافتح قضية بسرعة', icon: 'fa-scale-balanced', path: '/lawyers' },
+      { id: 'n4', type: 'ملاحة', title: 'الرسائل', subtitle: 'جميع المحادثات القانونية في مكان واحد', icon: 'fa-comments', path: '/messages' },
+      { id: 'n5', type: 'ملاحة', title: 'المدفوعات', subtitle: 'الرصيد والفواتير والمعاملات', icon: 'fa-wallet', path: '/billing' },
+      { id: 'n6', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
     ];
 
     if (user?.role === 'admin') {
@@ -136,11 +141,11 @@ export default function MainLayout() {
   const navItems = useMemo(
     () =>
       [
-        { name: 'الرئيسية', icon: 'fa-user-shield', path: '/user' },
+        { name: 'لوحة التحكم', icon: 'fa-table-columns', path: '/user' },
         { name: 'القضايا', icon: 'fa-folder-open', path: '/cases' },
-        { name: 'المتابعون', icon: 'fa-user-check', path: '/following' },
-        { name: 'القوانين', icon: 'fa-gavel', path: '/legal' },
-        { name: 'الذكاء القانوني', icon: 'fa-robot', path: '/aichat', accent: true },
+        { name: 'المحامون', icon: 'fa-scale-balanced', path: '/lawyers' },
+        { name: 'الرسائل', icon: 'fa-comments', path: '/messages' },
+        { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },
         { name: 'المحامي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
         { name: 'الإدارة', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
       ].filter((item) => item.visible !== false),
@@ -248,7 +253,7 @@ export default function MainLayout() {
                         className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"
                       >
                         <i className="fa-solid fa-user-check opacity-50"></i>
-                        قائمة المتابعة
+                        المحامون المحفوظون
                       </button>
                       <div className="my-1 h-px bg-slate-50"></div>
                       <button

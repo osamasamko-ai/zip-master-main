@@ -216,18 +216,18 @@ export default function Profile() {
                 <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} className="flex-1" />
               </div>
               <ActionButton
-                onClick={() => navigate('/user', { state: { activeTab: 'schedule' } })}
+                onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)}
                 variant="primary"
                 className="w-full"
               >
-                احجز استشارة الآن
+                تواصل الآن
               </ActionButton>
               <ActionButton
-                onClick={() => navigate('/following')}
+                onClick={() => navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: lawyer.id } })}
                 variant="secondary"
                 className="w-full"
               >
-                اذهب إلى My Following
+                افتح قضية مع هذا المحامي
               </ActionButton>
             </div>
 
@@ -327,10 +327,10 @@ export default function Profile() {
             </button>
             <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} />
             <ActionButton
-              onClick={() => navigate('/user', { state: { activeTab: 'schedule' } })}
+              onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)}
               variant="ghost"
             >
-              احجز استشارة
+              تواصل
             </ActionButton>
           </div>
         </div>
@@ -341,9 +341,9 @@ export default function Profile() {
           <div className="space-y-6">
             <NoticePanel
               title="الخطوة التالية"
-              description={`أفضل خطوة الآن هي ${lawyer.isOnline ? 'حجز استشارة مباشرة' : 'متابعة المحامي وتفعيل التنبيهات'} إذا كان تخصص ${lawyer.specialty} يطابق حاجتك الحالية.`}
+              description={`أفضل خطوة الآن هي ${lawyer.isOnline ? 'بدء رسالة مباشرة' : 'فتح قضية جديدة مع هذا المحامي'} إذا كان تخصص ${lawyer.specialty} يطابق حاجتك الحالية.`}
               action={
-                <ActionButton onClick={() => navigate('/user', { state: { activeTab: 'schedule' } })} variant="primary" size="sm">
+                <ActionButton onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)} variant="primary" size="sm">
                   ابدأ الآن
                 </ActionButton>
               }

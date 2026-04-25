@@ -190,6 +190,7 @@ function mapWorkspaceCase(item: any) {
     id: item.id,
     title: item.title,
     lawyer: {
+      id: item.lawyer.id,
       name: item.lawyer.name,
       role: item.lawyer.roleDescription || item.lawyer.lawyerProfile?.specialty || 'محامٍ',
       img: item.lawyer.img || item.lawyer.lawyerProfile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(item.lawyer.name)}&background=0d2a59&color=ffffff`,

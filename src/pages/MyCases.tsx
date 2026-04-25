@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import ActionButton from '../components/ui/ActionButton';
@@ -13,12 +13,14 @@ type CaseStatus = 'pending' | 'review' | 'active' | 'closed';
 
 type WorkspaceTab = 'summary' | 'chat' | 'docs' | 'ai' | 'financials';
 type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded';
+type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed';
 
 type CaseMessageSender = 'user' | 'lawyer';
 
 type DocAction = 'بانتظار توقيعك' | null;
 
 interface CaseLawyer {
+  id?: string;
   name: string;
   role: string;
   img: string;
@@ -139,12 +141,18 @@ const CaseSidebar = ({
   setActiveCaseId: (id: string) => void,
   showArchived: boolean,
   searchQuery: string,
-  statusFilter: CaseStatus | 'all'
+  statusFilter: SidebarFilter
 }) => {
   const filtered = cases.filter((c) => {
     const matchesArchive = showArchived ? c.isArchived : !c.isArchived;
     const matchesSearch = c.title.toLowerCase().includes(searchQuery.toLowerCase()) || c.lawyer.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || c.status === statusFilter;
+    const hasAction = c.status === 'pending' || (c.unreadCount ?? 0) > 0 || c.documents.some((doc) => doc.actionRequired || doc.expiresAt);
+    const matchesStatus =
+      statusFilter === 'all' ||
+      (statusFilter === 'needs_action' && hasAction) ||
+      (statusFilter === 'in_progress' && c.status === 'active') ||
+      (statusFilter === 'waiting' && c.status === 'review') ||
+      (statusFilter === 'completed' && c.status === 'closed');
     return matchesArchive && matchesSearch && matchesStatus;
   });
 
@@ -575,6 +583,7 @@ export default function MyCases() {
   const { user, logout } = useAuth();
   const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications(); // Use global notifications
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [activeCaseId, setActiveCaseId] = useState<string>('');
   const [cases, setCases] = useState<LegalCase[]>([]);
@@ -594,7 +603,8 @@ export default function MyCases() {
   };
 
   useEffect(() => {
-    refreshCases();
+    const state = location.state as { activeCaseId?: string } | null;
+    refreshCases(state?.activeCaseId);
   }, []);
 
   useEffect(() => {
@@ -635,7 +645,7 @@ export default function MyCases() {
 
   const [showArchived, setShowArchived] = useState(false);
   const [sidebarSearch, setSidebarSearch] = useState('');
-  const [sidebarStatusFilter, setSidebarStatusFilter] = useState<CaseStatus | 'all'>('all');
+  const [sidebarStatusFilter, setSidebarStatusFilter] = useState<SidebarFilter>('needs_action');
   const [isRecording, setIsRecording] = useState(false);
   const [isCaseSwitcherOpen, setIsCaseSwitcherOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -664,6 +674,35 @@ export default function MyCases() {
   const currentModalLawyer = useMemo(() =>
     availableLawyers.find(l => l.id === newCaseLawyerId) || availableLawyers[0] || FALLBACK_LAWYERS[0]
     , [availableLawyers, newCaseLawyerId]);
+
+  useEffect(() => {
+    const state = location.state as {
+      openNewCase?: boolean;
+      preselectedLawyerId?: string;
+      activeCaseId?: string;
+      focusArea?: 'docs' | 'messages';
+    } | null;
+
+    if (!state) return;
+
+    if (state.preselectedLawyerId) {
+      setNewCaseLawyerId(state.preselectedLawyerId);
+    }
+    if (state.activeCaseId) {
+      setActiveCaseId(state.activeCaseId);
+    }
+    if (state.focusArea === 'docs') {
+      setActiveTab('docs');
+    }
+    if (state.focusArea === 'messages') {
+      setActiveTab('chat');
+    }
+    if (state.openNewCase) {
+      setIsNewCaseModalOpen(true);
+    }
+
+    window.history.replaceState({}, document.title);
+  }, [location.state]);
 
   const handleLogout = () => {
     logout();
@@ -1146,13 +1185,21 @@ export default function MyCases() {
                 <i className="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
               </div>
               <div className="flex gap-1 mt-4 overflow-x-auto no-scrollbar pb-1">
-                {(['all', 'review', 'active', 'closed'] as const).map((f) => (
+                {(['needs_action', 'in_progress', 'waiting', 'completed', 'all'] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setSidebarStatusFilter(f)}
                     className={`px-3 py-1.5 rounded-xl text-[9px] font-black whitespace-nowrap transition-all ${sidebarStatusFilter === f ? 'bg-brand-navy text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}
                   >
-                    {f === 'all' ? 'الكل' : f === 'review' ? 'بانتظارك' : f === 'active' ? 'نشط' : 'مكتمل'}
+                    {f === 'needs_action'
+                      ? 'تحتاج إجراء'
+                      : f === 'in_progress'
+                        ? 'قيد التنفيذ'
+                        : f === 'waiting'
+                          ? 'بانتظار المحامي'
+                          : f === 'completed'
+                            ? 'مكتملة'
+                            : 'الكل'}
                   </button>
                 ))}
               </div>

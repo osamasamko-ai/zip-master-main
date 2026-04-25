@@ -112,7 +112,7 @@ export default function Following() {
                 <i className="fa-solid fa-bell"></i>
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-black text-brand-gold">تحديث من قائمة المتابعة</p>
+                <p className="text-xs font-black text-brand-gold">تحديث من المحفوظات</p>
                 <p className="truncate text-sm font-bold">{activeToast.message}</p>
               </div>
               <button
@@ -130,15 +130,15 @@ export default function Following() {
         <div className="absolute -left-20 -top-20 h-56 w-56 rounded-full bg-brand-gold/10 blur-3xl"></div>
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">شبكة الثقة</p>
-            <h2 className="mt-3 text-3xl font-black text-brand-dark">قائمة المتابعة</h2>
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">Saved Lawyers</p>
+            <h2 className="mt-3 text-3xl font-black text-brand-dark">المحامون المحفوظون</h2>
             <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
-              تابع المحامين الذين تثق بهم، واحصل على وصول أسرع إليهم في البحث والنتائج والتنبيهات.
+              قائمة عملية للرجوع السريع إلى المحامين الذين تثق بهم، ثم التواصل أو فتح قضية جديدة معهم دون خطوات إضافية.
             </p>
           </div>
           <div className="grid grid-cols-2 gap-3 lg:min-w-[320px]">
             <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">المتابَعون</p>
+              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">المحفوظون</p>
               <p className="mt-2 text-3xl font-black text-brand-dark">{totalFollowed}</p>
               <p className="mt-1 text-xs font-bold text-slate-500">قائمة مفضلة سريعة الوصول</p>
             </div>
@@ -157,19 +157,19 @@ export default function Following() {
         <div className="space-y-6">
           <NoticePanel
             title="الخطوة التالية"
-            description="إذا كنت تبحث عن قرار سريع، ابدأ بالمحامي المتصل الآن أو صاحب أعلى توافق مع تخصصك المطلوب. المتابَعون يُرتبون أولًا افتراضيًا."
+            description="إذا كنت تريد إنجازاً سريعاً، ابدأ بالمحامي المتاح الآن ثم استخدم زر التواصل أو افتح قضية جديدة مباشرة من هذه الصفحة."
           />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <h3 className="text-xl font-black text-brand-dark">قائمة المتابعة</h3>
-              <p className="mt-1 text-xs font-bold text-slate-400">المحامون المتابَعون يظهرون أولًا في بقية رحلات البحث داخل المنصة.</p>
+              <h3 className="text-xl font-black text-brand-dark">المحامون المحفوظون</h3>
+              <p className="mt-1 text-xs font-bold text-slate-400">كل بطاقة هنا تنتهي بإجراء واضح: تواصل، افتح قضية، أو أزل من المحفوظات.</p>
             </div>
             <div className="relative w-full lg:w-96">
               <input
                 type="text"
                 value={followedSearch}
                 onChange={(event) => setFollowedSearch(event.target.value)}
-                placeholder="ابحث داخل قائمة المتابعة"
+                placeholder="ابحث داخل المحفوظات"
                 className="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-4 pr-11 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
               />
               <i className="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
@@ -231,7 +231,7 @@ export default function Following() {
                     <FollowButton isFollowing={true} isLoading={isPending(lawyer.id)} onToggle={() => unfollow(lawyer.id)} />
                   </div>
 
-                  <div className="mt-4 grid grid-cols-2 gap-3">
+                  <div className="mt-4 grid grid-cols-3 gap-3">
                     <ActionButton
                       onClick={() => navigate(`/profile/${lawyer.id}`)}
                       variant="secondary"
@@ -240,11 +240,18 @@ export default function Following() {
                       عرض الملف
                     </ActionButton>
                     <ActionButton
-                      onClick={() => navigate('/user', { state: { activeTab: 'schedule' } })}
+                      onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)}
+                      variant="ghost"
+                      className="w-full"
+                    >
+                      تواصل
+                    </ActionButton>
+                    <ActionButton
+                      onClick={() => navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: lawyer.id } })}
                       variant="primary"
                       className="w-full"
                     >
-                      احجز الآن
+                      افتح قضية
                     </ActionButton>
                   </div>
                 </motion.article>
@@ -253,8 +260,13 @@ export default function Following() {
           ) : (
             <EmptyState
               icon="user-plus"
-              title="لم تبدأ قائمة المتابعة بعد"
-              description="تابع المحامين الموثقين الذين يناسبون احتياجك لتسريع العودة إليهم وإبرازهم في نتائج البحث والمقارنة."
+              title="لا توجد محامون محفوظون بعد"
+              description="احفظ المحامين المناسبين لاحتياجك حتى تتمكن من العودة إليهم بسرعة والتواصل معهم من دون إعادة البحث."
+              action={
+                <ActionButton onClick={() => navigate('/lawyers')} variant="primary">
+                  ابحث عن محامٍ
+                </ActionButton>
+              }
             />
           )}
         </div>
@@ -275,13 +287,8 @@ export default function Following() {
                     <img src={lawyer.avatar} alt={lawyer.name} className="h-12 w-12 rounded-2xl object-cover" />
                   </div>
                   <div className="mt-4 flex items-center gap-3">
-                    <ActionButton
-                      onClick={() => navigate(`/profile/${lawyer.id}`)}
-                      variant="secondary"
-                      size="sm"
-                      className="flex-1"
-                    >
-                      الملف
+                    <ActionButton onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)} variant="secondary" size="sm" className="flex-1">
+                      تواصل
                     </ActionButton>
                     <FollowButton isFollowing={isFollowed(lawyer.id)} isLoading={isPending(lawyer.id)} onToggle={() => follow(lawyer.id)} className="flex-1" />
                   </div>

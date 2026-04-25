@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useOutletContext } from 'react-router-dom';
+import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import FollowButton from '../components/FollowButton';
@@ -136,6 +136,7 @@ const HEADER_FOCUS_OPTIONS: Array<{ value: HeaderFocus; label: string }> = [
 
 export default function UserDashboard() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications(); // Use global notifications
   const { setSosOpen } = useOutletContext<MainLayoutContext>();
@@ -186,6 +187,14 @@ export default function UserDashboard() {
     };
     load();
   }, []);
+
+  useEffect(() => {
+    const state = location.state as { activeTab?: DashboardTab } | null;
+    if (!state?.activeTab) return;
+
+    setActiveTab(state.activeTab);
+    window.history.replaceState({}, document.title);
+  }, [location.state]);
 
   useEffect(() => {
     const handleFollowStateChange = (event: Event) => {
@@ -414,7 +423,7 @@ export default function UserDashboard() {
 
   const handleQuickAction = (actionId: string) => {
     if (actionId === 'start') {
-      setActiveTab('services');
+      navigate('/cases', { state: { openNewCase: true } });
       return;
     }
     if (actionId === 'sos') {
@@ -426,10 +435,10 @@ export default function UserDashboard() {
       return;
     }
     if (actionId === 'upload') {
-      setActiveTab('documents');
+      navigate('/cases', { state: { focusArea: 'docs' } });
       return;
     }
-    setActiveTab('schedule');
+    navigate('/lawyers');
   };
 
   const getLawyerInitial = (lawyer: LawyerItem) => lawyer.name.split(' ').slice(-1)[0].charAt(0);
@@ -444,10 +453,10 @@ export default function UserDashboard() {
           </div>
           <button
             type="button"
-            onClick={() => setActiveTab('schedule')}
+            onClick={() => navigate('/lawyers')}
             className="rounded-xl bg-brand-navy px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-dark"
           >
-            حجز موعد
+            عرض كل المحامين
           </button>
         </div>
 
@@ -622,13 +631,12 @@ export default function UserDashboard() {
                     <button
                       type="button"
                       onClick={() => {
-                        setSelectedLawyerId(lawyer.id);
-                        setActiveTab('schedule');
+                        navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`);
                       }}
-                      title={`حجز استشارة مع ${lawyer.name}`}
+                      title={`تواصل مع ${lawyer.name}`}
                       className="rounded-2xl bg-brand-navy px-3 py-2 text-sm font-semibold text-white transition duration-200 hover:bg-[#102d5e] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      احجز
+                      تواصل
                     </button>
                   </div>
                 </div>
@@ -689,12 +697,14 @@ export default function UserDashboard() {
                     <div className="grid gap-3 sm:grid-cols-2">
                       <button
                         type="button"
+                        onClick={() => navigate(`/profile/${selectedLawyer.id}`)}
                         className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-brand-navy hover:text-brand-navy active:scale-[0.99]"
                       >
                         عرض الملف
                       </button>
                       <button
                         type="button"
+                        onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(selectedLawyer.id)}`)}
                         className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-brand-navy hover:bg-white hover:text-brand-navy active:scale-[0.99]"
                       >
                         تواصل مباشر
@@ -722,11 +732,11 @@ export default function UserDashboard() {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setActiveTab('schedule')}
-                  title={`حجز استشارة مع ${selectedLawyer.name}`}
+                  onClick={() => navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: selectedLawyer.id } })}
+                  title={`افتح قضية مع ${selectedLawyer.name}`}
                   className="w-full rounded-2xl bg-brand-gold px-4 py-3 text-sm font-bold text-brand-dark transition duration-200 hover:bg-yellow-600 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  احجز الآن مع {selectedLawyer.name}
+                  افتح قضية مع {selectedLawyer.name}
                 </button>
               </>
             ) : (
@@ -1308,7 +1318,13 @@ export default function UserDashboard() {
             <h3 className="text-lg font-bold text-brand-dark">المدفوعات والمحفظة</h3>
             <p className="text-sm text-slate-500">رصيد واضح، سجل مصروفات، وفواتير قابلة للمتابعة.</p>
           </div>
-          <i className="fa-solid fa-shield-halved text-green-500" title="دفع آمن"></i>
+          <button
+            type="button"
+            onClick={() => navigate('/billing')}
+            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-brand-navy transition hover:border-brand-navy hover:bg-slate-50"
+          >
+            إضافة رصيد
+          </button>
         </div>
 
         <div className="mt-4 rounded-[28px] grad-navy p-5 text-right text-white shadow-premium">
