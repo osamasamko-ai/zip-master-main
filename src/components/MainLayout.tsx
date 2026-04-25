@@ -23,17 +23,17 @@ export default function MainLayout() {
 
   // Breadcrumb mapping
   const pathMap: Record<string, string> = {
-    'user': 'لوحة التحكم',
+    'user': 'الرئيسية',
     'cases': 'القضايا',
     'lawyers': 'المحامون',
     'messages': 'الرسائل',
     'billing': 'المدفوعات',
     'following': 'المحفوظون',
-    'legal': 'المكتبة القانونية',
-    'aichat': 'المساعد الذكي',
-    'pro': 'مكتب المحامي',
+    'legal': 'المكتبة',
+    'aichat': 'المساعد',
+    'pro': 'المكتب',
     'admin': 'الإدارة',
-    'profile': 'الملف الشخصي',
+    'profile': 'الملف',
     'settings': 'الإعدادات',
   };
 
@@ -80,7 +80,7 @@ export default function MainLayout() {
 
     // Common navigation shortcuts
     const items = [
-      { id: 'n1', type: 'ملاحة', title: 'لوحة التحكم', subtitle: 'أسرع طريق لما يحتاج انتباهك الآن', icon: 'fa-table-columns', path: '/user' },
+      { id: 'n1', type: 'ملاحة', title: 'الرئيسية', subtitle: 'أسرع طريق لما يحتاج انتباهك الآن', icon: 'fa-table-columns', path: '/user' },
       { id: 'n2', type: 'ملاحة', title: 'القضايا', subtitle: 'متابعة سير العمل والمهام المطلوبة', icon: 'fa-folder-open', path: '/cases' },
       { id: 'n3', type: 'ملاحة', title: 'المحامون', subtitle: 'ابحث وتواصل وافتح قضية بسرعة', icon: 'fa-scale-balanced', path: '/lawyers' },
       { id: 'n4', type: 'ملاحة', title: 'الرسائل', subtitle: 'جميع المحادثات القانونية في مكان واحد', icon: 'fa-comments', path: '/messages' },
@@ -91,10 +91,10 @@ export default function MainLayout() {
     ];
 
     if (user?.role === 'admin') {
-      items.push({ id: 'a1', type: 'إدارة', title: 'لوحة التحكم', subtitle: 'إدارة النظام والمستخدمين', icon: 'fa-server', path: '/admin' });
+      items.push({ id: 'a1', type: 'إدارة', title: 'الإدارة', subtitle: 'إدارة النظام والمستخدمين', icon: 'fa-server', path: '/admin' });
     }
     if (user?.role === 'pro') {
-      items.push({ id: 'p1', type: 'احترافي', title: 'مكتب المحامي', subtitle: 'إدارة القضايا والعملاء', icon: 'fa-briefcase', path: '/pro' });
+      items.push({ id: 'p1', type: 'احترافي', title: 'المكتب', subtitle: 'إدارة القضايا والعملاء', icon: 'fa-briefcase', path: '/pro' });
     }
 
     return items.filter(
@@ -143,12 +143,12 @@ export default function MainLayout() {
   const navItems = useMemo(
     () =>
       [
-        { name: 'لوحة التحكم', icon: 'fa-table-columns', path: '/user' },
+        { name: 'الرئيسية', icon: 'fa-table-columns', path: '/user' },
         { name: 'القضايا', icon: 'fa-folder-open', path: '/cases' },
         { name: 'المحامون', icon: 'fa-scale-balanced', path: '/lawyers' },
         { name: 'الرسائل', icon: 'fa-comments', path: '/messages' },
-        { name: 'المكتبة القانونية', icon: 'fa-book-open', path: '/legal' },
-        { name: 'المساعد الذكي', icon: 'fa-robot', path: '/aichat' },
+        { name: 'المكتبة', icon: 'fa-book-open', path: '/legal' },
+        { name: 'المساعد', icon: 'fa-robot', path: '/aichat' },
         { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },
         { name: 'المحامي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
         { name: 'الإدارة', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
