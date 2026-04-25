@@ -489,7 +489,13 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
 }
 
 export async function getUserDashboard(userId: string) {
-  const [cases, follows, lawyers, invoices, transactions] = await Promise.all([
+  const [currentUser, cases, follows, lawyers, invoices, transactions] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        accountBalance: true,
+      },
+    }),
     prisma.case.findMany({
       where: { clientId: userId, isArchived: false },
       select: {
@@ -499,6 +505,7 @@ export async function getUserDashboard(userId: string) {
         progress: true,
         status: true,
         riskScore: true,
+        unreadCount: true,
         updatedAt: true,
         lawyer: {
           select: {
@@ -582,6 +589,16 @@ export async function getUserDashboard(userId: string) {
     })),
   );
 
+  const actionRequiredCases = cases.filter((item) => item.status === 'pending' || item.unreadCount > 0).length;
+  const requiredDocuments = documentItems.filter((item) => item.status === 'مطلوب').length;
+  const inReviewDocuments = documentItems.filter((item) => item.status === 'قيد المراجعة').length;
+  const completedDocuments = documentItems.filter((item) => item.status === 'مكتمل').length;
+  const totalDocuments = documentItems.length;
+  const fileHealth =
+    totalDocuments === 0
+      ? 0
+      : Math.round(((completedDocuments + inReviewDocuments * 0.6) / totalDocuments) * 100);
+
   const scheduleItems = caseItems.slice(0, 3).map((item, index) => ({
     id: `sch-${item.id}`,
     title: `متابعة ${item.title}`,
@@ -615,6 +632,15 @@ export async function getUserDashboard(userId: string) {
   );
 
   return {
+    summary: {
+      activeCases: caseItems.length,
+      actionRequiredCases,
+      requiredDocuments,
+      totalDocuments,
+      completedDocuments,
+      fileHealth,
+      accountBalance: currentUser?.accountBalance ?? 0,
+    },
     cases: caseItems,
     documents: documentItems,
     schedule: scheduleItems,

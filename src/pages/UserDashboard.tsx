@@ -89,6 +89,16 @@ interface LawyerItem {
   followers: number;
 }
 
+interface DashboardSummary {
+  activeCases: number;
+  actionRequiredCases: number;
+  requiredDocuments: number;
+  totalDocuments: number;
+  completedDocuments: number;
+  fileHealth: number;
+  accountBalance: number;
+}
+
 const DASHBOARD_TABS: Array<{
   id: DashboardTab;
   label: string;
@@ -131,6 +141,7 @@ export default function UserDashboard() {
   const { setSosOpen } = useOutletContext<MainLayoutContext>();
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<{
+    summary: DashboardSummary;
     cases: CaseItem[];
     documents: DocumentItem[];
     schedule: ScheduleItem[];
@@ -149,6 +160,8 @@ export default function UserDashboard() {
   const payments = dashboardData?.payments ?? [];
   const lawyers = dashboardData?.lawyers ?? [];
   const services = dashboardData?.services ?? [];
+  const summary = dashboardData?.summary;
+  const availableBalance = summary?.accountBalance ?? user?.accountBalance ?? 0;
 
   const serviceCategories = useMemo(() => ['الكل', ...Array.from(new Set(services.map(s => s.category)))], [services]);
 
@@ -330,13 +343,55 @@ export default function UserDashboard() {
   }, [selectedCaseId]);
 
   const stats = useMemo(
-    () => [
-      { label: 'القضايا النشطة', value: '3', note: 'منها 1 تحتاج إجراء منك', icon: 'fa-solid fa-briefcase', tone: 'text-brand-navy', progress: 75, color: 'bg-brand-navy' },
-      { label: 'المستندات المطلوبة', value: '2', note: 'جاهزة للرفع الآن', icon: 'fa-solid fa-file-shield', tone: 'text-amber-600', progress: 40, color: 'bg-amber-500' },
-      { label: 'صحة الملف', value: '82%', note: 'أكمل رفع الهوية للتحسين', icon: 'fa-solid fa-heart-pulse', tone: 'text-emerald-600', progress: 82, color: 'bg-emerald-500' },
-      { label: 'الرصيد', value: (user?.accountBalance ?? 0).toLocaleString('ar-IQ'), note: 'IQD متاح', icon: 'fa-solid fa-vault', tone: 'text-brand-gold', progress: 100, color: 'bg-brand-gold' },
-    ],
-    []
+    () => {
+      const activeCases = summary?.activeCases ?? cases.length;
+      const actionRequiredCases = summary?.actionRequiredCases ?? cases.filter((item) => item.status === 'بانتظارك' || item.unread).length;
+      const pendingDocuments = summary?.requiredDocuments ?? requiredDocuments.length;
+      const totalDocuments = summary?.totalDocuments ?? documents.length;
+      const fileHealth = summary?.fileHealth ?? (totalDocuments > 0 ? Math.round((documents.filter((item) => item.status === 'مكتمل').length / totalDocuments) * 100) : 0);
+      const healthyCasesProgress = activeCases > 0 ? Math.round(((activeCases - actionRequiredCases) / activeCases) * 100) : 0;
+      const documentsProgress = totalDocuments > 0 ? Math.round(((totalDocuments - pendingDocuments) / totalDocuments) * 100) : 0;
+
+      return [
+        {
+          label: 'القضايا النشطة',
+          value: activeCases.toLocaleString('ar-IQ'),
+          note: activeCases === 0 ? 'لا توجد قضايا نشطة حالياً' : actionRequiredCases > 0 ? `منها ${actionRequiredCases.toLocaleString('ar-IQ')} تحتاج إجراء منك` : 'كل القضايا تحت المتابعة',
+          icon: 'fa-solid fa-briefcase',
+          tone: 'text-brand-navy',
+          progress: healthyCasesProgress,
+          color: 'bg-brand-navy',
+        },
+        {
+          label: 'المستندات المطلوبة',
+          value: pendingDocuments.toLocaleString('ar-IQ'),
+          note: pendingDocuments === 0 ? 'لا توجد مستندات مطلوبة الآن' : `${pendingDocuments.toLocaleString('ar-IQ')} جاهزة للرفع الآن`,
+          icon: 'fa-solid fa-file-shield',
+          tone: 'text-amber-600',
+          progress: documentsProgress,
+          color: 'bg-amber-500',
+        },
+        {
+          label: 'صحة الملف',
+          value: `${fileHealth.toLocaleString('ar-IQ')}%`,
+          note: totalDocuments === 0 ? 'أضف أول مستند لبدء تقييم الملف' : pendingDocuments > 0 ? `أكمل ${pendingDocuments.toLocaleString('ar-IQ')} مستند لتحسينه` : 'ملفك القانوني في وضع جيد',
+          icon: 'fa-solid fa-heart-pulse',
+          tone: 'text-emerald-600',
+          progress: fileHealth,
+          color: 'bg-emerald-500',
+        },
+        {
+          label: 'الرصيد',
+          value: availableBalance.toLocaleString('ar-IQ'),
+          note: 'IQD متاح',
+          icon: 'fa-solid fa-vault',
+          tone: 'text-brand-gold',
+          progress: 100,
+          color: 'bg-brand-gold',
+        },
+      ];
+    },
+    [availableBalance, cases, documents, requiredDocuments.length, summary]
   );
 
   const guidedPaths = useMemo(
@@ -1259,9 +1314,9 @@ export default function UserDashboard() {
         <div className="mt-4 rounded-[28px] grad-navy p-5 text-right text-white shadow-premium">
           <p className="text-sm text-blue-200">الرصيد المتاح</p>
           <h4 className="mt-2 text-4xl font-bold tracking-wide">
-            125,000 <span className="text-sm text-brand-gold">IQD</span>
+            {availableBalance.toLocaleString('ar-IQ')} <span className="text-sm text-brand-gold">IQD</span>
           </h4>
-          <p className="mt-2 text-xs text-blue-100">آخر تعبئة: اليوم 10:30 ص</p>
+          <p className="mt-2 text-xs text-blue-100">يتم جلب الرصيد مباشرة من حسابك الحالي.</p>
         </div>
 
         <div className="mt-4 grid gap-3">
@@ -1308,7 +1363,7 @@ export default function UserDashboard() {
           <NotificationBell /> {/* Use the NotificationBell component from context */}
           <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 border border-white/10">
             <i className="fa-solid fa-wallet text-brand-gold text-xs"></i>
-            <span className="text-xs font-black">{(user?.accountBalance ?? 0).toLocaleString('ar-IQ')} د.ع</span>
+            <span className="text-xs font-black">{availableBalance.toLocaleString('ar-IQ')} د.ع</span>
           </div>
           <AnimatePresence>
             {isNotificationsOpen && (
