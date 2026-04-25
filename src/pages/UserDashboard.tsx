@@ -204,16 +204,16 @@ export default function UserDashboard() {
       setDashboardData((current) =>
         current
           ? {
-              ...current,
-              lawyers: current.lawyers.map((lawyer) =>
-                lawyer.id === lawyerId
-                  ? {
-                      ...lawyer,
-                      followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (lawyer.followers ?? 0) + delta),
-                    }
-                  : lawyer,
-              ),
-            }
+            ...current,
+            lawyers: current.lawyers.map((lawyer) =>
+              lawyer.id === lawyerId
+                ? {
+                  ...lawyer,
+                  followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (lawyer.followers ?? 0) + delta),
+                }
+                : lawyer,
+            ),
+          }
           : current,
       );
     };
@@ -755,8 +755,8 @@ export default function UserDashboard() {
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">ما يحتاج انتباهك الآن</h3>
-                <p className="text-sm text-slate-500">خطوات واضحة ومباشرة حتى لا تضيع أي متابعة مهمة.</p>
+                <h3 className="text-lg font-bold text-brand-dark">أولوياتك لليوم</h3>
+                <p className="text-sm text-slate-500">إليك أهم الإجراءات التي تتطلب تدخلك لضمان سير قضيتك بنجاح.</p>
               </div>
               <button
                 type="button"
@@ -794,8 +794,8 @@ export default function UserDashboard() {
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">ابدأ خطوة جديدة</h3>
-                <p className="text-sm text-slate-500">ثلاثة مسارات واضحة: ابدأ خدمة، أكمل ما هو مطلوب، أو احجز موعداً.</p>
+                <h3 className="text-lg font-bold text-brand-dark">بادر باتخاذ إجراء</h3>
+                <p className="text-sm text-slate-500">اختر المسار الأنسب لاحتياجك الحالي: اطلب خدمة، ارفع وثائقك، أو نسّق جلسة استشارية.</p>
               </div>
             </div>
 
@@ -825,8 +825,8 @@ export default function UserDashboard() {
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">قضاياك الحالية</h3>
-                <p className="text-sm text-slate-500">ملخص سريع للحالات الجارية حتى تعرف أين تتابع الآن.</p>
+                <h3 className="text-lg font-bold text-brand-dark">متابعة سير الأعمال</h3>
+                <p className="text-sm text-slate-500">نظرة فاحصة على تقدم ملفاتك المفتوحة وآخر التحديثات الواردة عليها.</p>
               </div>
               <button
                 type="button"
@@ -1417,7 +1417,7 @@ export default function UserDashboard() {
             )}
           </AnimatePresence>
 
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
+          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
             <i className="fa-solid fa-sparkles text-brand-gold"></i>
           </div>
           <p className="text-xs font-black md:text-sm">نصيحة AI: بناءً على المسودة المرفوعة، ينصح بمراجعة بند "الصيانة التشغيلية" مع المحامي قبل انتهاء المهلة غداً.</p>
@@ -1445,7 +1445,7 @@ export default function UserDashboard() {
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
                   {activeTab === 'overview'
-                    ? 'لوحة استخدام يومي مصممة لتقليل التشتت: راقب القضايا، اعرف ما يتطلب إجراءً منك، وانتقل بسرعة بين المستندات والمواعيد والمدفوعات.'
+                    ? 'أهلاً بك في مركز عملياتك القانوني. تابع مستجدات قضاياك، أنجز المهام المطلوبة، وتواصل مع خبرائك بضغطة زر واحدة.'
                     : `أنت الآن داخل قسم ${activeTabMeta.label}. ${activeTabMeta.description} مع عرض مهيأ للاستخدام المكثف والوصول الأسرع إلى الإجراءات المهمة.`}
                 </p>
               </div>
@@ -1582,9 +1582,8 @@ export default function UserDashboard() {
                 id={`dashboard-tab-${tab.id}`}
                 aria-controls={`dashboard-panel-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
-                className={`group relative flex min-w-[120px] md:min-w-[150px] items-center gap-3 rounded-[1.25rem] px-5 py-3 text-right transition-all duration-300 focus:outline-none ${
-                  activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-brand-navy'
-                }`}
+                className={`group relative flex min-w-[120px] md:min-w-[150px] items-center gap-3 rounded-[1.25rem] px-5 py-3 text-right transition-all duration-300 focus:outline-none ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-brand-navy'
+                  }`}
               >
                 {activeTab === tab.id && (
                   <motion.div
@@ -1593,9 +1592,8 @@ export default function UserDashboard() {
                     transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                   />
                 )}
-                <div className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                  activeTab === tab.id ? 'bg-white/15' : 'bg-white shadow-sm border border-slate-100 group-hover:border-brand-navy/30'
-                }`}>
+                <div className={`relative z-10 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${activeTab === tab.id ? 'bg-white/15' : 'bg-white shadow-sm border border-slate-100 group-hover:border-brand-navy/30'
+                  }`}>
                   <i className={`${tab.icon} text-xs ${activeTab === tab.id ? 'text-white' : 'text-brand-navy'}`}></i>
                 </div>
                 <div className="relative z-10 min-w-0">
