@@ -6,6 +6,7 @@ export default function Auth() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [name, setName] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('user');
   const [loading, setLoading] = useState(false);
@@ -13,13 +14,50 @@ export default function Auth() {
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
+  const resetRegisterFields = () => {
+    setName('');
+    setEmail('');
+    setPassword('');
+    setConfirmPassword('');
+    setSelectedRole('user');
+  };
+
+  const normalizeEmail = (value: string) => value.trim().toLowerCase();
+
+  const validateRegisterForm = () => {
+    const trimmedName = name.trim();
+    const normalizedEmail = normalizeEmail(email);
+
+    if (!trimmedName) {
+      return 'يرجى إدخال الاسم الكامل.';
+    }
+
+    if (!normalizedEmail) {
+      return 'يرجى إدخال البريد الإلكتروني.';
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      return 'صيغة البريد الإلكتروني غير صحيحة.';
+    }
+
+    if (password.length < 8) {
+      return 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.';
+    }
+
+    if (password !== confirmPassword) {
+      return 'تأكيد كلمة المرور غير مطابق.';
+    }
+
+    return null;
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
 
     try {
-      const loggedInUser = await login(email, password);
+      const loggedInUser = await login(normalizeEmail(email), password);
       navigate(loggedInUser.role === 'admin' ? '/admin' : loggedInUser.role === 'pro' ? '/pro' : '/user');
     } catch (err: any) {
       setError(err.message || 'Login failed');
@@ -30,11 +68,19 @@ export default function Auth() {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
     setError(null);
 
+    const validationError = validateRegisterForm();
+    if (validationError) {
+      setError(validationError);
+      return;
+    }
+
+    setLoading(true);
+
     try {
-      const registeredUser = await register(email, password, name, selectedRole);
+      const registeredUser = await register(normalizeEmail(email), password, name.trim(), selectedRole);
+      resetRegisterFields();
       navigate(registeredUser.role === 'admin' ? '/admin' : registeredUser.role === 'pro' ? '/pro' : '/user');
     } catch (err: any) {
       setError(err.message || 'Registration failed');
@@ -60,14 +106,20 @@ export default function Auth() {
 
           <div className="mb-8 flex flex-row border-b border-gray-200">
             <button
-              onClick={() => setAuthMode('login')}
+              onClick={() => {
+                setError(null);
+                setAuthMode('login');
+              }}
               className={`flex-1 pb-3 text-center font-bold border-b-2 transition ${authMode === 'login' ? 'text-brand-gold border-brand-gold' : 'text-gray-400 border-transparent hover:text-gray-600'
                 }`}
             >
               تسجيل الدخول
             </button>
             <button
-              onClick={() => setAuthMode('register')}
+              onClick={() => {
+                setError(null);
+                setAuthMode('register');
+              }}
               className={`flex-1 pb-3 text-center font-bold border-b-2 transition ${authMode === 'register' ? 'text-brand-gold border-brand-gold' : 'text-gray-400 border-transparent hover:text-gray-600'
                 }`}
             >
@@ -150,6 +202,18 @@ export default function Auth() {
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
+                />
+                <p className="mt-2 text-right text-xs font-bold text-slate-400">8 أحرف على الأقل.</p>
+              </div>
+              <div>
+                <label className="mb-2 block text-right text-sm font-bold text-gray-700">تأكيد كلمة المرور</label>
+                <input
+                  type="password"
+                  placeholder="••••••••"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   required
                   className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
                 />

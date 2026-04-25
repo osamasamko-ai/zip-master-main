@@ -91,7 +91,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       localStorage.setItem('auth_user', JSON.stringify(user));
       return user;
     } catch (err: any) {
-      const errorMessage = err.response?.data?.error || 'Registration failed';
+      const errorMessage = err.response?.data?.error || 'تعذر إنشاء الحساب.';
       setError(errorMessage);
       throw new Error(errorMessage);
     } finally {

@@ -229,13 +229,23 @@ async function startServer() {
     try {
       const { email, password, name, role = 'user' } = req.body;
       const requestedRole = role as 'user' | 'pro' | 'admin';
+      const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      const normalizedName = typeof name === 'string' ? name.trim() : '';
 
-      if (!email || !password || !name) {
-        return res.status(400).json({ error: 'Email, password, and name are required' });
+      if (!normalizedEmail || !password || !normalizedName) {
+        return res.status(400).json({ error: 'البريد الإلكتروني والاسم وكلمة المرور مطلوبة.' });
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ error: 'صيغة البريد الإلكتروني غير صحيحة.' });
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.' });
       }
 
       if (!['user', 'pro', 'admin'].includes(requestedRole)) {
-        return res.status(400).json({ error: 'Invalid role' });
+        return res.status(400).json({ error: 'نوع الحساب غير صالح.' });
       }
 
       if (requestedRole === 'admin') {
@@ -244,34 +254,49 @@ async function startServer() {
         });
 
         if (existingAdminCount > 0) {
-          return res.status(403).json({ error: 'Admin registration is disabled' });
+          return res.status(403).json({ error: 'تسجيل حسابات الإدارة غير متاح.' });
         }
 
         if (!adminBootstrapSecret) {
-          return res.status(500).json({ error: 'Admin bootstrap is not configured' });
+          return res.status(500).json({ error: 'تهيئة حساب الإدارة غير مكتملة.' });
         }
 
         if (req.body.adminBootstrapSecret !== adminBootstrapSecret) {
-          return res.status(403).json({ error: 'Invalid admin bootstrap secret' });
+          return res.status(403).json({ error: 'بيانات إنشاء حساب الإدارة غير صحيحة.' });
         }
       }
 
       // Check if user exists
-      const existingUser = await prisma.user.findUnique({ where: { email } });
+      const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
       if (existingUser) {
-        return res.status(409).json({ error: 'User already exists' });
+        return res.status(409).json({ error: 'هذا البريد الإلكتروني مستخدم بالفعل.' });
       }
 
       const hashedPassword = await hashPassword(password);
-      const user = await prisma.user.create({
-        data: {
-          email,
-          passwordHash: hashedPassword,
-          name,
-          role: requestedRole as any,
-          verified: false,
-          blocked: false,
-        },
+      const user = await prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            email: normalizedEmail,
+            passwordHash: hashedPassword,
+            name: normalizedName,
+            role: requestedRole as any,
+            verified: false,
+            blocked: false,
+          },
+        });
+
+        if (requestedRole === 'pro') {
+          await tx.lawyerProfile.create({
+            data: {
+              userId: createdUser.id,
+              licenseStatus: 'pending',
+              submittedAt: 'اليوم',
+              profileScore: 15,
+            },
+          });
+        }
+
+        return createdUser;
       });
 
       const token = generateToken({
@@ -288,14 +313,21 @@ async function startServer() {
             email: user.email,
             name: user.name,
             role: user.role,
+            verified: user.verified,
             accountBalance: user.accountBalance,
+            licenseStatus: requestedRole === 'pro' ? 'pending' : undefined,
           },
         },
-        message: 'User registered successfully',
+        message: 'تم إنشاء الحساب بنجاح.',
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error('Registration error:', error);
-      res.status(500).json({ error: 'Registration failed' });
+
+      if (error?.code === 'P2002') {
+        return res.status(409).json({ error: 'هذا البريد الإلكتروني مستخدم بالفعل.' });
+      }
+
+      res.status(500).json({ error: 'تعذر إنشاء الحساب. حاول مرة أخرى.' });
     }
   });
 
