@@ -5,23 +5,26 @@ export const useDocumentUpload = () => {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const uploadNationalId = async (file: File): Promise<string> => {
+    const uploadDocument = async (file: File, endpoint: string, fallbackError: string): Promise<string> => {
         setUploading(true);
         setError(null);
-        try {
-            const formData = new FormData();
-            formData.append('document', file);
 
-            const response = await fetch('/api/profile/documents/national-id', {
+        try {
+            const response = await fetch(endpoint, {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('lexigate_token')}`,
+                    ...(apiClient.getToken() ? { Authorization: `Bearer ${apiClient.getToken()}` } : {}),
                 },
-                body: formData,
+                body: (() => {
+                    const formData = new FormData();
+                    formData.append('document', file);
+                    return formData;
+                })(),
             });
 
             if (!response.ok) {
-                throw new Error('فشل في تحميل البطاقة الوطنية');
+                const payload = await response.json().catch(() => null);
+                throw new Error(payload?.error || fallbackError);
             }
 
             const data = await response.json();
@@ -35,34 +38,12 @@ export const useDocumentUpload = () => {
         }
     };
 
+    const uploadNationalId = async (file: File): Promise<string> => {
+        return uploadDocument(file, '/api/profile/documents/national-id', 'فشل في تحميل البطاقة الوطنية');
+    };
+
     const uploadLawyerLicense = async (file: File): Promise<string> => {
-        setUploading(true);
-        setError(null);
-        try {
-            const formData = new FormData();
-            formData.append('document', file);
-
-            const response = await fetch('/api/profile/documents/lawyer-license', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('lexigate_token')}`,
-                },
-                body: formData,
-            });
-
-            if (!response.ok) {
-                throw new Error('فشل في تحميل بطاقة المحاماة');
-            }
-
-            const data = await response.json();
-            return data.fileUrl;
-        } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'خطأ في التحميل';
-            setError(errorMessage);
-            throw err;
-        } finally {
-            setUploading(false);
-        }
+        return uploadDocument(file, '/api/profile/documents/lawyer-license', 'فشل في تحميل بطاقة المحاماة');
     };
 
     return {

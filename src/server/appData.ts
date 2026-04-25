@@ -126,6 +126,10 @@ export async function getCurrentUserProfile(userId: string) {
     securityAlerts: user.securityAlerts,
     marketingEmails: user.marketingEmails,
     roleDescription: user.roleDescription || '',
+    nationalIdUrl: user.lawyerProfile?.nationalIdUrl || '',
+    nationalIdVerified: user.lawyerProfile?.nationalIdVerified || false,
+    lawyerLicenseUrl: user.lawyerProfile?.lawyerLicenseUrl || '',
+    lawyerLicenseVerified: user.lawyerProfile?.lawyerLicenseVerified || false,
   };
 }
 

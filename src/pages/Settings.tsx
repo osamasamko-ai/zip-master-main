@@ -37,6 +37,17 @@ type InvoiceItem = {
   status: 'paid' | 'pending';
 };
 
+type VerificationDocument = {
+  key: 'nationalId' | 'lawyerLicense';
+  label: string;
+  description: string;
+  helperText: string;
+  icon: string;
+  previewUrl: string;
+  isVerified: boolean;
+  required: boolean;
+};
+
 function SettingsCard({
   title,
   description,
@@ -110,11 +121,13 @@ export default function Settings() {
   const { user } = useAuth();
   const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications(); // Use global notifications
   const navigate = useNavigate();
+  const { uploadNationalId, uploadLawyerLicense, uploading, error: uploadError } = useDocumentUpload();
 
   const [activeSection, setActiveSection] = useState<SettingsSection>('account');
   const [savedToast, setSavedToast] = useState('');
   const [sessionsNotice, setSessionsNotice] = useState('');
   const [billingStatus, setBillingStatus] = useState<'active' | 'past_due'>('active');
+  const [documentNotice, setDocumentNotice] = useState('');
   const [sessions, setSessions] = useState<SessionItem[]>(INITIAL_SESSIONS);
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(INITIAL_ACTIVITY);
   const [invoices, setInvoices] = useState<InvoiceItem[]>(INITIAL_INVOICES);
@@ -138,6 +151,12 @@ export default function Settings() {
     billingReminders: true,
     securityAlerts: true,
     marketingEmails: false,
+  });
+  const [documents, setDocuments] = useState({
+    nationalIdUrl: '',
+    nationalIdVerified: false,
+    lawyerLicenseUrl: '',
+    lawyerLicenseVerified: false,
   });
 
   React.useEffect(() => {
@@ -163,6 +182,12 @@ export default function Settings() {
           marketingEmails: !!data.profile.marketingEmails,
         }));
         setInvoices(data.invoices || []);
+        setDocuments({
+          nationalIdUrl: data.profile.nationalIdUrl || '',
+          nationalIdVerified: !!data.profile.nationalIdVerified,
+          lawyerLicenseUrl: data.profile.lawyerLicenseUrl || '',
+          lawyerLicenseVerified: !!data.profile.lawyerLicenseVerified,
+        });
       } catch (error) {
         console.error('Failed to load settings', error);
       }
@@ -174,6 +199,7 @@ export default function Settings() {
     () => [
       { id: 'account' as const, label: 'الحساب', icon: 'fa-id-card', description: 'الهوية، بيانات الحساب، وبيئة العمل' },
       { id: 'security' as const, label: 'الأمان', icon: 'fa-shield-halved', description: 'كلمة المرور، الحماية، والجلسات' },
+      { id: 'documents' as const, label: 'المستندات', icon: 'fa-file-shield', description: 'الهوية، بطاقة المحاماة، وحالة التحقق' },
       { id: 'billing' as const, label: 'الفوترة', icon: 'fa-credit-card', description: 'الخطة، المدفوعات، والفواتير' },
       { id: 'notifications' as const, label: 'الإشعارات', icon: 'fa-bell', description: 'التنبيهات والقنوات المفضلة' },
       { id: 'integrations' as const, label: 'التكاملات', icon: 'fa-link', description: 'الأدوات المتصلة وتصدير البيانات' },
@@ -200,6 +226,66 @@ export default function Settings() {
     ],
     []
   );
+
+  const isProfessionalAccount = user?.role === 'pro' || user?.role === 'admin';
+
+  const verificationDocuments = useMemo<VerificationDocument[]>(
+    () => [
+      {
+        key: 'nationalId',
+        label: 'البطاقة الوطنية',
+        description: 'ارفع نسخة واضحة من الجهة الأمامية أو ملف PDF رسمي لاستخدامها في التحقق من الهوية.',
+        helperText: 'يفضّل أن تكون البيانات كاملة وواضحة وبدون قص للأطراف.',
+        icon: 'fa-id-card',
+        previewUrl: documents.nationalIdUrl,
+        isVerified: documents.nationalIdVerified,
+        required: true,
+      },
+      {
+        key: 'lawyerLicense',
+        label: 'بطاقة المحاماة',
+        description: isProfessionalAccount
+          ? 'أضف بطاقة المحاماة الحالية لإكمال التحقق المهني وتفعيل الاعتماد في الملف العام.'
+          : 'يمكنك رفع بطاقة المحاماة الآن إذا كنت بصدد الترقية إلى حساب مهني أو استكمال التحقق لاحقاً.',
+        helperText: 'نقبل JPG وPNG وPDF بحجم يصل إلى 5MB لكل ملف.',
+        icon: 'fa-scale-balanced',
+        previewUrl: documents.lawyerLicenseUrl,
+        isVerified: documents.lawyerLicenseVerified,
+        required: isProfessionalAccount,
+      },
+    ],
+    [documents, isProfessionalAccount]
+  );
+
+  const uploadedDocumentsCount = verificationDocuments.filter((item) => item.previewUrl).length;
+  const verifiedDocumentsCount = verificationDocuments.filter((item) => item.isVerified).length;
+
+  const handleNationalIdUpload = async (file: File) => {
+    const fileUrl = await uploadNationalId(file);
+    setDocuments((current) => ({
+      ...current,
+      nationalIdUrl: fileUrl,
+      nationalIdVerified: false,
+    }));
+    setDocumentNotice('تم رفع البطاقة الوطنية وهي الآن بانتظار المراجعة.');
+  };
+
+  const handleLawyerLicenseUpload = async (file: File) => {
+    const fileUrl = await uploadLawyerLicense(file);
+    setDocuments((current) => ({
+      ...current,
+      lawyerLicenseUrl: fileUrl,
+      lawyerLicenseVerified: false,
+    }));
+    setDocumentNotice('تم رفع بطاقة المحاماة وهي الآن بانتظار المراجعة.');
+  };
+
+  React.useEffect(() => {
+    if (!documentNotice) return;
+
+    const timeoutId = window.setTimeout(() => setDocumentNotice(''), 2800);
+    return () => window.clearTimeout(timeoutId);
+  }, [documentNotice]);
 
   const saveChanges = async () => {
     try {
@@ -572,6 +658,82 @@ export default function Settings() {
                   ))}
                 </div>
               </SettingsCard>
+            </>
+          )}
+
+          {activeSection === 'documents' && (
+            <>
+              <section className="overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.04] shadow-sm">
+                <div className="grid gap-5 p-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+                  <div className="text-right">
+                    <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">Identity & Verification</p>
+                    <h2 className="mt-3 text-2xl font-black text-brand-dark">توثيق المستندات الأساسية</h2>
+                    <p className="mt-2 text-sm font-bold leading-7 text-slate-500">
+                      هذا القسم مخصص لرفع البطاقة الوطنية وبطاقة المحاماة ضمن تجربة واضحة وسريعة، مع إبقاء حالة كل مستند مفهومة فوراً للمستخدم.
+                    </p>
+                    <div className="mt-5 flex flex-wrap justify-end gap-2">
+                      <StatusBadge tone={uploadedDocumentsCount === verificationDocuments.length ? 'success' : 'warning'}>
+                        {uploadedDocumentsCount}/{verificationDocuments.length} مستندات مرفوعة
+                      </StatusBadge>
+                      <StatusBadge tone={verifiedDocumentsCount > 0 ? 'info' : 'default'}>
+                        {verifiedDocumentsCount} مستندات موثقة
+                      </StatusBadge>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.75rem] border border-white/70 bg-white/90 p-5 text-right shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="rounded-2xl bg-emerald-50 p-3 text-emerald-600">
+                        <i className="fa-solid fa-shield-check text-xl"></i>
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-brand-dark">متطلبات الرفع</p>
+                        <ul className="mt-3 space-y-2 text-xs font-bold leading-6 text-slate-500">
+                          <li>استخدم صورة واضحة أو ملف PDF رسمي.</li>
+                          <li>الحجم الأقصى لكل ملف هو 5MB.</li>
+                          <li>سيتم إلغاء التوثيق السابق تلقائياً عند استبدال الملف.</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {(documentNotice || uploadError) && (
+                <NoticePanel
+                  title={uploadError ? 'تعذر رفع المستند' : 'تم استلام المستند'}
+                  description={uploadError || documentNotice}
+                  tone={uploadError ? 'warning' : 'success'}
+                />
+              )}
+
+              <div className="grid gap-5 xl:grid-cols-2">
+                {verificationDocuments.map((document) => (
+                  <div key={document.key} className="space-y-4 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex flex-wrap justify-end gap-2">
+                        {document.required && <StatusBadge tone="warning">مطلوب</StatusBadge>}
+                        {document.previewUrl && !document.isVerified && <StatusBadge tone="info">قيد المراجعة</StatusBadge>}
+                        {!document.previewUrl && <StatusBadge tone="neutral">غير مرفوع</StatusBadge>}
+                      </div>
+                      <div className="text-right">
+                        <h3 className="text-lg font-black text-brand-dark">{document.label}</h3>
+                        <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{document.helperText}</p>
+                      </div>
+                    </div>
+
+                    <DocumentUpload
+                      label={document.label}
+                      description={document.description}
+                      icon={document.icon}
+                      previewUrl={document.previewUrl}
+                      isVerified={document.isVerified}
+                      isLoading={uploading}
+                      onUpload={document.key === 'nationalId' ? handleNationalIdUpload : handleLawyerLicenseUpload}
+                    />
+                  </div>
+                ))}
+              </div>
             </>
           )}
 
