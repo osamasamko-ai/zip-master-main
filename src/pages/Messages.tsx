@@ -4,6 +4,12 @@ import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
 import apiClient from '../api/client';
 
+const QUICK_MESSAGE_PROMPTS = [
+  'أحتاج تحديثاً سريعاً على آخر خطوة في القضية.',
+  'هل هناك مستندات مطلوبة مني اليوم؟',
+  'هل يمكن تحديد الخطوة التالية بوضوح؟',
+];
+
 type MessageItem = {
   id: string | number;
   sender: 'user' | 'lawyer';
@@ -127,6 +133,9 @@ export default function Messages() {
     null;
   const selectedCase = selectedConversation?.cases[0] || null;
   const threadMessages = selectedCase?.messages || [];
+  const latestClientMessage = [...threadMessages].reverse().find((message) => message.sender === 'user') || null;
+  const draftLength = draft.trim().length;
+  const conversationHealthLabel = latestClientMessage?.awaitingResponse ? 'بانتظار رد المحامي' : 'المحادثة محدثة';
 
   const handleSend = async () => {
     if (!draft.trim() || !selectedCase) return;
@@ -194,7 +203,7 @@ export default function Messages() {
                   key={conversation.id}
                   type="button"
                   onClick={() => setSelectedConversationId(conversation.id)}
-                  className={`w-full rounded-2xl border px-4 py-4 text-right transition ${selectedConversation?.id === conversation.id ? 'border-brand-navy bg-brand-navy/[0.03]' : 'border-slate-200 bg-slate-50/60 hover:border-brand-navy/20 hover:bg-white'}`}
+                  className={`w-full rounded-[1.6rem] border px-4 py-4 text-right transition ${selectedConversation?.id === conversation.id ? 'border-brand-navy bg-[linear-gradient(135deg,rgba(15,39,78,0.04),rgba(255,255,255,1))] shadow-md ring-1 ring-brand-navy/10' : 'border-slate-200 bg-slate-50/60 hover:border-brand-navy/20 hover:bg-white hover:shadow-sm'}`}
                 >
                   <div className="flex items-start gap-3">
                     <img src={conversation.lawyerImg} alt={conversation.lawyerName} className="h-12 w-12 rounded-2xl object-cover shadow-sm" />
@@ -210,7 +219,7 @@ export default function Messages() {
                         {conversation.lastMessage?.text || conversation.cases[0]?.title}
                       </p>
                       {conversation.lastMessage?.sender === 'user' && (
-                        <p className={`mt-2 text-[10px] font-black ${conversation.lastMessage.awaitingResponse ? 'text-amber-600' : 'text-emerald-600'}`}>
+                        <p className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-[10px] font-black ${conversation.lastMessage.awaitingResponse ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
                           {conversation.lastMessage.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة طلبك'}
                         </p>
                       )}
@@ -245,11 +254,19 @@ export default function Messages() {
                         <p className="mt-1 text-sm font-bold text-slate-500">
                           {selectedConversation.lawyerRole} • عادةً يرد خلال وقت قصير
                         </p>
+                        <div className="mt-2 flex flex-wrap justify-end gap-2">
+                          <span className={`rounded-full px-3 py-1 text-[10px] font-black ${latestClientMessage?.awaitingResponse ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                            {conversationHealthLabel}
+                          </span>
+                          <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-500">
+                            {selectedCase.statusText}
+                          </span>
+                        </div>
                       </div>
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-3">
-                      <ActionButton onClick={() => setDraft('أحتاج تحديثاً سريعاً على آخر خطوة في القضية.')} variant="secondary" size="sm">
+                      <ActionButton onClick={() => setDraft(QUICK_MESSAGE_PROMPTS[0])} variant="secondary" size="sm">
                         اطلب تحديثاً
                       </ActionButton>
                       <ActionButton onClick={() => navigate('/cases', { state: { activeCaseId: selectedCase.id } })} variant="secondary" size="sm">
@@ -261,14 +278,30 @@ export default function Messages() {
                     </div>
                   </div>
 
-                  <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-3 text-right">
-                    <p className="text-[11px] font-black text-slate-400">القضية المرتبطة</p>
-                    <p className="mt-1 text-sm font-black text-brand-dark">{selectedCase.title}</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">{selectedCase.statusText}</p>
+                  <div className="mt-4 rounded-[1.6rem] border border-slate-200 bg-[linear-gradient(135deg,rgba(248,250,252,1),rgba(255,255,255,1))] px-4 py-4 text-right">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-black text-slate-400">القضية المرتبطة</p>
+                        <p className="mt-1 text-sm font-black text-brand-dark">{selectedCase.title}</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">{selectedCase.statusText}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-center">
+                        <div className="rounded-2xl bg-white px-3 py-2 shadow-sm">
+                          <p className="text-[10px] font-black text-slate-400">الرسائل</p>
+                          <p className="mt-1 text-sm font-black text-brand-dark">{threadMessages.length.toLocaleString('ar-IQ')}</p>
+                        </div>
+                        <div className="rounded-2xl bg-white px-3 py-2 shadow-sm">
+                          <p className="text-[10px] font-black text-slate-400">الحالة</p>
+                          <p className={`mt-1 text-sm font-black ${latestClientMessage?.awaitingResponse ? 'text-amber-700' : 'text-emerald-700'}`}>
+                            {latestClientMessage?.awaitingResponse ? 'مفتوحة' : 'متابعة'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="max-h-[520px] space-y-4 overflow-y-auto bg-slate-50/50 p-5">
+                <div className="max-h-[520px] space-y-4 overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.75),rgba(255,255,255,1))] p-5">
                   {threadMessages.map((message) => (
                     <div key={message.id} className={`flex ${message.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
                       <div className={`max-w-[78%] rounded-[1.5rem] px-4 py-3 text-right shadow-sm ${message.sender === 'user' ? 'bg-white border border-slate-200 text-slate-700' : 'bg-brand-navy text-white'}`}>
@@ -285,20 +318,46 @@ export default function Messages() {
                 </div>
 
                 <div className="border-t border-slate-100 p-5">
-                  <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
-                    <textarea
-                      value={draft}
-                      onChange={(event) => setDraft(event.target.value)}
-                      placeholder="اكتب رسالتك هنا..."
-                      className="min-h-[110px] rounded-[1.5rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
-                    />
-                    <div className="grid gap-3">
-                      <ActionButton onClick={handleSend} variant="primary" disabled={!draft.trim() || isSending}>
-                        {isSending ? 'جارٍ الإرسال...' : 'إرسال'}
-                      </ActionButton>
-                      <ActionButton onClick={() => setDraft('أرفقت المستند المطلوب وسأتابع معكم اليوم.')} variant="secondary">
-                        رد جاهز
-                      </ActionButton>
+                  <div className="rounded-[1.8rem] border border-brand-navy/10 bg-[linear-gradient(135deg,rgba(15,39,78,0.03),rgba(255,255,255,1))] p-4 shadow-sm">
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {QUICK_MESSAGE_PROMPTS.map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => setDraft(prompt)}
+                          className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-600 transition hover:border-brand-navy/30 hover:text-brand-navy"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-[11px] font-black text-slate-400">رسالتك إلى {selectedConversation.lawyerName}</p>
+                          <span className={`rounded-full px-3 py-1 text-[10px] font-black ${draftLength > 0 ? 'bg-brand-navy/5 text-brand-navy' : 'bg-slate-100 text-slate-400'}`}>
+                            {draftLength > 0 ? `${draftLength} حرف` : 'ابدأ الكتابة'}
+                          </span>
+                        </div>
+                        <textarea
+                          value={draft}
+                          onChange={(event) => setDraft(event.target.value)}
+                          placeholder="اكتب رسالتك هنا بصياغة واضحة، ويمكنك الإشارة إلى المستند أو الخطوة المطلوبة..."
+                          className="min-h-[130px] rounded-[1.5rem] border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                        />
+                        <p className="text-[11px] font-bold text-slate-400">نصيحة: الرسائل الأقصر والواضحة تساعد المحامي على الرد بسرعة أكبر.</p>
+                      </div>
+                      <div className="grid gap-3">
+                        <ActionButton onClick={handleSend} variant="primary" disabled={!draft.trim() || isSending}>
+                          {isSending ? 'جارٍ الإرسال...' : 'إرسال الآن'}
+                        </ActionButton>
+                        <ActionButton onClick={() => setDraft('أرفقت المستند المطلوب وسأتابع معكم اليوم.')} variant="secondary">
+                          رد جاهز
+                        </ActionButton>
+                        <ActionButton onClick={() => setDraft('')} variant="ghost" disabled={!draft.length || isSending}>
+                          مسح المسودة
+                        </ActionButton>
+                      </div>
                     </div>
                   </div>
                 </div>

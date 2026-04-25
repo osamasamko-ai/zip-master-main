@@ -315,6 +315,20 @@ export default function Lawyers() {
                       عرض الملف
                     </ActionButton>
                   </div>
+
+                  <div className="mt-4 rounded-[1.6rem] border border-slate-200 bg-[linear-gradient(135deg,rgba(248,250,252,1),rgba(255,255,255,1))] px-4 py-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">أفضل خطوة الآن</p>
+                        <p className="mt-1 text-sm font-black text-brand-dark">
+                          {lawyer.isOnline ? 'ابدأ برسالة سريعة لمعرفة التوفر الفوري.' : 'افتح ملفاً جديداً لتثبيت الطلب ومشاركة التفاصيل.'}
+                        </p>
+                      </div>
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black ${lawyer.isOnline ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
+                        {lawyer.isOnline ? 'رد أسرع متوقع' : 'ابدأ بتنظيم الطلب'}
+                      </span>
+                    </div>
+                  </div>
                 </article>
               ))}
             </div>

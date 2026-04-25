@@ -1517,6 +1517,18 @@ export default function MyCases() {
                             ))}
                           </div>
 
+                          <div className="rounded-[1.6rem] border border-brand-navy/10 bg-[linear-gradient(135deg,rgba(15,39,78,0.03),rgba(255,255,255,1))] p-4">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div className="text-right">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Message Desk</p>
+                                <p className="mt-1 text-sm font-black text-brand-dark">أرسل تحديثاً واضحاً إلى {activeCase.lawyer.name} مع الإجراء أو المستند المطلوب.</p>
+                              </div>
+                              <span className={`rounded-full px-3 py-1 text-[10px] font-black ${newMessage.trim().length > 0 ? 'bg-brand-navy/5 text-brand-navy' : 'bg-slate-100 text-slate-400'}`}>
+                                {newMessage.trim().length > 0 ? `${newMessage.trim().length} حرف` : 'ابدأ الكتابة'}
+                              </span>
+                            </div>
+                          </div>
+
                           <div className="flex items-end gap-3 bg-slate-50 border border-slate-200 rounded-3xl p-2 focus-within:bg-white focus-within:border-brand-navy transition-all relative">
                             <button className="p-3.5 text-slate-400 hover:text-brand-navy transition-colors rounded-2xl shrink-0">
                               <i className="fa-solid fa-paperclip text-lg"></i>
@@ -1549,6 +1561,18 @@ export default function MyCases() {
                                 className="w-12 h-12 bg-brand-navy text-white rounded-2xl hover:bg-brand-dark transition-all shrink-0 flex items-center justify-center shadow-lg shadow-brand-navy/30 scale-in-center"
                               >
                                 <i className="fa-solid fa-paper-plane"></i>
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] font-bold text-slate-400">
+                            <span>اختصار مفيد: `Enter` للإرسال و `Shift + Enter` لسطر جديد.</span>
+                            {newMessage.trim().length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setNewMessage('')}
+                                className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-slate-500 transition hover:border-slate-300 hover:text-brand-dark"
+                              >
+                                مسح المسودة
                               </button>
                             )}
                           </div>

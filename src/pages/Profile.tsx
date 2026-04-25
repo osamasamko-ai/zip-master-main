@@ -229,6 +229,12 @@ export default function Profile() {
             </div>
 
             <div className="mt-5 space-y-3">
+              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4 text-right">
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Start Smart</p>
+                <p className="mt-2 text-sm font-black text-brand-dark">
+                  {lawyer.isOnline ? 'يمكنك بدء محادثة الآن ثم تحويلها إلى قضية عند الحاجة.' : 'الأفضل فتح قضية مباشرة إذا كانت لديك مستندات أو تفاصيل جاهزة.'}
+                </p>
+              </div>
               <div className="flex gap-3">
                 <button
                   onClick={() => setNotificationsEnabled((current) => !current)}
@@ -253,6 +259,16 @@ export default function Profile() {
               >
                 افتح قضية مع هذا المحامي
               </ActionButton>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">نمط البدء</p>
+                  <p className="mt-2 text-sm font-black text-brand-dark">{lawyer.isOnline ? 'محادثة سريعة' : 'فتح ملف منظم'}</p>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ملاءمة الطلب</p>
+                  <p className="mt-2 text-sm font-black text-brand-dark">{lawyer.specialty}</p>
+                </div>
+              </div>
             </div>
 
             <div className="mt-5 rounded-[1.75rem] border border-emerald-100 bg-emerald-50/60 p-4">
