@@ -610,6 +610,15 @@ export default function MyCases() {
 
   const [activeCaseId, setActiveCaseId] = useState<string>('');
   const [cases, setCases] = useState<LegalCase[]>([]);
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>('summary');
+  const [newMessage, setNewMessage] = useState<string>('');
+  const [isLawyerTyping, setIsLawyerTyping] = useState<boolean>(false);
+
+  const activeCase = useMemo(() => cases.find((c) => c.id === activeCaseId) || null, [cases, activeCaseId]);
+
+  const [replyModalDoc, setReplyModalDoc] = useState<LegalDocument | null>(null);
+  const [replyText, setReplyText] = useState('');
+
   const mergeCasesWithPendingMessages = useCallback((serverCases: LegalCase[], localCases: LegalCase[]) => {
     return serverCases.map((serverCase) => {
       const localCase = localCases.find((item) => item.id === serverCase.id);
@@ -892,8 +901,6 @@ export default function MyCases() {
     }
   };
 
-  const activeCase = useMemo(() => cases.find((c) => c.id === activeCaseId) || null, [cases, activeCaseId]);
-
   // Keyboard Shortcuts
   useEffect(() => {
     setSelectedDocs(new Set());
@@ -928,8 +935,6 @@ export default function MyCases() {
     }, 2000);
   };
 
-  const [newMessage, setNewMessage] = useState<string>('');
-  const [isLawyerTyping, setIsLawyerTyping] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -954,8 +959,6 @@ export default function MyCases() {
 
   const uploadTimersRef = useRef<number[]>([]);
   const [caseToDelete, setCaseToDelete] = useState<string | null>(null);
-
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>('summary');
 
   // Folder states
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
@@ -1544,7 +1547,13 @@ export default function MyCases() {
                               <div key={`alert-${doc.id}`} className="text-xs font-bold text-amber-800 flex flex-col md:flex-row md:items-center justify-between gap-3 bg-white p-3 rounded-xl border border-amber-100 shadow-sm">
                                 <div className="flex items-center gap-2">
                                   <i className="fa-solid fa-file-signature text-amber-500"></i>
-                                  <span>يرجى العمل على الوثيقة <span className="font-black cursor-pointer hover:text-amber-900 mx-1 underline underline-offset-4 decoration-amber-200">{doc.name}</span></span>
+                                  <span>
+                                    {doc.actionRequired && doc.actionRequired !== 'بانتظار توقيعك' ? (
+                                      <>ملاحظة المحامي على <span className="font-black">{doc.name}</span>: <span className="italic">"{doc.actionRequired}"</span></>
+                                    ) : (
+                                      <>يرجى العمل على الوثيقة <span className="font-black cursor-pointer hover:text-amber-900 mx-1 underline underline-offset-4 decoration-amber-200">{doc.name}</span></>
+                                    )}
+                                  </span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   {doc.expiresAt && <span className="bg-red-50 text-red-600 px-2 py-1 rounded-lg text-[10px] font-black border border-red-100"><i className="fa-solid fa-clock ml-1"></i> {doc.expiresText}</span>}
@@ -1959,6 +1968,15 @@ export default function MyCases() {
                                     className="text-[9px] font-black bg-brand-navy text-white hover:bg-brand-dark px-3 py-1 rounded-lg transition shadow-md"
                                   >
                                     توقيع
+                                  </button>
+                                )}
+                                {doc.actionRequired && doc.actionRequired !== 'بانتظار توقيعك' && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); handleDocReply(doc); }}
+                                    className="text-[9px] font-black bg-amber-100 text-amber-800 hover:bg-amber-200 px-3 py-1 rounded-lg transition shadow-sm"
+                                  >
+                                    <i className="fa-solid fa-reply ml-1"></i>
+                                    رد
                                   </button>
                                 )}
                                 {doc.expiresAt && (
@@ -2815,6 +2833,48 @@ export default function MyCases() {
         )}
       </AnimatePresence>
 
+      {/* Document Reply Modal */}
+      <AnimatePresence>
+        {replyModalDoc && (
+          <div className="fixed inset-0 z-[250] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-white rounded-[2.5rem] w-full max-w-md shadow-2xl p-8 text-right"
+            >
+              <div className="flex justify-between items-center mb-6">
+                <h3 className="text-xl font-black text-brand-dark">
+                  {replyModalDoc.actionRequired && replyModalDoc.actionRequired !== 'بانتظار توقيعك' ? 'الرد على ملاحظة المحامي' : 'استفسار عن وثيقة'}
+                </h3>
+                <button onClick={() => setReplyModalDoc(null)} className="text-slate-400 hover:text-red-500 transition">
+                  <i className="fa-solid fa-times text-xl"></i>
+                </button>
+              </div>
+
+              <div className="mb-6 p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-2">الوثيقة: {replyModalDoc.name}</p>
+                {replyModalDoc.actionRequired && replyModalDoc.actionRequired !== 'بانتظار توقيعك' && (
+                  <p className="text-sm font-bold text-brand-navy italic">"{replyModalDoc.actionRequired}"</p>
+                )}
+              </div>
+
+              <textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                placeholder="اكتب ردك هنا..."
+                className="w-full h-32 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white resize-none mb-6"
+                autoFocus
+              />
+
+              <div className="flex gap-3">
+                <button onClick={() => setReplyModalDoc(null)} className="flex-1 py-3 px-4 border border-slate-200 text-slate-500 rounded-xl font-black text-xs hover:bg-slate-50 transition">إلغاء</button>
+                <button onClick={handleSendDocReply} disabled={!replyText.trim()} className="flex-[2] py-3 px-4 bg-brand-navy text-white rounded-xl font-black text-xs shadow-lg shadow-brand-navy/20 hover:bg-brand-dark transition disabled:opacity-50">إرسال الرد</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

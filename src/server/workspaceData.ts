@@ -482,6 +482,14 @@ export async function reviewCaseDocument(caseId: string, documentId: string, sta
   return getCaseWorkspace(caseId);
 }
 
+export async function clearDocumentAction(caseId: string, documentId: string) {
+  await prisma.document.update({
+    where: { id: documentId },
+    data: { actionRequired: null },
+  });
+  return getCaseWorkspace(caseId);
+}
+
 export async function addCaseDocument(caseId: string, payload: { name: string; size: string; type: string; folderId?: string | null; }) {
   const previewUrl = `https://dummyimage.com/600x400/f3f4f6/1f2937&text=${encodeURIComponent(payload.name)}`;
   await prisma.document.create({

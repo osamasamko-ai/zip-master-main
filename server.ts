@@ -80,6 +80,7 @@ import {
   removeCaseCollaborator,
   signCaseDocument,
   reviewCaseDocument,
+  clearDocumentAction,
   toggleCaseArchive,
   updateCaseProgress,
   markCaseMessagesAsRead,
@@ -723,6 +724,15 @@ async function startServer() {
     } catch (error) {
       console.error('Review document error:', error);
       res.status(500).json({ error: 'Failed to review document' });
+    }
+  });
+
+  app.post('/api/app/workspace/cases/:caseId/documents/:documentId/clear-action', authenticateToken, async (req, res) => {
+    try {
+      res.json({ data: await clearDocumentAction(req.params.caseId, req.params.documentId) });
+    } catch (error) {
+      console.error('Clear document action error:', error);
+      res.status(500).json({ error: 'Failed to clear document action' });
     }
   });
 
