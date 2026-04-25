@@ -540,6 +540,12 @@ export default function ProDashboard() {
     () => cases.find(caseItem => caseItem.id === selectedCaseId) ?? cases[0],
     [cases, selectedCaseId]
   );
+
+  const isRequestMessage = (text: string) => {
+    const keywords = ['يرجى', 'مستند', 'وثيقة', 'توقيع', 'إرسال', 'تزويدنا'];
+    return keywords.some(k => text.includes(k));
+  };
+
   const selectedVaultDoc = useMemo(
     () => vaultDocs.find(doc => doc.id === selectedVaultDocId) ?? vaultDocs[0],
     [vaultDocs, selectedVaultDocId]
@@ -1375,8 +1381,8 @@ export default function ProDashboard() {
           <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="text-right">
-              <h3 className="text-lg font-bold text-brand-dark">طابور الأولوية</h3>
-              <p className="text-sm text-gray-500">ابدأ بهذه القضايا لأن تأثيرها مباشر على العميل أو الإيراد أو الموعد.</p>
+                <h3 className="text-lg font-bold text-brand-dark">طابور الأولوية</h3>
+                <p className="text-sm text-gray-500">ابدأ بهذه القضايا لأن تأثيرها مباشر على العميل أو الإيراد أو الموعد.</p>
               </div>
               <button type="button" onClick={() => setActiveTab('cases')} className="text-xs font-bold text-brand-navy">عرض الكل</button>
             </div>
@@ -1411,8 +1417,8 @@ export default function ProDashboard() {
           <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="text-right">
-              <h3 className="text-lg font-bold text-brand-dark">جدول اليوم</h3>
-              <p className="text-sm text-gray-500">مواعيد قريبة تضمن عدم ضياع أي متابعة تشغيلية.</p>
+                <h3 className="text-lg font-bold text-brand-dark">جدول اليوم</h3>
+                <p className="text-sm text-gray-500">مواعيد قريبة تضمن عدم ضياع أي متابعة تشغيلية.</p>
               </div>
               <button type="button" onClick={() => setIsAddApptModalOpen(true)} className="rounded-xl bg-brand-navy px-3 py-2 text-xs font-bold text-white">إضافة</button>
             </div>
@@ -1839,8 +1845,8 @@ export default function ProDashboard() {
                     type="button"
                     onClick={() => {
                       setSelectedCaseId(linkedMessageCase.id);
-                    setActiveTab('cases');
-                  }}
+                      setActiveTab('cases');
+                    }}
                     className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-brand-navy"
                   >
                     فتح ملف القضية
@@ -2841,107 +2847,107 @@ export default function ProDashboard() {
 
       {/* Command Palette Modal */}
       {isCommandPaletteOpen && (
+        <div
+          className="fixed inset-0 z-[300] flex items-start justify-center bg-brand-dark/20 px-4 pt-[15vh] backdrop-blur-sm"
+          onClick={() => setIsCommandPaletteOpen(false)}
+        >
           <div
-            className="fixed inset-0 z-[300] flex items-start justify-center bg-brand-dark/20 px-4 pt-[15vh] backdrop-blur-sm"
-            onClick={() => setIsCommandPaletteOpen(false)}
+            className="w-full max-w-2xl overflow-hidden rounded-[2.5rem] border border-white/20 bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="w-full max-w-2xl overflow-hidden rounded-[2.5rem] border border-white/20 bg-white shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="relative border-b border-slate-100 p-6">
-                <i className="fa-solid fa-magnifying-glass absolute right-8 top-1/2 -translate-y-1/2 text-slate-400"></i>
-                <input
-                  autoFocus
-                  placeholder="ابحث عن قضية، وثيقة، أو رسالة..."
-                  className="w-full bg-transparent pr-12 text-lg font-bold text-brand-dark outline-none placeholder:text-slate-300 text-right"
-                  value={commandQuery}
-                  onChange={(e) => setCommandQuery(e.target.value)}
-                />
-              </div>
+            <div className="relative border-b border-slate-100 p-6">
+              <i className="fa-solid fa-magnifying-glass absolute right-8 top-1/2 -translate-y-1/2 text-slate-400"></i>
+              <input
+                autoFocus
+                placeholder="ابحث عن قضية، وثيقة، أو رسالة..."
+                className="w-full bg-transparent pr-12 text-lg font-bold text-brand-dark outline-none placeholder:text-slate-300 text-right"
+                value={commandQuery}
+                onChange={(e) => setCommandQuery(e.target.value)}
+              />
+            </div>
 
-              <div className="max-h-[60vh] overflow-y-auto p-4">
-                {commandResults.length > 0 ? (
-                  <div className="space-y-2">
-                    <p className="mb-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">نتائج البحث</p>
-                    {commandResults.map((res) => (
-                      <button
-                        key={`${res.type}-${res.id}`}
-                        onClick={res.action}
-                        className="flex w-full items-center justify-between rounded-2xl p-4 text-right transition hover:bg-slate-50"
-                      >
-                        <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">{res.type}</span>
-                        <div className="flex items-center gap-4">
-                          <div className="text-right">
-                            <p className="text-sm font-bold text-brand-dark">{res.title}</p>
-                            <p className="text-[11px] text-slate-400 truncate max-w-[300px]">{res.subtitle}</p>
-                          </div>
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-navy/5 text-brand-navy">
-                            <i className={`fa-solid ${res.icon}`}></i>
-                          </div>
+            <div className="max-h-[60vh] overflow-y-auto p-4">
+              {commandResults.length > 0 ? (
+                <div className="space-y-2">
+                  <p className="mb-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">نتائج البحث</p>
+                  {commandResults.map((res) => (
+                    <button
+                      key={`${res.type}-${res.id}`}
+                      onClick={res.action}
+                      className="flex w-full items-center justify-between rounded-2xl p-4 text-right transition hover:bg-slate-50"
+                    >
+                      <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">{res.type}</span>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-brand-dark">{res.title}</p>
+                          <p className="text-[11px] text-slate-400 truncate max-w-[300px]">{res.subtitle}</p>
                         </div>
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="py-12 text-center text-slate-400">
-                    <i className="fa-solid fa-terminal mb-3 block text-3xl opacity-20"></i>
-                    <p className="text-sm font-bold">{commandQuery ? 'لا توجد نتائج تطابق بحثك' : 'ابدأ الكتابة للبحث السريع...'}</p>
-                  </div>
-                )}
-              </div>
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-navy/5 text-brand-navy">
+                          <i className={`fa-solid ${res.icon}`}></i>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-12 text-center text-slate-400">
+                  <i className="fa-solid fa-terminal mb-3 block text-3xl opacity-20"></i>
+                  <p className="text-sm font-bold">{commandQuery ? 'لا توجد نتائج تطابق بحثك' : 'ابدأ الكتابة للبحث السريع...'}</p>
+                </div>
+              )}
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       {/* Bulk Status Update Modal */}
       {isBulkStatusModalOpen && (
+        <div
+          className="fixed inset-0 z-[400] flex items-center justify-center bg-brand-dark/40 px-4 backdrop-blur-sm"
+        >
           <div
-            className="fixed inset-0 z-[400] flex items-center justify-center bg-brand-dark/40 px-4 backdrop-blur-sm"
+            className="w-full max-w-sm rounded-[2.5rem] bg-white p-8 text-right shadow-2xl"
           >
-            <div
-              className="w-full max-w-sm rounded-[2.5rem] bg-white p-8 text-right shadow-2xl"
-            >
-              <h3 className="mb-2 text-xl font-black text-brand-dark">تحديث الحالة الجماعي</h3>
-              <p className="mb-6 text-sm font-bold text-slate-500">سيتم تغيير حالة {selectedCases.size} قضية مختارة إلى:</p>
+            <h3 className="mb-2 text-xl font-black text-brand-dark">تحديث الحالة الجماعي</h3>
+            <p className="mb-6 text-sm font-bold text-slate-500">سيتم تغيير حالة {selectedCases.size} قضية مختارة إلى:</p>
 
-              <div className="grid gap-3">
-                {(['Open', 'In Review', 'Closed', 'At Risk'] as CaseRecord['status'][]).map((status) => (
-                  <button
-                    key={status}
-                    onClick={() => handleBulkStatusUpdate(status)}
-                    className={`flex items-center justify-between rounded-2xl border border-slate-100 p-4 text-sm font-black transition hover:border-brand-navy hover:bg-slate-50`}
-                  >
-                    <span className={`h-2 w-2 rounded-full ${statusBadgeMap[status].split(' ')[0].replace('bg-', 'bg-')}`}></span>
-                    {status}
-                  </button>
-                ))}
-              </div>
-
-              <button onClick={() => setIsBulkStatusModalOpen(false)} className="mt-6 w-full py-3 text-xs font-black text-slate-400 hover:text-brand-dark transition">إلغاء</button>
+            <div className="grid gap-3">
+              {(['Open', 'In Review', 'Closed', 'At Risk'] as CaseRecord['status'][]).map((status) => (
+                <button
+                  key={status}
+                  onClick={() => handleBulkStatusUpdate(status)}
+                  className={`flex items-center justify-between rounded-2xl border border-slate-100 p-4 text-sm font-black transition hover:border-brand-navy hover:bg-slate-50`}
+                >
+                  <span className={`h-2 w-2 rounded-full ${statusBadgeMap[status].split(' ')[0].replace('bg-', 'bg-')}`}></span>
+                  {status}
+                </button>
+              ))}
             </div>
+
+            <button onClick={() => setIsBulkStatusModalOpen(false)} className="mt-6 w-full py-3 text-xs font-black text-slate-400 hover:text-brand-dark transition">إلغاء</button>
           </div>
-        )}
+        </div>
+      )}
 
       {/* Undo Delete Toast */}
       {showUndoToast && (
-          <div
-            className="fixed bottom-8 left-1/2 z-[500] -translate-x-1/2 w-full max-w-md px-4"
-          >
-            <div className="flex items-center justify-between gap-4 rounded-2xl border border-brand-navy/10 bg-brand-dark p-4 text-white shadow-2xl">
-              <div className="flex items-center gap-3 pr-2">
-                <i className="fa-solid fa-trash-can text-red-400"></i>
-                <p className="text-sm font-bold">تم حذف القضايا المختارة ({lastDeletedCases.length})</p>
-              </div>
-              <button
-                onClick={handleUndoDelete}
-                className="rounded-xl bg-white/10 px-4 py-2 text-xs font-black text-brand-gold transition hover:bg-white/20"
-              >
-                تراجع
-              </button>
+        <div
+          className="fixed bottom-8 left-1/2 z-[500] -translate-x-1/2 w-full max-w-md px-4"
+        >
+          <div className="flex items-center justify-between gap-4 rounded-2xl border border-brand-navy/10 bg-brand-dark p-4 text-white shadow-2xl">
+            <div className="flex items-center gap-3 pr-2">
+              <i className="fa-solid fa-trash-can text-red-400"></i>
+              <p className="text-sm font-bold">تم حذف القضايا المختارة ({lastDeletedCases.length})</p>
             </div>
+            <button
+              onClick={handleUndoDelete}
+              className="rounded-xl bg-white/10 px-4 py-2 text-xs font-black text-brand-gold transition hover:bg-white/20"
+            >
+              تراجع
+            </button>
           </div>
-        )}
+        </div>
+      )}
 
       {/* Real-time Toast Notification */}
       <AnimatePresence>
@@ -2959,7 +2965,7 @@ export default function ProDashboard() {
               <div className="flex-1 min-w-0 text-right">
                 <h4 className="text-sm font-black text-brand-gold mb-1">{activeToast.title}</h4>
                 <p className="text-xs font-bold text-slate-300 leading-relaxed line-clamp-2">{activeToast.message}</p>
-                <button 
+                <button
                   onClick={() => {
                     if (activeToast.link) navigate(activeToast.link);
                     setActiveToast(null);
