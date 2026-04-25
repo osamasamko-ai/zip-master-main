@@ -136,56 +136,61 @@ export default function Messages() {
     });
   }, []);
 
-  const loadCases = useCallback(async (preferredConversationId?: string) => {
+  const loadCases = useCallback(async (isInitial = false) => {
     try {
       const response = await apiClient.getWorkspaceCases();
       const nextCases = response.data || [];
-      setCases((current) => mergeCasesWithPendingMessages(nextCases, current));
 
-      const grouped = buildConversations(nextCases);
-      const preferred =
-        preferredConversationId && grouped.some((conversation) => conversation.id === preferredConversationId)
-          ? preferredConversationId
-          : selectedLawyerIdFromQuery && grouped.some((conversation) => conversation.lawyerId === selectedLawyerIdFromQuery)
-            ? grouped.find((conversation) => conversation.lawyerId === selectedLawyerIdFromQuery)?.id || ''
+      setCases((current) => {
+        const merged = mergeCasesWithPendingMessages(nextCases, current);
+        // Skip update if core data hasn't changed to prevent expensive downstream re-renders
+        if (merged.length === current.length && merged.every((item, idx) =>
+          item.id === current[idx].id &&
+          item.messages.length === current[idx].messages.length &&
+          item.unreadCount === current[idx].unreadCount
+        )) {
+          return current;
+        }
+        return merged;
+      });
+
+      if (isInitial) {
+        const grouped = buildConversations(nextCases);
+        const preferred =
+          selectedLawyerIdFromQuery && grouped.some((c) => c.lawyerId === selectedLawyerIdFromQuery)
+            ? grouped.find((c) => c.lawyerId === selectedLawyerIdFromQuery)?.id || ''
             : grouped[0]?.id || '';
-      setSelectedConversationId(preferred);
+        setSelectedConversationId(preferred);
+      }
     } catch (error) {
       console.error('Failed to load messages', error);
-      setCases([]);
     }
   }, [mergeCasesWithPendingMessages, selectedLawyerIdFromQuery]);
 
   useEffect(() => {
-    loadCases();
+    loadCases(true);
   }, [loadCases]);
 
   useEffect(() => {
-    const refresh = () => {
-      loadCases(selectedConversationId || undefined);
+    const handleRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        loadCases(false);
+      }
     };
 
     const intervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        refresh();
-      }
+      handleRefresh();
     }, 5000);
 
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        refresh();
-      }
-    };
-
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleRefresh);
+    document.addEventListener('visibilitychange', handleRefresh);
 
     return () => {
       window.clearInterval(intervalId);
-      window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleRefresh);
+      document.removeEventListener('visibilitychange', handleRefresh);
     };
-  }, [loadCases, selectedConversationId]);
+  }, [loadCases]);
 
   const conversations = useMemo(() => buildConversations(cases), [cases]);
 
@@ -198,12 +203,6 @@ export default function Messages() {
       conversation.cases.some((item) => item.title.toLowerCase().includes(normalizedQuery)),
     );
   }, [conversations, query]);
-
-  useEffect(() => {
-    if (!filteredConversations.some((conversation) => conversation.id === selectedConversationId)) {
-      setSelectedConversationId(filteredConversations[0]?.id || '');
-    }
-  }, [filteredConversations, selectedConversationId]);
 
   const selectedConversation =
     filteredConversations.find((conversation) => conversation.id === selectedConversationId) ||
