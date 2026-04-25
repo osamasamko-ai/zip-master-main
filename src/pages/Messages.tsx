@@ -46,6 +46,7 @@ type Conversation = {
   cases: WorkspaceCase[];
   lastMessage: MessageItem | null;
   unreadCount: number;
+  lastSeen?: string;
 };
 
 function useSelectedLawyerId() {
@@ -396,8 +397,10 @@ export default function Messages() {
                           <h2 className="text-lg font-black text-brand-dark">{selectedConversation.lawyerName}</h2>
                           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="متصل الآن"></span>
                         </div>
-                        <p className="mt-0.5 text-xs font-bold text-slate-500">
-                          {selectedConversation.lawyerRole}
+                        <p className="mt-0.5 text-xs font-bold text-slate-500 flex items-center justify-end gap-1.5">
+                          <span>{selectedConversation.lawyerRole}</span>
+                          <span className="h-0.5 w-0.5 rounded-full bg-slate-300"></span>
+                          <span className="text-slate-400 font-medium">آخر ظهور: {selectedConversation.lastSeen || 'الآن'}</span>
                         </p>
                         <div className="mt-1.5 flex flex-wrap justify-end gap-2">
                           <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tighter ${latestClientMessage?.awaitingResponse ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
@@ -612,6 +615,7 @@ function buildConversations(cases: WorkspaceCase[]): Conversation[] {
       cases: [item],
       lastMessage,
       unreadCount: item.unreadCount || 0,
+      lastSeen: 'منذ ٥ دقائق',
     });
   });
 
