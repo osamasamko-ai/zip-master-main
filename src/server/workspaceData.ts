@@ -498,7 +498,13 @@ function mapProCase(item: any) {
 }
 
 export async function getProWorkspace(lawyerId: string) {
-  const [cases, appointments] = await Promise.all([
+  const [lawyer, cases, appointments, followerCount, newFollowersThisWeek, reviewCount, transactions] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: lawyerId },
+      include: {
+        lawyerProfile: true,
+      },
+    }),
     prisma.case.findMany({
       where: { lawyerId },
       include: {
@@ -510,6 +516,17 @@ export async function getProWorkspace(lawyerId: string) {
       orderBy: { updatedAt: 'desc' },
     } as any),
     prisma.appointment.findMany({ where: { lawyerId }, orderBy: { createdAt: 'asc' } }),
+    prisma.userFollow.count({ where: { lawyerId } }),
+    prisma.userFollow.count({
+      where: {
+        lawyerId,
+        createdAt: {
+          gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000),
+        },
+      },
+    }),
+    prisma.review.count({ where: { lawyerId } }),
+    prisma.transaction.findMany({ where: { userId: lawyerId }, orderBy: { createdAt: 'desc' }, take: 12 }),
   ]);
 
   const caseRecords = cases.map(mapProCase);
@@ -591,7 +608,61 @@ export async function getProWorkspace(lawyerId: string) {
     governorate: item.client.location || 'العراق',
   }));
 
+  const totalAgreedRevenue = cases.reduce((sum: number, item: any) => sum + Number(item.totalAgreedFee || 0), 0);
+  const collectedRevenue = cases.reduce((sum: number, item: any) => sum + Number(item.paidAmount || 0), 0);
+  const pendingRevenue = Math.max(0, totalAgreedRevenue - collectedRevenue);
+  const withdrawnTotal = transactions
+    .filter((item) => item.type === 'debit' && item.status === 'completed')
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const currentMonth = new Date().getMonth();
+  const currentYear = new Date().getFullYear();
+  const monthlyEarnings = transactions
+    .filter((item) => item.type === 'credit' && item.status === 'completed' && item.createdAt.getMonth() === currentMonth && item.createdAt.getFullYear() === currentYear)
+    .reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const nextBillingDate = new Intl.DateTimeFormat('ar-IQ', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(new Date(currentYear, currentMonth + 1, 1));
+  const subscriptionTier = lawyer?.subscriptionTier || 'basic';
+  const caseLimit = subscriptionTier === 'enterprise' ? 'غير محدود' : subscriptionTier === 'pro' ? '25' : '10';
+
   return {
+    summary: {
+      lawyerName: lawyer?.name || 'المحامي',
+      availableToWithdraw: lawyer?.accountBalance ?? 0,
+      pendingRevenue,
+      monthlyEarnings,
+      totalWithdrawn: withdrawnTotal,
+      totalCollected: collectedRevenue,
+      totalAgreedRevenue,
+      followers: followerCount,
+      newFollowersThisWeek,
+      reviewCount,
+      rating: lawyer?.lawyerProfile?.rating ?? 0,
+      subscriptionTier,
+      nextBillingDate,
+      activeCases: caseRecords.filter((item) => item.status !== 'Closed').length,
+      completedCases: caseRecords.filter((item) => item.status === 'Closed').length,
+      payoutMethods: [
+        { id: 'pm-zain', label: 'زين كاش', value: 'الحساب الافتراضي', recommended: true },
+        { id: 'pm-bank', label: 'تحويل بنكي', value: lawyer?.location || 'العراق', recommended: false },
+      ],
+      usage: {
+        activeCases: caseRecords.filter((item) => item.status !== 'Closed').length,
+        caseLimit,
+        aiAssists: 18,
+        aiLimit: subscriptionTier === 'enterprise' ? 'غير محدود' : subscriptionTier === 'pro' ? '200' : '50',
+      },
+      recentTransactions: transactions.map((item) => ({
+        id: item.id,
+        label: item.label,
+        amount: item.amount,
+        status: item.status,
+        type: item.type,
+        date: formatDateLabel(item.createdAt),
+      })),
+    },
     cases: caseRecords,
     appointments: appointments.map((item) => ({
       id: item.id,

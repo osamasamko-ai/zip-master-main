@@ -97,11 +97,44 @@ interface DeadlineReminder {
   governorate: string;
 }
 
-type DashboardTab = 'overview' | 'cases' | 'communications' | 'documents' | 'operations';
+type DashboardTab = 'overview' | 'cases' | 'messages' | 'earnings' | 'account';
 type CaseViewFilter = 'all' | 'urgent' | 'pinned' | 'billing';
 type VaultFilter = 'all' | 'needs-review' | 'signed' | 'confidential';
 type InboxFilter = 'all' | 'unread' | 'urgent' | 'waiting';
 type SavedViewId = 'today-work' | 'urgent-today' | 'awaiting-reply' | 'needs-review';
+
+interface ProSummary {
+  lawyerName: string;
+  availableToWithdraw: number;
+  pendingRevenue: number;
+  monthlyEarnings: number;
+  totalWithdrawn: number;
+  totalCollected: number;
+  totalAgreedRevenue: number;
+  followers: number;
+  newFollowersThisWeek: number;
+  reviewCount: number;
+  rating: number;
+  subscriptionTier: string;
+  nextBillingDate: string;
+  activeCases: number;
+  completedCases: number;
+  payoutMethods: Array<{ id: string; label: string; value: string; recommended: boolean }>;
+  usage: {
+    activeCases: number;
+    caseLimit: string;
+    aiAssists: number;
+    aiLimit: string;
+  };
+  recentTransactions: Array<{
+    id: string;
+    label: string;
+    amount: number;
+    status: string;
+    type: string;
+    date: string;
+  }>;
+}
 
 const statusBadgeMap: Record<CaseRecord['status'], string> = {
   Open: 'bg-green-100 text-green-700',
@@ -149,18 +182,18 @@ const messagePriorityClassMap: Record<InboxMessage['priority'], string> = {
 };
 
 const tabs: Array<{ id: DashboardTab; label: string; icon: string; description: string }> = [
-  { id: 'overview', label: 'اليوم', icon: 'fa-grid-2', description: 'طابور العمل والأولويات الحالية' },
-  { id: 'cases', label: 'القضايا', icon: 'fa-briefcase', description: 'إدارة الملفات، التقدم، والفوترة' },
-  { id: 'communications', label: 'التواصل', icon: 'fa-inbox', description: 'الرسائل والمتابعة السريعة' },
-  { id: 'documents', label: 'الوثائق', icon: 'fa-folder-open', description: 'مستودع المستندات والمراجعة' },
-  { id: 'operations', label: 'التشغيل', icon: 'fa-sliders', description: 'الجدول، الفريق، والمساعد' }
+  { id: 'overview', label: 'نظرة عامة', icon: 'fa-grid-2', description: 'الأولويات، الدخل، والمهام الحالية' },
+  { id: 'cases', label: 'القضايا', icon: 'fa-briefcase', description: 'إدارة الملفات النشطة والتاريخية' },
+  { id: 'messages', label: 'الرسائل', icon: 'fa-inbox', description: 'تواصل العملاء وردودك السريعة' },
+  { id: 'earnings', label: 'الأرباح', icon: 'fa-wallet', description: 'الإيرادات والسحب والتحويلات' },
+  { id: 'account', label: 'الحساب', icon: 'fa-user-gear', description: 'المتابعون والاشتراك والإعدادات' }
 ];
 
 const quickActions = [
   { icon: 'fa-folder-plus', label: 'قضية جديدة' },
-  { icon: 'fa-envelope-open-text', label: 'رسالة عميل' },
-  { icon: 'fa-file-circle-check', label: 'مراجعة وثائق' },
-  { icon: 'fa-pen-to-square', label: 'إعداد مذكّرة' },
+  { icon: 'fa-envelope-open-text', label: 'رد على عميل' },
+  { icon: 'fa-money-bill-transfer', label: 'طلب سحب' },
+  { icon: 'fa-file-circle-check', label: 'مراجعة حالة' },
   { icon: 'fa-robot', label: 'مساعد AI' }
 ];
 
@@ -311,7 +344,8 @@ export default function ProDashboard() {
   const chartRef = useRef<HTMLCanvasElement>(null);
   const chartInstance = useRef<Chart | null>(null);
 
-  const [activeTab, setActiveTab] = useState<DashboardTab>('cases');
+  const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
+  const [summary, setSummary] = useState<ProSummary | null>(null);
   const [appointments, setAppointments] = useState<Appointment[]>([]);
   const [cases, setCases] = useState<CaseRecord[]>([]);
   const [clients, setClients] = useState<ClientRecord[]>([]);
@@ -322,6 +356,7 @@ export default function ProDashboard() {
   const [deadlineReminders, setDeadlineReminders] = useState<DeadlineReminder[]>([]);
 
   const applyWorkspaceData = (data: any) => {
+    setSummary(data.summary || null);
     setCases(data.cases || []);
     setAppointments(data.appointments || []);
     setClients(data.clients || []);
@@ -426,8 +461,8 @@ export default function ProDashboard() {
 
     const items = [
       ...cases.map((c) => ({ id: c.id, type: 'قضية', title: c.title, subtitle: c.client, icon: 'fa-briefcase', action: () => { setSelectedCaseId(c.id); setActiveTab('cases'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
-      ...vaultDocs.map((d) => ({ id: d.id, type: 'وثيقة', title: d.name, subtitle: d.caseTitle, icon: 'fa-file-lines', action: () => { setSelectedVaultDocId(d.id); setActiveTab('documents'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
-      ...inboxMessages.map((m) => ({ id: m.id, type: 'رسالة', title: m.name, subtitle: m.text, icon: 'fa-envelope', action: () => { setActiveMessageId(m.id); setActiveTab('communications'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
+      ...vaultDocs.map((d) => ({ id: d.id, type: 'وثيقة', title: d.name, subtitle: d.caseTitle, icon: 'fa-file-lines', action: () => { setSelectedVaultDocId(d.id); setSelectedCaseId(cases.find(caseItem => caseItem.title === d.caseTitle)?.id ?? selectedCaseId); setActiveTab('cases'); setCaseViewMode('workbench'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
+      ...inboxMessages.map((m) => ({ id: m.id, type: 'رسالة', title: m.name, subtitle: m.text, icon: 'fa-envelope', action: () => { setActiveMessageId(m.id); setActiveTab('messages'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
     ];
 
     return items.filter(
@@ -436,7 +471,7 @@ export default function ProDashboard() {
         item.subtitle.toLowerCase().includes(query) ||
         item.type.toLowerCase().includes(query)
     );
-  }, [commandQuery, cases, vaultDocs, inboxMessages]);
+  }, [commandQuery, cases, vaultDocs, inboxMessages, selectedCaseId]);
 
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>('all');
   const [activeQuickAction, setActiveQuickAction] = useState('');
@@ -489,6 +524,15 @@ export default function ProDashboard() {
   const signedDocsCount = vaultDocs.filter(doc => doc.status === 'Signed').length;
   const billableHoursTotal = cases.reduce((sum, caseItem) => sum + caseItem.billableHours, 0);
   const outstandingInvoiceTotal = cases.reduce((sum, caseItem) => sum + caseItem.outstandingInvoice, 0);
+  const availableToWithdraw = summary?.availableToWithdraw ?? 0;
+  const pendingRevenue = summary?.pendingRevenue ?? outstandingInvoiceTotal;
+  const monthlyEarnings = summary?.monthlyEarnings ?? 0;
+  const totalWithdrawn = summary?.totalWithdrawn ?? 0;
+  const followersCount = summary?.followers ?? 0;
+  const newFollowersThisWeek = summary?.newFollowersThisWeek ?? 0;
+  const reviewCount = summary?.reviewCount ?? 0;
+  const ratingValue = summary?.rating ?? 0;
+  const subscriptionTier = summary?.subscriptionTier ?? 'basic';
 
   const searchableCases = cases.filter(caseItem => {
     const query = workspaceSearch.trim().toLowerCase();
@@ -592,10 +636,10 @@ export default function ProDashboard() {
     () => [
       { label: 'قضايا عاجلة', value: urgentCases.length, note: 'تحتاج معالجة فورية', icon: 'fa-solid fa-fire-extinguisher', tone: 'text-red-600', progress: 65, color: 'bg-red-500' },
       { label: 'رسائل جديدة', value: unreadMessagesCount, note: `${waitingReplyCount} بانتظار رد`, icon: 'fa-solid fa-envelope-open-text', tone: 'text-brand-navy', progress: 40, color: 'bg-brand-navy' },
-      { label: 'وثائق معلقة', value: docsNeedingReviewCount, note: 'للمراجعة والتدقيق', icon: 'fa-solid fa-file-circle-exclamation', tone: 'text-amber-600', progress: 72, color: 'bg-amber-500' },
-      { label: 'مهام مفتوحة', value: openTasksCount, note: 'قيد التنفيذ بالفريق', icon: 'fa-solid fa-list-check', tone: 'text-emerald-600', progress: 28, color: 'bg-emerald-500' },
+      { label: 'الأرباح المتاحة', value: Math.round(availableToWithdraw / 1000), note: 'بالألف د.ع قابلة للسحب', icon: 'fa-solid fa-wallet', tone: 'text-emerald-600', progress: 72, color: 'bg-emerald-500' },
+      { label: 'المتابعون', value: followersCount, note: `${newFollowersThisWeek} هذا الأسبوع`, icon: 'fa-solid fa-user-group', tone: 'text-amber-600', progress: 28, color: 'bg-amber-500' },
     ],
-    [urgentCases.length, unreadMessagesCount, waitingReplyCount, docsNeedingReviewCount, openTasksCount]
+    [availableToWithdraw, followersCount, newFollowersThisWeek, unreadMessagesCount, urgentCases.length, waitingReplyCount]
   );
 
   const handleBulkStatusUpdate = async (newStatus: CaseRecord['status']) => {
@@ -636,10 +680,16 @@ export default function ProDashboard() {
     chartInstance.current = new Chart(chartRef.current, {
       type: 'line',
       data: {
-        labels: ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو'],
+        labels: ['الإجمالي المتفق', 'المحصل', 'المتاح للسحب', 'المعلق', 'المسحوب'],
         datasets: [{
-          label: 'الإيرادات (مليون دينار)',
-          data: [1.2, 1.9, 1.5, 2.5, 2.2, 3.4],
+          label: 'الإيرادات (ألف دينار)',
+          data: [
+            Number((summary?.totalAgreedRevenue ?? 0) / 1000),
+            Number((summary?.totalCollected ?? 0) / 1000),
+            Number((availableToWithdraw ?? 0) / 1000),
+            Number((pendingRevenue ?? 0) / 1000),
+            Number((totalWithdrawn ?? 0) / 1000),
+          ],
           borderColor: '#1A237E',
           backgroundColor: 'rgba(26, 35, 126, 0.08)',
           borderWidth: 2,
@@ -671,7 +721,7 @@ export default function ProDashboard() {
             callbacks: {
               label: (context) => {
                 const val = context.parsed.y;
-                return `الإيرادات: ${val} مليون د.ع`;
+                return `القيمة: ${val.toLocaleString('ar-IQ')} ألف د.ع`;
               }
             }
           }
@@ -688,7 +738,7 @@ export default function ProDashboard() {
         chartInstance.current.destroy();
       }
     };
-  }, [activeTab]);
+  }, [activeTab, availableToWithdraw, pendingRevenue, summary, totalWithdrawn]);
 
   const handleQuickAction = (label: string) => {
     setActiveSavedView('today-work');
@@ -699,23 +749,24 @@ export default function ProDashboard() {
         setIsNewCaseModalOpen(true);
         setQuickActionNote('تم تحويلك مباشرة إلى تبويب القضايا لبدء إنشاء ملف جديد.');
         break;
-      case 'مراجعة وثائق':
-        setActiveTab('documents');
-        setQuickActionNote('تبويب الوثائق مفتوح الآن لبدء المراجعة أو الربط بالقضية.');
-        break;
-      case 'رسالة عميل':
-        setActiveTab('communications');
+      case 'رد على عميل':
+        setActiveTab('messages');
         setActiveMessageId(inboxMessages[0]?.id ?? null);
         setQuickActionNote('تبويب التواصل مفتوح مع أحدث رسالة لبدء الرد السريع.');
         break;
-      case 'مساعد AI':
-        setActiveTab('operations');
-        setQuickActionNote('تم فتح قسم التشغيل حيث المساعد جاهز للتحليل وإنتاج المسودات.');
+      case 'طلب سحب':
+        setActiveTab('earnings');
+        setQuickActionNote('قسم الأرباح مفتوح الآن لمراجعة الرصيد القابل للسحب والتحويلات الأخيرة.');
         break;
-      case 'إعداد مذكّرة':
-        setActiveTab('operations');
-        setAiPrompt('اكتب مسودة مذكّرة قانونية موجزة تشرح أهم نقاط الدفاع والخطوات التالية.');
-        setQuickActionNote('تم تجهيز مطالبة المساعد بصياغة مذكرة قانونية أولية.');
+      case 'مراجعة حالة':
+        setActiveTab('cases');
+        setCaseViewFilter('urgent');
+        setCaseViewMode('list');
+        setQuickActionNote('تم فتح طابور القضايا الأكثر احتياجاً لتدخلك الآن.');
+        break;
+      case 'مساعد AI':
+        setActiveTab('account');
+        setQuickActionNote('تم فتح قسم التشغيل حيث المساعد جاهز للتحليل وإنتاج المسودات.');
         break;
     }
   };
@@ -728,15 +779,12 @@ export default function ProDashboard() {
       setCaseViewMode('list');
     } else if (label === 'رسائل جديدة') {
       setActiveSavedView('awaiting-reply');
-      setActiveTab('communications');
+      setActiveTab('messages');
       setInboxFilter('unread');
-    } else if (label === 'وثائق معلقة') {
-      setActiveSavedView('needs-review');
-      setActiveTab('documents');
-      setVaultFilter('needs-review');
-    } else if (label === 'مهام مفتوحة') {
-      setActiveSavedView('today-work');
-      setActiveTab('operations');
+    } else if (label === 'الأرباح المتاحة') {
+      setActiveTab('earnings');
+    } else if (label === 'المتابعون') {
+      setActiveTab('account');
     }
   };
 
@@ -757,12 +805,12 @@ export default function ProDashboard() {
       return;
     }
     if (view === 'awaiting-reply') {
-      setActiveTab('communications');
+      setActiveTab('messages');
       setInboxFilter('waiting');
       return;
     }
-    setActiveTab('documents');
-    setVaultFilter('needs-review');
+    setActiveTab('cases');
+    setCaseViewMode('workbench');
   };
 
   const savedViews = [
@@ -813,7 +861,8 @@ export default function ProDashboard() {
     const response = await apiClient.uploadProVaultDocument(selectedCase?.id ?? null);
     applyWorkspaceData(response.data);
     setSelectedVaultDocId(response.data?.vaultDocs?.[0]?.id ?? null);
-    setActiveTab('documents');
+    setActiveTab('cases');
+    setCaseViewMode('workbench');
   };
 
   const handleMarkMessageRead = async (messageId: string) => {
@@ -912,136 +961,121 @@ export default function ProDashboard() {
 
   const renderCaseWorkbench = () => (
     <div className="space-y-6">
-      {/* Workbench Header */}
-      <section className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between rounded-[2rem] bg-white border border-slate-200 p-4 sm:p-6 shadow-sm">
-        <div className="flex flex-row-reverse items-center gap-4">
-          <button
-            onClick={() => setCaseViewMode('list')}
-            className="h-10 w-10 shrink-0 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:text-brand-navy hover:bg-brand-navy/5 transition-all border border-slate-100"
-          >
-            <i className="fa-solid fa-arrow-right"></i>
-          </button>
-          <div className="text-right">
-            <div className="flex items-center justify-end gap-2 mb-1">
-              <div className="relative group/status">
-                <button className={`rounded-full px-2.5 py-0.5 text-[9px] font-black uppercase flex items-center gap-1.5 transition-transform hover:scale-105 ${statusBadgeMap[selectedCase.status]}`}>
-                  {selectedCase.status}
-                  <i className="fa-solid fa-chevron-down text-[7px] opacity-50"></i>
-                </button>
-                <div className="absolute top-full right-0 mt-1 w-32 bg-white border border-slate-100 shadow-xl rounded-xl py-1 z-50 opacity-0 invisible group-hover/status:opacity-100 group-hover/status:visible transition-all">
-                  {(['Open', 'In Review', 'Closed', 'At Risk'] as CaseRecord['status'][]).map(s => (
-                    <button key={s} onClick={() => handleUpdateCaseStatus(selectedCase.id, s)} className="w-full px-3 py-1.5 text-right text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-colors">
-                      {s}
-                    </button>
-                  ))}
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex flex-row-reverse items-start gap-4">
+            <button
+              onClick={() => setCaseViewMode('list')}
+              className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400 transition hover:border-brand-navy/20 hover:bg-white hover:text-brand-navy"
+            >
+              <i className="fa-solid fa-arrow-right"></i>
+            </button>
+            <div className="text-right">
+              <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
+                <div className="relative group/status">
+                  <button className={`rounded-full px-3 py-1 text-[10px] font-black uppercase flex items-center gap-1.5 transition-transform hover:scale-[1.02] ${statusBadgeMap[selectedCase.status]}`}>
+                    {selectedCase.status}
+                    <i className="fa-solid fa-chevron-down text-[7px] opacity-50"></i>
+                  </button>
+                  <div className="absolute top-full right-0 mt-1 w-32 bg-white border border-slate-100 shadow-xl rounded-xl py-1 z-50 opacity-0 invisible group-hover/status:opacity-100 group-hover/status:visible transition-all">
+                    {(['Open', 'In Review', 'Closed', 'At Risk'] as CaseRecord['status'][]).map(s => (
+                      <button key={s} onClick={() => handleUpdateCaseStatus(selectedCase.id, s)} className="w-full px-3 py-1.5 text-right text-[10px] font-black text-slate-600 hover:bg-slate-50 transition-colors">
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
+                <span className={`rounded-full px-3 py-1 text-[10px] font-black ${priorityBadgeMap[selectedCase.priority]}`}>{selectedCase.priority}</span>
+                <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-600">{selectedCase.nextDeadline}</span>
               </div>
               <h2 className="text-2xl font-black text-brand-dark">{selectedCase.title}</h2>
+              <p className="mt-1 text-sm font-bold text-slate-500">{selectedCase.client} • {selectedCase.matter}</p>
+              <p className="mt-3 max-w-3xl text-xs font-bold leading-6 text-slate-500">
+                ابدأ من الإجراء التالي الواضح: راجع الرسالة أو المستند أو الفاتورة الأقرب لهذه القضية، ثم حدّث التقدم من نفس الشاشة.
+              </p>
             </div>
-            <p className="text-sm font-bold text-slate-500">العميل: {selectedCase.client} • {selectedCase.matter}</p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {activeTimerCaseId === selectedCase.id && (
+              <div className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${isTimerRunning ? 'border-red-200 bg-red-50 text-red-600' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
+                <i className="fa-solid fa-stopwatch text-xs"></i>
+                <span className="text-xs font-mono font-black">{formatTimer(timerSeconds)}</span>
+              </div>
+            )}
+            <button
+              onClick={() => handleToggleTimer(selectedCase.id)}
+              className={`rounded-xl px-4 py-2.5 text-xs font-black transition-all shadow-sm active:scale-95 ${isTimerRunning && activeTimerCaseId === selectedCase.id ? 'bg-red-500 text-white shadow-red-200' : 'bg-emerald-500 text-white shadow-emerald-200'}`}
+            >
+              <i className={`fa-solid ${isTimerRunning && activeTimerCaseId === selectedCase.id ? 'fa-pause' : 'fa-play'} ml-2`}></i>
+              {isTimerRunning && activeTimerCaseId === selectedCase.id ? 'إيقاف' : 'بدء التوقيت'}
+            </button>
+            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600 transition hover:border-brand-navy/20 hover:bg-slate-50 hover:text-brand-navy">تصدير التقرير</button>
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 justify-center lg:justify-end">
-          {activeTimerCaseId === selectedCase.id && (
-            <div className={`flex items-center gap-2 rounded-xl px-3 py-2 border ${isTimerRunning ? 'border-red-200 bg-red-50 text-red-600' : 'border-slate-200 bg-slate-50 text-slate-400'}`}>
-              <i className="fa-solid fa-stopwatch text-xs"></i>
-              <span className="text-xs font-mono font-black">{formatTimer(timerSeconds)}</span>
-            </div>
-          )}
-          <button
-            onClick={() => handleToggleTimer(selectedCase.id)}
-            className={`rounded-xl px-5 py-2.5 text-xs font-black transition-all shadow-md active:scale-95 ${isTimerRunning && activeTimerCaseId === selectedCase.id ? 'bg-red-500 text-white shadow-red-200' : 'bg-emerald-500 text-white shadow-emerald-200'}`}
-          >
-            <i className={`fa-solid ${isTimerRunning && activeTimerCaseId === selectedCase.id ? 'fa-pause' : 'fa-play'} ml-2`}></i>
-            {isTimerRunning && activeTimerCaseId === selectedCase.id ? 'إيقاف الفوترة' : 'بدء التوقيت'}
-          </button>
-          <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600 hover:bg-slate-50 transition">تصدير التقرير</button>
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-right">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">الإجراء التالي</p>
+            <p className="mt-2 text-sm font-black text-brand-dark">{caseRelatedMessages.length > 0 ? 'راجع آخر رسالة ثم أرسل تحديثاً' : 'ابدأ بإضافة مستند أو ملاحظة داخلية'}</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-right">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">الفوترة</p>
+            <p className="mt-2 text-sm font-black text-brand-dark">{selectedCase.outstandingInvoice.toLocaleString()} د.ع مستحق</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-right">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">الرسائل</p>
+            <p className="mt-2 text-sm font-black text-brand-dark">{caseRelatedMessages.length} رسالة مرتبطة</p>
+          </div>
+          <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4 text-right">
+            <p className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">المستندات</p>
+            <p className="mt-2 text-sm font-black text-brand-dark">{caseRelatedDocs.length} ملف داخل القضية</p>
+          </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_360px] gap-6">
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Documents Workbench */}
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <div className="space-y-5">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <SurfaceCard
-              title="مستندات القضية"
-              description="المسودات، التوكيلات، والأدلة المرفوعة."
-              actions={<button onClick={handleVaultUpload} className="flex items-center gap-1.5 rounded-lg bg-brand-navy/5 px-3 py-1.5 text-[10px] font-black text-brand-navy hover:bg-brand-navy/10 transition">
-                <i className="fa-solid fa-plus text-[8px]"></i>
-                رفع جديد
-              </button>}
-            >
-              <div className="space-y-3">
-                {caseRelatedDocs.length > 0 ? caseRelatedDocs.map(doc => (
-                  <div key={doc.id} className="flex flex-row-reverse items-center justify-between p-3 rounded-2xl border border-slate-100 bg-slate-50/50 hover:bg-white transition-all group">
-                    <div className="flex flex-row-reverse items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm transition-transform group-hover:scale-110">
-                        <i className={`fa-solid ${getFileIcon(doc.type).split(' ')[0]} ${getFileIcon(doc.type).split(' ')[1]} text-lg`}></i>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-xs font-black text-brand-dark truncate max-w-[100px] sm:max-w-none">{doc.name}</p>
-                        <p className="text-[10px] font-bold text-slate-400">{doc.date}</p>
-                      </div>
-                    </div>
-                    <span className={`rounded-full px-2 py-0.5 text-[8px] font-black ${vaultStatusClassMap[doc.status]}`}>{vaultStatusLabelMap[doc.status]}</span>
-                  </div>
-                )) : (
-                  <div className="py-12 text-center text-slate-300">
-                    <i className="fa-solid fa-folder-open mb-3 block text-3xl opacity-20"></i>
-                    <p className="text-xs font-bold">لا توجد مستندات بعد</p>
-                  </div>
-                )}
-              </div>
-            </SurfaceCard>
-
-            {/* Instant Communication Workbench */}
-            <SurfaceCard
-              title="مراسلات العميل"
-              description="آخر التوجيهات والطلبات المتبادلة."
+              title="رد سريع للعميل"
+              description="كل ما تحتاجه للرد أو طلب مستند من داخل نفس المساحة."
               className="flex flex-col"
             >
-              <div className="space-y-4 max-h-[260px] sm:max-h-[300px] overflow-y-auto px-1 mb-4 custom-scrollbar flex flex-col">
+              <div className="mb-4 flex gap-2 overflow-x-auto pb-1 no-scrollbar">
+                {responseTemplates.map((t, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setWorkbenchReply(t)}
+                    className="shrink-0 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black text-slate-500 transition hover:border-brand-navy/20 hover:bg-white hover:text-brand-navy"
+                    title={t}
+                  >
+                    {t.substring(0, 20)}...
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-3 max-h-[260px] overflow-y-auto custom-scrollbar pr-1">
                 {caseRelatedMessages.length > 0 ? caseRelatedMessages.map(msg => {
                   const isMe = msg.name === user?.name;
                   return (
-                    <div key={msg.id} className={`flex gap-2.5 max-w-[90%] ${isMe ? 'flex-row-reverse self-end' : 'self-start'}`}>
-                      <div className="h-8 w-8 shrink-0 rounded-xl overflow-hidden border border-slate-100 shadow-sm mt-1">
-                        <img src={`https://ui-avatars.com/api/?name=${encodeURIComponent(msg.name)}&background=random`} alt="" className="h-full w-full object-cover" />
-                      </div>
-                      <div className={`relative rounded-2xl p-3 text-right shadow-sm ${isMe ? 'bg-brand-navy text-white rounded-tr-none after:absolute after:-right-1 after:top-0 after:w-3 after:h-3 after:bg-brand-navy after:rotate-45' : 'bg-slate-100 text-slate-700 rounded-tl-none after:absolute after:-left-1 after:top-0 after:w-3 after:h-3 after:bg-slate-100 after:rotate-45'}`}>
-                        <div className="flex items-center justify-between gap-4 mb-1 opacity-70">
-                          <span className="text-[9px] font-bold">{msg.time}</span>
-                          <span className="text-[10px] font-black">{isMe ? 'أنت' : msg.name}</span>
-                        </div>
-                        <p className="text-xs font-bold leading-relaxed">{msg.text}</p>
+                    <div key={msg.id} className={`flex ${isMe ? 'justify-start' : 'justify-end'}`}>
+                      <div className={`max-w-[88%] rounded-[1.35rem] px-4 py-3 text-right text-xs font-bold leading-6 shadow-sm ${isMe ? 'bg-white border border-slate-200 text-slate-700' : 'bg-brand-navy text-white'}`}>
+                        <div className={`mb-1 text-[10px] font-black ${isMe ? 'text-slate-400' : 'text-white/70'}`}>{isMe ? 'أنت' : msg.name} • {msg.time}</div>
+                        <p>{msg.text}</p>
                       </div>
                     </div>
                   );
                 }) : (
-                  <div className="py-12 text-center text-slate-300">
+                  <div className="py-10 text-center text-slate-300">
                     <i className="fa-solid fa-comments mb-3 block text-3xl opacity-20"></i>
-                    <p className="text-xs font-bold">ابدأ المحادثة مع العميل</p>
+                    <p className="text-xs font-bold">ابدأ أول رد داخل هذه القضية</p>
                   </div>
                 )}
               </div>
-              <div className="mt-auto border-t border-slate-100 pt-4">
-                <div className="flex gap-1.5 mb-3 overflow-x-auto no-scrollbar pb-1">
-                  {responseTemplates.map((t, i) => (
-                    <button 
-                      key={i} 
-                      onClick={() => setWorkbenchReply(t)}
-                      className="shrink-0 px-2.5 py-1.5 bg-slate-100 hover:bg-brand-navy/10 text-[9px] font-black text-slate-500 rounded-lg transition-all border border-transparent hover:border-brand-navy/20 whitespace-nowrap"
-                      title={t}
-                    >
-                      <i className="fa-solid fa-bolt-lightning mr-1 opacity-50 text-brand-gold"></i>
-                      {t.substring(0, 18)}...
-                    </button>
-                  ))}
-                </div>
+              <div className="mt-4 border-t border-slate-100 pt-4">
                 <div className="relative">
                   <textarea
-                    rows={1}
+                    rows={3}
                     value={workbenchReply}
                     onChange={(e) => setWorkbenchReply(e.target.value)}
                     onKeyDown={(e) => {
@@ -1050,36 +1084,62 @@ export default function ProDashboard() {
                         handleSendWorkbenchMessage();
                       }
                     }}
-                    placeholder="اكتب رداً سريعاً للعميل..."
-                    className="w-full rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-right pr-4 pl-10 focus:border-brand-navy outline-none resize-none transition-all focus:bg-white min-h-[44px]"
+                    placeholder="اكتب تحديثاً أو طلباً واضحاً للعميل..."
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 pl-14 text-sm text-right outline-none resize-none transition focus:border-brand-navy focus:bg-white"
                   />
-                  <button 
+                  <button
                     onClick={handleSendWorkbenchMessage}
                     disabled={!workbenchReply.trim()}
-                    className="absolute left-2 bottom-2 h-7 w-7 rounded-lg bg-brand-navy text-white text-[10px] disabled:opacity-50 shadow-md transition-all hover:scale-105"
+                    className="absolute left-3 bottom-3 flex h-9 w-9 items-center justify-center rounded-xl bg-brand-navy text-white text-xs shadow-md transition hover:scale-105 disabled:opacity-50"
                   >
                     <i className="fa-solid fa-paper-plane"></i>
                   </button>
                 </div>
               </div>
             </SurfaceCard>
+
+            <SurfaceCard
+              title="مستندات القضية"
+              description="الوثائق الأساسية فقط حتى لا يصبح العرض مزدحماً."
+              actions={<button onClick={handleVaultUpload} className="rounded-xl bg-brand-navy/5 px-3 py-2 text-[10px] font-black text-brand-navy transition hover:bg-brand-navy/10">رفع جديد</button>}
+            >
+              <div className="space-y-3">
+                {caseRelatedDocs.length > 0 ? caseRelatedDocs.slice(0, 5).map(doc => (
+                  <div key={doc.id} className="flex flex-row-reverse items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/50 px-3 py-3 transition hover:bg-white">
+                    <div className="flex flex-row-reverse items-center gap-3">
+                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white shadow-sm">
+                        <i className={`fa-solid ${getFileIcon(doc.type).split(' ')[0]} ${getFileIcon(doc.type).split(' ')[1]} text-base`}></i>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-black text-brand-dark">{doc.name}</p>
+                        <p className="text-[10px] font-bold text-slate-400">{doc.date}</p>
+                      </div>
+                    </div>
+                    <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ${vaultStatusClassMap[doc.status]}`}>{vaultStatusLabelMap[doc.status]}</span>
+                  </div>
+                )) : (
+                  <div className="py-10 text-center text-slate-300">
+                    <i className="fa-solid fa-folder-open mb-3 block text-3xl opacity-20"></i>
+                    <p className="text-xs font-bold">لا توجد مستندات بعد</p>
+                  </div>
+                )}
+              </div>
+            </SurfaceCard>
           </div>
 
-          {/* Detailed Timeline */}
-          <SurfaceCard title="سجل الأحداث التفصيلي" description="مخطط زمني لكافة الإجراءات القانونية والملاحظات الداخلية.">
-            <div className="space-y-4">
-              {selectedCaseTimeline.map(entry => (
-                <div key={entry.id} className="flex flex-row-reverse items-start gap-4 p-4 rounded-2xl bg-slate-50/50 border border-slate-100">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm text-brand-navy">
-                    <i className={`fa-solid ${entry.type === 'hearing' ? 'fa-building-columns' : 'fa-file-lines'}`}></i>
+          <SurfaceCard title="سجل الأحداث" description="تسلسل زمني مبسط لآخر الإجراءات المهمة فقط.">
+            <div className="space-y-3">
+              {selectedCaseTimeline.slice(0, 6).map(entry => (
+                <div key={entry.id} className="flex flex-row-reverse items-start gap-3 rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-brand-navy shadow-sm">
+                    <i className={`fa-solid ${entry.type === 'hearing' ? 'fa-building-columns' : entry.type === 'client' ? 'fa-comments' : 'fa-file-lines'}`}></i>
                   </div>
-                  <div className="text-right flex-1">
-                    <div className="flex flex-row-reverse items-center justify-between mb-1">
+                  <div className="flex-1 text-right">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[10px] font-black text-slate-400">{entry.date}</span>
                       <h4 className="text-sm font-black text-brand-dark">{entry.title}</h4>
-                      <span className="text-[10px] font-bold text-slate-400">{entry.date}</span>
                     </div>
-                    <p className="text-xs font-bold text-slate-500 mb-2">{entry.detail}</p>
-                    <span className="text-[9px] font-black text-brand-gold uppercase tracking-widest">{entry.court} • {entry.governorate}</span>
+                    <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{entry.detail}</p>
                   </div>
                 </div>
               ))}
@@ -1087,16 +1147,15 @@ export default function ProDashboard() {
           </SurfaceCard>
         </div>
 
-        {/* Right Info Bar */}
-        <div className="space-y-6">
-          <SurfaceCard title="التقدم التشغيلي">
-            <div className="space-y-6">
-              <div>
-                <div className="flex items-center justify-between mb-3 text-[11px] font-black text-slate-400 uppercase tracking-widest">
-                  <span>{selectedCase.progress}% مكتمل</span>
-                  <span>نسبة الإنجاز</span>
+        <div className="space-y-5">
+          <SurfaceCard title="لوحة الحالة">
+            <div className="space-y-5">
+              <div className="rounded-2xl bg-slate-50 p-4">
+                <div className="mb-3 flex items-center justify-between text-[11px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  <span>{selectedCase.progress}%</span>
+                  <span>التقدم</span>
                 </div>
-                <input 
+                <input
                   type="range"
                   min="0"
                   max="100"
@@ -1105,7 +1164,24 @@ export default function ProDashboard() {
                   className="w-full h-1.5 bg-slate-100 rounded-lg appearance-none cursor-pointer accent-brand-gold"
                 />
               </div>
-              <div className="space-y-3 border-t border-slate-50 pt-4">
+
+              <div className="grid gap-3">
+                <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-red-500">المخاطر</p>
+                  <div className="mt-3 flex items-center gap-3">
+                    <div className="h-2 flex-1 overflow-hidden rounded-full bg-red-100">
+                      <div className="h-full bg-red-500" style={{ width: `${selectedCase.riskScore}%` }}></div>
+                    </div>
+                    <span className="text-sm font-black text-red-600">{selectedCase.riskScore}%</span>
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-amber-600">الالتزام القادم</p>
+                  <p className="mt-2 text-sm font-black text-brand-dark">{selectedCaseReminders[0]?.dueDate || selectedCase.nextDeadline}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 border-t border-slate-100 pt-4">
                 {[
                   { label: 'الوكالة القانونية', done: true },
                   { label: 'هوية العميل الموثقة', done: true },
@@ -1120,55 +1196,32 @@ export default function ProDashboard() {
             </div>
           </SurfaceCard>
 
-          <SurfaceCard title="خلاصة الموقف">
-            <div className="space-y-4">
-              <div className="p-4 rounded-2xl bg-red-50 border border-red-100">
-                <p className="text-[10px] font-black text-red-600 uppercase mb-2">مستوى المخاطر</p>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-2 rounded-full bg-red-100 overflow-hidden">
-                    <div className="h-full bg-red-500" style={{ width: `${selectedCase.riskScore}%` }}></div>
-                  </div>
-                  <span className="text-sm font-black text-red-600">{selectedCase.riskScore}%</span>
+          <SurfaceCard title="مؤشرات سريعة">
+            <div className="space-y-3">
+              {[
+                { label: 'ساعات فوترة', value: `${selectedCase.billableHours} ساعة` },
+                { label: 'مبلغ مستحق', value: `${selectedCase.outstandingInvoice.toLocaleString()} د.ع` },
+                { label: 'آخر موعد', value: selectedCase.nextDeadline },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3 text-sm">
+                  <span className="font-black text-brand-dark">{item.value}</span>
+                  <span className="text-xs font-black text-slate-400">{item.label}</span>
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">الالتزامات القادمة</p>
-                {selectedCaseReminders.map(r => (
-                  <div key={r.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 text-right">
-                    <p className="text-xs font-black text-brand-dark">{r.title}</p>
-                    <p className="text-[9px] font-bold text-brand-gold mt-1">{r.dueDate}</p>
-                  </div>
-                ))}
-              </div>
+              ))}
             </div>
           </SurfaceCard>
 
-          <SurfaceCard title="المالية الحالية">
-            <div className="space-y-3 text-right">
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-xs font-black text-emerald-600">{selectedCase.billableHours}h</span>
-                <span className="text-xs font-bold text-slate-500">الساعات المفوترة</span>
-              </div>
-              <div className="flex justify-between items-center py-2 border-b border-slate-100">
-                <span className="text-xs font-black text-red-600">{selectedCase.outstandingInvoice.toLocaleString()} د.ع</span>
-                <span className="text-xs font-bold text-slate-500">بانتظار التحصيل</span>
-              </div>
-              <button className="w-full mt-2 py-3 rounded-xl bg-brand-navy/[0.05] text-brand-navy text-[11px] font-black hover:bg-brand-navy/[0.08] transition">إصدار فاتورة مرحلية</button>
-            </div>
-          </SurfaceCard>
-
-          <SurfaceCard title="ملاحظات خاصة" description="مساحة لرؤى المحامي (لا تظهر للعميل).">
+          <SurfaceCard title="ملاحظات خاصة" description="ملخص داخلي سريع لا يظهر للعميل.">
             <div className="space-y-3">
               <textarea
                 value={caseNote}
                 onChange={(e) => setCaseNote(e.target.value)}
                 placeholder="أدخل ملاحظاتك الخاصة هنا..."
-                className="w-full h-32 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-bold text-slate-700 text-right focus:border-brand-navy focus:bg-white outline-none resize-none transition-all shadow-inner"
+                className="h-28 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-bold text-slate-700 text-right outline-none transition-all focus:border-brand-navy focus:bg-white"
               />
-              <button 
+              <button
                 onClick={handleSavePrivateNote}
-                className="w-full py-2.5 rounded-xl bg-brand-gold text-brand-dark text-[11px] font-black hover:bg-yellow-500 transition shadow-md"
+                className="w-full rounded-xl bg-brand-gold px-4 py-2.5 text-[11px] font-black text-brand-dark shadow-sm transition hover:bg-yellow-500"
               >
                 حفظ الملاحظة
               </button>
@@ -1184,10 +1237,10 @@ export default function ProDashboard() {
       <section className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
           {[
-            { label: 'قضايا نشطة', value: cases.length, note: `${urgentCases.length} تحتاج متابعة`, tone: 'text-brand-dark' },
-            { label: 'ساعات فوترة', value: billableHoursTotal, note: 'هذا الأسبوع', tone: 'text-brand-dark' },
-            { label: 'رسائل جديدة', value: unreadMessagesCount, note: `${waitingReplyCount} بانتظار رد`, tone: 'text-red-600' },
-            { label: 'مستندات معلّقة', value: docsNeedingReviewCount, note: `${confidentialDocsCount} سرية`, tone: 'text-brand-navy' }
+            { label: 'تحتاج إجراء الآن', value: urgentCases.length, note: 'ابدأ بالأعلى خطورة', tone: 'text-red-600' },
+            { label: 'رسائل غير مقروءة', value: unreadMessagesCount, note: `${waitingReplyCount} تنتظر ردك`, tone: 'text-brand-dark' },
+            { label: 'متاح للسحب', value: `${Math.round(availableToWithdraw / 1000)}k`, note: 'ألف د.ع', tone: 'text-emerald-600' },
+            { label: 'متابعون جدد', value: newFollowersThisWeek, note: `${followersCount} إجمالي المتابعين`, tone: 'text-brand-navy' }
           ].map(item => (
             <div key={item.label} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
               <p className="text-[11px] uppercase tracking-wide text-gray-400">{item.label}</p>
@@ -1200,8 +1253,8 @@ export default function ProDashboard() {
         <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="text-right">
-              <h3 className="text-lg font-bold text-brand-dark">لوحة اليوم</h3>
-              <p className="mt-1 text-sm text-gray-500">مركز تحكم سريع للوصول إلى أهم الأعمال خلال اليوم.</p>
+              <h3 className="text-lg font-bold text-brand-dark">مركز العمل اليومي</h3>
+              <p className="mt-1 text-sm text-gray-500">كل ما تحتاجه للرد، إدارة القضايا، وسحب الأرباح من مكان واحد.</p>
             </div>
             <div className="flex flex-wrap gap-2">
               {quickActions.map(action => (
@@ -1252,8 +1305,8 @@ export default function ProDashboard() {
           <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">القضايا الحرجة</h3>
-                <p className="text-sm text-gray-500">أعلى الملفات مخاطرة أو الأقرب تأثيراً.</p>
+              <h3 className="text-lg font-bold text-brand-dark">طابور الأولوية</h3>
+              <p className="text-sm text-gray-500">ابدأ بهذه القضايا لأن تأثيرها مباشر على العميل أو الإيراد أو الموعد.</p>
               </div>
               <button type="button" onClick={() => setActiveTab('cases')} className="text-xs font-bold text-brand-navy">عرض الكل</button>
             </div>
@@ -1288,8 +1341,8 @@ export default function ProDashboard() {
           <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between mb-4">
               <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">جدول اليوم</h3>
-                <p className="text-sm text-gray-500">عرض سريع للمواعيد القريبة.</p>
+              <h3 className="text-lg font-bold text-brand-dark">جدول اليوم</h3>
+              <p className="text-sm text-gray-500">مواعيد قريبة تضمن عدم ضياع أي متابعة تشغيلية.</p>
               </div>
               <button type="button" onClick={() => setIsAddApptModalOpen(true)} className="rounded-xl bg-brand-navy px-3 py-2 text-xs font-bold text-white">إضافة</button>
             </div>
@@ -1320,7 +1373,7 @@ export default function ProDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div className="text-right">
               <h3 className="text-lg font-bold text-brand-dark">الأداء المالي</h3>
-              <p className="text-sm text-gray-500">اتجاه الإيرادات وتوزيع النشاط.</p>
+              <p className="text-sm text-gray-500">عرض واضح للمبلغ المتفق، المحصّل، المتاح للسحب، والمعلّق.</p>
             </div>
             <span className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-bold text-gray-600">2026</span>
           </div>
@@ -1333,21 +1386,21 @@ export default function ProDashboard() {
           <div className="flex items-center justify-between mb-4">
             <div className="text-right">
               <h3 className="text-lg font-bold text-brand-dark">مؤشرات فورية</h3>
-              <p className="text-sm text-gray-500">الرسائل، الوثائق، والفوترة المفتوحة.</p>
+              <p className="text-sm text-gray-500">لقطة سريعة على السيولة، المتابعة، والنمو.</p>
             </div>
           </div>
           <div className="space-y-3 text-sm">
             <div className="flex items-center justify-between rounded-2xl bg-gray-50 p-3">
-              <span className="text-gray-500">فواتير مفتوحة</span>
-              <span className="font-bold text-brand-dark">{outstandingInvoiceTotal.toLocaleString()} د.ع</span>
+              <span className="text-gray-500">متاح للسحب</span>
+              <span className="font-bold text-emerald-600">{availableToWithdraw.toLocaleString()} د.ع</span>
             </div>
             <div className="flex items-center justify-between rounded-2xl bg-gray-50 p-3">
-              <span className="text-gray-500">رسائل عاجلة</span>
-              <span className="font-bold text-red-600">{urgentInboxCount}</span>
+              <span className="text-gray-500">إيراد معلّق</span>
+              <span className="font-bold text-amber-700">{pendingRevenue.toLocaleString()} د.ع</span>
             </div>
             <div className="flex items-center justify-between rounded-2xl bg-gray-50 p-3">
-              <span className="text-gray-500">مهام قيد التنفيذ</span>
-              <span className="font-bold text-brand-dark">{openTasksCount}</span>
+              <span className="text-gray-500">المتابعون</span>
+              <span className="font-bold text-brand-dark">{followersCount}</span>
             </div>
           </div>
         </div>
@@ -1355,15 +1408,19 @@ export default function ProDashboard() {
         <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <div className="text-right">
-              <h3 className="text-lg font-bold text-brand-dark">نصائح مهنية لليوم</h3>
-              <p className="text-sm text-gray-500">إرشادات داعمة تظهر بعد استعراض طابور العمل الأساسي.</p>
+              <h3 className="text-lg font-bold text-brand-dark">نمو الممارسة</h3>
+              <p className="text-sm text-gray-500">تحسين الظهور والتفاعل والتحويل إلى قضايا مدفوعة.</p>
             </div>
             <div className="h-10 w-10 flex items-center justify-center rounded-xl bg-brand-gold/10 text-brand-gold">
               <i className="fa-solid fa-lightbulb"></i>
             </div>
           </div>
           <div className="grid gap-3">
-            {professionalAdvices.map(advice => (
+            {[
+              { id: 1, text: `لديك ${newFollowersThisWeek} متابع جديد هذا الأسبوع. أظهر توفرك أو سرّع الردود لتحويل الاهتمام إلى استشارات.`, icon: 'fa-user-group', color: 'text-brand-navy' },
+              { id: 2, text: `خطة الاشتراك الحالية: ${subscriptionTier}. راقب حد القضايا النشطة واستخدام الأدوات حتى لا تصل لنقطة تعطل.`, icon: 'fa-crown', color: 'text-brand-gold' },
+              { id: 3, text: `أسرع طريقة لزيادة التحصيل هذا اليوم هي متابعة القضايا ذات الفواتير المفتوحة ثم إرسال تحديث مختصر للعميل.`, icon: 'fa-wallet', color: 'text-emerald-500' },
+            ].map(advice => (
               <div key={advice.id} className="flex flex-row-reverse items-start gap-3 p-3 rounded-2xl bg-slate-50 border border-slate-100 transition hover:bg-white">
                 <i className={`fa-solid ${advice.icon} ${advice.color} mt-1`}></i>
                 <p className="text-xs font-bold text-slate-600 leading-relaxed text-right">{advice.text}</p>
@@ -1378,8 +1435,8 @@ export default function ProDashboard() {
   const renderCasesTab = () => (
     <div className="space-y-5">
       <ListWorkspaceHeader
-        title="طابور القضايا"
-        description="نفس نمط العمل اليومي: ابحث، فلتر، ثم افتح الملف الصحيح بسرعة."
+        title="إدارة القضايا"
+        description="طابور واضح للقضايا النشطة والتاريخية مع أسرع طريق إلى الإجراء التالي."
         searchValue={workspaceSearch}
         onSearchChange={setWorkspaceSearch}
         searchPlaceholder="ابحث عن قضية، عميل، أو موضوع..."
@@ -1513,13 +1570,13 @@ export default function ProDashboard() {
                 { label: 'ساعات الفوترة', value: `${selectedCase.billableHours} ساعة` },
                 { label: 'مستوى المخاطر', value: `${selectedCase.riskScore}%` },
               ]}
-              nextStep={<><span className="font-bold">الخطوة التالية:</span> راجع الوثائق المرتبطة وحدد موعد متابعة مع العميل خلال 24 ساعة.</>}
+              nextStep={<><span className="font-bold">الخطوة التالية:</span> افتح الملف وابدأ برسالة تحديث أو متابعة الفوترة أو مراجعة الوثائق من داخل نفس المساحة.</>}
               actions={
                 <>
                   <ActionButton variant="primary" size="sm" onClick={() => setCaseViewMode('workbench')}>فتح الملف</ActionButton>
-                  <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('communications')}>فتح الرسائل</ActionButton>
-                  <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('documents')}>عرض الوثائق</ActionButton>
-                  <ActionButton variant="ghost" size="sm" onClick={() => setIsAddApptModalOpen(true)}>جدولة متابعة</ActionButton>
+                  <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('messages')}>فتح الرسائل</ActionButton>
+                  <ActionButton variant="secondary" size="sm" onClick={() => setCaseViewMode('workbench')}>عرض الوثائق</ActionButton>
+                  <ActionButton variant="ghost" size="sm" onClick={() => setActiveTab('earnings')}>الفوترة</ActionButton>
                 </>
               }
             />
@@ -1608,8 +1665,8 @@ export default function ProDashboard() {
     <div className="grid grid-cols-1 xl:grid-cols-[1.1fr_0.95fr] gap-5">
       <section className="space-y-5">
         <ListWorkspaceHeader
-          title="طابور التواصل"
-          description="نفس نمط العمل اليومي مع الرسائل: ابحث، فلتر، ثم افتح الرسالة التي تحتاج قراراً."
+          title="الرسائل"
+          description="مركز واضح لكل رسائل العملاء مع أسرع طريق للرد أو فتح القضية المرتبطة."
           searchValue={searchInboxTerm}
           onSearchChange={setSearchInboxTerm}
           searchPlaceholder="ابحث في الرسائل..."
@@ -1705,8 +1762,8 @@ export default function ProDashboard() {
                     type="button"
                     onClick={() => {
                       setSelectedCaseId(linkedMessageCase.id);
-                      setActiveTab('cases');
-                    }}
+                    setActiveTab('cases');
+                  }}
                     className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-brand-navy"
                   >
                     فتح ملف القضية
@@ -1755,6 +1812,285 @@ export default function ProDashboard() {
               'صعّد الرسالة إلى متابعة عاجلة إذا ارتبطت بموعد أو مهلة قانونية.'
             ].map(item => (
               <div key={item} className="rounded-2xl bg-gray-50 p-3 text-gray-600">{item}</div>
+            ))}
+          </div>
+        </div>
+      </section>
+    </div>
+  );
+
+  const renderEarningsTab = () => (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+      <section className="space-y-5">
+        <SurfaceCard
+          title="ملخص الأرباح"
+          description="فصل واضح بين المتاح للسحب، الإيراد المعلّق، والتحويلات السابقة."
+          actions={<ActionButton variant="primary" size="sm">طلب سحب</ActionButton>}
+        >
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: 'المتاح للسحب', value: `${availableToWithdraw.toLocaleString()} د.ع`, note: 'يمكن طلبه الآن', tone: 'text-emerald-600' },
+              { label: 'إيراد معلق', value: `${pendingRevenue.toLocaleString()} د.ع`, note: 'بانتظار التحصيل أو التصفية', tone: 'text-amber-700' },
+              { label: 'هذا الشهر', value: `${monthlyEarnings.toLocaleString()} د.ع`, note: 'إيراد محقق خلال الشهر الحالي', tone: 'text-brand-dark' },
+              { label: 'إجمالي المسحوب', value: `${totalWithdrawn.toLocaleString()} د.ع`, note: 'تحويلات مكتملة', tone: 'text-brand-navy' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-right">
+                <p className="text-[11px] uppercase tracking-wide text-gray-400">{item.label}</p>
+                <p className={`mt-2 text-2xl font-bold ${item.tone}`}>{item.value}</p>
+                <p className="mt-2 text-xs text-gray-500">{item.note}</p>
+              </div>
+            ))}
+          </div>
+        </SurfaceCard>
+
+        <div className="grid gap-5 xl:grid-cols-[1.05fr_0.95fr]">
+          <div className="rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#0f274e_0%,#15386c_55%,#1d4f88_100%)] p-5 text-white shadow-lg shadow-brand-navy/10">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-white/70">Premium Finance</p>
+            <div className="mt-4 flex items-end justify-between gap-4">
+              <div className="text-right">
+                <p className="text-sm font-bold text-white/70">القيمة المتاحة الآن</p>
+                <p className="mt-2 text-4xl font-black">{availableToWithdraw.toLocaleString()}</p>
+                <p className="mt-2 text-xs font-bold text-white/60">دينار عراقي جاهز للتحويل عند تفعيل نقطة السحب</p>
+              </div>
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 text-brand-gold">
+                <i className="fa-solid fa-wallet text-xl"></i>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-[11px] font-black uppercase tracking-[0.24em] text-slate-400">الحركة المالية</p>
+            <div className="mt-4 space-y-3">
+              {[
+                { label: 'إجمالي متفق عليه', value: `${summary?.totalAgreedRevenue?.toLocaleString?.() ?? 0} د.ع`, tone: 'text-brand-dark' },
+                { label: 'محصل فعلياً', value: `${summary?.totalCollected?.toLocaleString?.() ?? 0} د.ع`, tone: 'text-emerald-600' },
+                { label: 'معلق حالياً', value: `${pendingRevenue.toLocaleString()} د.ع`, tone: 'text-amber-700' },
+              ].map((item) => (
+                <div key={item.label} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className={`text-sm font-black ${item.tone}`}>{item.value}</span>
+                  <span className="text-xs font-black text-slate-400">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <SurfaceCard
+          title="سحب الأموال"
+          description="خطوة واحدة لاختيار المبلغ ثم تأكيد وسيلة التحويل."
+        >
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-4">
+                {[0.25, 0.5, 0.75, 1].map((ratio) => {
+                  const amount = Math.round(availableToWithdraw * ratio);
+                  return (
+                    <button
+                      key={ratio}
+                      type="button"
+                      className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-sm font-bold text-brand-dark transition hover:border-brand-navy hover:bg-white"
+                    >
+                      {amount.toLocaleString()} د.ع
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+                <span className="font-bold text-brand-dark">ملاحظة:</span> تم تجهيز واجهة السحب لتكون مباشرة وواضحة. تنفيذ التحويل الفعلي ما يزال يحتاج نقطة API مخصصة للسحب حتى لا يتم عرض حركة مالية غير حقيقية.
+              </div>
+            </div>
+
+            <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
+              <h4 className="text-sm font-black text-brand-dark">وسائل التحويل</h4>
+              <div className="mt-4 space-y-3">
+                {(summary?.payoutMethods || []).map((method) => (
+                  <div key={method.id} className="rounded-2xl border border-white bg-white px-4 py-4 text-right shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      {method.recommended && (
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">مفضلة</span>
+                      )}
+                      <div>
+                        <p className="text-sm font-black text-brand-dark">{method.label}</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">{method.value}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard
+          title="سجل المعاملات"
+          description="سجل محاسبي سريع للمراجعة أثناء العمل اليومي."
+        >
+          <div className="space-y-3">
+            {(summary?.recentTransactions || []).length > 0 ? (
+              summary?.recentTransactions.map((item) => (
+                <div key={item.id} className="rounded-2xl border border-gray-100 bg-gray-50/80 p-4">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black ${item.type === 'credit' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-200 text-slate-700'}`}>
+                      {item.type === 'credit' ? 'إيراد' : 'سحب'}
+                    </span>
+                    <div className="flex-1 text-right">
+                      <p className="text-sm font-black text-brand-dark">{item.label}</p>
+                      <p className="mt-1 text-xs font-bold text-slate-500">{item.date}</p>
+                    </div>
+                    <p className="text-sm font-black text-brand-dark">{Number(item.amount).toLocaleString()} د.ع</p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+                لا توجد معاملات حديثة لعرضها.
+              </div>
+            )}
+          </div>
+        </SurfaceCard>
+      </section>
+
+      <section className="space-y-5">
+        <WorkspacePreviewPanel
+          eyebrow="قرار مالي سريع"
+          title="أفضل خطوة الآن"
+          subtitle="تسلسل واضح حتى لا تضيع حالة أي مبلغ"
+          status={<span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-bold text-emerald-700">مالي</span>}
+          summary={
+            <div className="space-y-2">
+              <p>لديك <span className="font-bold text-emerald-700">{availableToWithdraw.toLocaleString()} د.ع</span> متاحة الآن و <span className="font-bold text-amber-700">{pendingRevenue.toLocaleString()} د.ع</span> ما تزال معلقة.</p>
+              <p>ابدأ بالقضايا ذات الفواتير المفتوحة إذا كان هدفك زيادة التحصيل قبل تقديم طلب السحب.</p>
+            </div>
+          }
+          meta={[
+            { label: 'إيراد محصل', value: `${summary?.totalCollected?.toLocaleString?.() ?? 0} د.ع` },
+            { label: 'الفواتير المفتوحة', value: outstandingBillingCases.length },
+            { label: 'هذا الشهر', value: `${monthlyEarnings.toLocaleString()} د.ع` },
+            { label: 'آخر سحب', value: `${totalWithdrawn.toLocaleString()} د.ع` },
+          ]}
+          nextStep={<><span className="font-bold">الإجراء المقترح:</span> راجع القضايا ذات الرصيد المفتوح ثم انتقل مباشرة لتأكيد وسيلة السحب.</>}
+          actions={
+            <>
+              <ActionButton variant="primary" size="sm">طلب سحب</ActionButton>
+              <ActionButton variant="secondary" size="sm" onClick={() => { setActiveTab('cases'); setCaseViewFilter('billing'); }}>
+                افتح القضايا المالية
+              </ActionButton>
+              <ActionButton variant="ghost" size="sm" onClick={() => setActiveTab('overview')}>العودة للنظرة العامة</ActionButton>
+              <ActionButton variant="ghost" size="sm" onClick={() => setActiveTab('account')}>الاشتراك والحساب</ActionButton>
+            </>
+          }
+        />
+      </section>
+    </div>
+  );
+
+  const renderAccountTab = () => (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+      <section className="space-y-5">
+        <SurfaceCard
+          title="نمو الملف المهني"
+          description="متابعون ومراجعات وإشارات تساعدك على فهم أداء الواجهة العامة."
+        >
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {[
+              { label: 'إجمالي المتابعين', value: followersCount, note: `${newFollowersThisWeek} جديد هذا الأسبوع` },
+              { label: 'التقييم', value: ratingValue.toFixed(1), note: `${reviewCount} مراجعة` },
+              { label: 'القضايا النشطة', value: summary?.activeCases ?? cases.length, note: 'ملفات تعمل عليها حالياً' },
+              { label: 'المكتملة', value: summary?.completedCases ?? cases.filter((item) => item.status === 'Closed').length, note: 'تم إغلاقها بنجاح' },
+            ].map((item) => (
+              <div key={item.label} className="rounded-2xl border border-gray-200 bg-gray-50 p-4 text-right">
+                <p className="text-[11px] uppercase tracking-wide text-gray-400">{item.label}</p>
+                <p className="mt-2 text-2xl font-bold text-brand-dark">{item.value}</p>
+                <p className="mt-2 text-xs text-gray-500">{item.note}</p>
+              </div>
+            ))}
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard
+          title="الاشتراك الحالي"
+          description="معلومات واضحة عن الخطة وحدود الاستخدام وما الذي تحتاجه للترقية."
+        >
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_300px]">
+            <div className="rounded-3xl bg-[linear-gradient(135deg,#0f274e_0%,#173d73_60%,#285c99_100%)] p-5 text-white shadow-lg shadow-brand-navy/10">
+              <div className="flex items-start justify-between gap-3">
+                <div className="text-right">
+                  <p className="text-xs font-black uppercase tracking-[0.24em] text-white/70">Current Plan</p>
+                  <p className="mt-3 text-3xl font-black">{subscriptionTier.toUpperCase()}</p>
+                  <p className="mt-2 text-sm font-bold text-white/80">تاريخ المراجعة أو التجديد القادم: {summary?.nextBillingDate || 'غير محدد'}</p>
+                </div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-brand-gold">
+                  <i className="fa-solid fa-crown"></i>
+                </div>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-black text-slate-400">القضايا النشطة</p>
+                <p className="mt-1 text-sm font-black text-brand-dark">{summary?.usage.activeCases ?? 0} / {summary?.usage.caseLimit ?? 'غير محدد'}</p>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                <p className="text-xs font-black text-slate-400">استخدام أدوات AI</p>
+                <p className="mt-1 text-sm font-black text-brand-dark">{summary?.usage.aiAssists ?? 0} / {summary?.usage.aiLimit ?? '0'}</p>
+              </div>
+            </div>
+          </div>
+        </SurfaceCard>
+
+        <SurfaceCard
+          title="إجراءات الحساب"
+          description="اختصارات مباشرة للحساب، الاشتراك، ونمو الملف العام."
+        >
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ActionButton variant="primary" className="w-full">إدارة الاشتراك</ActionButton>
+            <ActionButton variant="secondary" className="w-full">تحديث وسيلة السحب</ActionButton>
+            <ActionButton variant="ghost" className="w-full">تحسين الملف العام</ActionButton>
+            <ActionButton variant="ghost" className="w-full">عرض سجل الفواتير</ActionButton>
+          </div>
+        </SurfaceCard>
+      </section>
+
+      <section className="space-y-5">
+        <WorkspacePreviewPanel
+          eyebrow="ملخص الحساب"
+          title={summary?.lawyerName || user?.name || 'المحامي'}
+          subtitle="الحساب والاشتراك ونمو الجمهور"
+          status={<span className="rounded-full bg-brand-gold/15 px-3 py-1 text-[10px] font-bold text-brand-dark">{subscriptionTier}</span>}
+          summary={
+            <div className="space-y-2">
+              <p>هذا القسم مصمم ليحفظ عناصر النمو والإعدادات المالية والاشتراك في مكان واحد بدل تشتيتها داخل التشغيل اليومي.</p>
+              <p>أفضل استخدام له هو مراجعة الاشتراك والنمو أسبوعياً، مع إبقاء العمل اليومي في القضايا والرسائل.</p>
+            </div>
+          }
+          meta={[
+            { label: 'متابعون', value: followersCount },
+            { label: 'مراجعات', value: reviewCount },
+            { label: 'الخطة', value: subscriptionTier },
+            { label: 'التقييم', value: ratingValue.toFixed(1) },
+          ]}
+          nextStep={<><span className="font-bold">الإجراء المقترح:</span> حدّث الملف المهني إذا انخفض النمو، وراجع الاشتراك قبل الوصول إلى حدود الاستخدام.</>}
+          actions={
+            <>
+              <ActionButton variant="primary" size="sm">إدارة الاشتراك</ActionButton>
+              <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('earnings')}>الأرباح والسحب</ActionButton>
+              <ActionButton variant="ghost" size="sm" onClick={() => setActiveTab('messages')}>العودة للرسائل</ActionButton>
+              <ActionButton variant="ghost" size="sm" onClick={() => setActiveTab('cases')}>العودة للقضايا</ActionButton>
+            </>
+          }
+        />
+
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h3 className="text-lg font-bold text-brand-dark">مؤشرات النمو</h3>
+          <div className="mt-4 space-y-3">
+            {[
+              { label: 'متابعون جدد', value: newFollowersThisWeek, tone: 'text-brand-navy' },
+              { label: 'إجمالي المتابعين', value: followersCount, tone: 'text-brand-dark' },
+              { label: 'عدد المراجعات', value: reviewCount, tone: 'text-amber-700' },
+            ].map((item) => (
+              <div key={item.label} className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                <span className={`text-sm font-black ${item.tone}`}>{item.value}</span>
+                <span className="text-xs font-black text-slate-400">{item.label}</span>
+              </div>
             ))}
           </div>
         </div>
@@ -2098,7 +2434,7 @@ export default function ProDashboard() {
             </div>
             <h2 className="mt-4 text-3xl font-bold leading-tight text-brand-dark">لوحة المحامي الاحترافية</h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-600">
-              منصة عمل كثيفة الاستخدام اليومي مصممة لسرعة التنقل بين القضايا، الوثائق، الرسائل، والتشغيل دون تشتيت.
+              مساحة عمل قانونية عالية الاستخدام اليومي، مصممة ليكون الرد على العملاء، إدارة القضايا، الأرباح، والاشتراك واضحاً وسريعاً بلا تشتيت.
             </p>
             {nextPriorityCase && (
               <div className="mt-4 flex flex-wrap justify-end gap-2">
@@ -2144,7 +2480,7 @@ export default function ProDashboard() {
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="text-right px-2">
             <h3 className="text-sm font-black text-brand-dark">العروض المحفوظة</h3>
-            <p className="mt-1 text-xs text-slate-500">انتقل مباشرة إلى طابور العمل الذي تريد مع الحفاظ على نفس نمط الفرز عبر القضايا والرسائل والوثائق.</p>
+            <p className="mt-1 text-xs text-slate-500">اختصارات سريعة لأكثر أوضاع العمل تكراراً: الأولويات، الرسائل المنتظرة، أو الملفات التي تحتاج مراجعة.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {savedViews.map((view) => (
@@ -2175,9 +2511,9 @@ export default function ProDashboard() {
               const isActive = activeTab === tab.id;
               const badgeCount =
                 tab.id === 'cases' ? urgentCases.length :
-                  tab.id === 'communications' ? unreadMessagesCount :
-                    tab.id === 'documents' ? docsNeedingReviewCount :
-                      tab.id === 'operations' ? openTasksCount : 0;
+                  tab.id === 'messages' ? unreadMessagesCount :
+                    tab.id === 'earnings' ? outstandingBillingCases.length :
+                      tab.id === 'account' ? newFollowersThisWeek : 0;
 
               return (
                 <button
@@ -2244,9 +2580,9 @@ export default function ProDashboard() {
       >
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'cases' && (caseViewMode === 'list' ? renderCasesTab() : renderCaseWorkbench())}
-        {activeTab === 'communications' && renderCommunicationsTab()}
-        {activeTab === 'documents' && renderDocumentsTab()}
-        {activeTab === 'operations' && renderOperationsTab()}
+        {activeTab === 'messages' && renderCommunicationsTab()}
+        {activeTab === 'earnings' && renderEarningsTab()}
+        {activeTab === 'account' && renderAccountTab()}
       </section>
 
       {isAddApptModalOpen && (
