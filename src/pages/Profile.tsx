@@ -6,7 +6,7 @@ import ActionButton from '../components/ui/ActionButton';
 import { useNotifications } from '../context/NotificationContext';
 import NoticePanel from '../components/ui/NoticePanel';
 import StatusBadge from '../components/ui/StatusBadge';
-import { useFollowedLawyers } from '../hooks/useFollowedLawyers';
+import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 import apiClient from '../api/client';
 
 type PublicTab = 'overview' | 'reviews' | 'activity';
@@ -80,7 +80,7 @@ export default function Profile() {
   const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications(); // Use global notifications
   const [activeTab, setActiveTab] = useState<PublicTab>('overview');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const { isFollowed, toggleFollow } = useFollowedLawyers();
+  const { isFollowed, isPending, toggleFollow } = useFollowedLawyers();
   const [lawyer, setLawyer] = useState<any | null>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [activityItems, setActivityItems] = useState<any[]>([]);
@@ -104,6 +104,36 @@ export default function Profile() {
     };
     load();
   }, [params.id]);
+
+  React.useEffect(() => {
+    const handleFollowStateChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ lawyerId: string; delta: number; followerCount?: number }>;
+      const { lawyerId, delta, followerCount } = customEvent.detail;
+
+      setLawyer((current: any) =>
+        current && current.id === lawyerId
+          ? {
+              ...current,
+              followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (current.followers ?? 0) + delta),
+            }
+          : current,
+      );
+
+      setRelatedLawyers((current: any[]) =>
+        current.map((item) =>
+          item.id === lawyerId
+            ? {
+                ...item,
+                followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (item.followers ?? 0) + delta),
+              }
+            : item,
+        ),
+      );
+    };
+
+    window.addEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
+    return () => window.removeEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
+  }, []);
 
   if (!lawyer) {
     return <div className="app-view text-right">جاري تحميل الملف...</div>;
@@ -183,7 +213,7 @@ export default function Profile() {
                 >
                   <i className={`fa-solid ${notificationsEnabled ? 'fa-bell' : 'fa-bell-slash'}`}></i>
                 </button>
-                <FollowButton isFollowing={isFollowing} onToggle={() => toggleFollow(lawyer.id)} className="flex-1" />
+                <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} className="flex-1" />
               </div>
               <ActionButton
                 onClick={() => navigate('/user', { state: { activeTab: 'schedule' } })}
@@ -295,7 +325,7 @@ export default function Profile() {
             >
               <i className={`fa-solid ${notificationsEnabled ? 'fa-bell' : 'fa-bell-slash'}`}></i>
             </button>
-            <FollowButton isFollowing={isFollowing} onToggle={() => toggleFollow(lawyer.id)} />
+            <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} />
             <ActionButton
               onClick={() => navigate('/user', { state: { activeTab: 'schedule' } })}
               variant="ghost"

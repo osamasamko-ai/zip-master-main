@@ -57,7 +57,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false);
   const [activeToast, setActiveToast] = useState<Notification | null>(null);
-  const unreadCount = notifications.filter(n => !n.read).length;
+  const unreadCount = useMemo(() => notifications.filter((n) => !n.read).length, [notifications]);
 
   const fetchNotifications = useCallback(async () => {
     if (!user?.id) return;
@@ -107,11 +107,11 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   }, []);
 
   const clearAllNotifications = useCallback(async () => {
-    setNotifications([]);
+    setNotifications((prev) => prev.map((item) => ({ ...item, read: true })));
   }, []);
 
-  const NotificationBell: React.FC = () => (
-    <button 
+  const NotificationBell = useCallback(() => (
+    <button
       onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
       className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-brand-navy hover:shadow-md transition-all relative"
     >
@@ -122,7 +122,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
         </span>
       )}
     </button>
-  );
+  ), [isNotificationsOpen, unreadCount]);
 
   const value = useMemo(() => ({
     notifications, unreadCount, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications, NotificationBell

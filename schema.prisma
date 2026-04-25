@@ -50,6 +50,9 @@ model User {
   reviewsAuthored       Review[]       @relation("ReviewAuthor")
   reviewsReceived       Review[]       @relation("ReviewLawyer")
   notifications         Notification[]
+
+  @@index([role, verified, createdAt])
+  @@index([blocked, createdAt])
 }
 
 model LawyerProfile {
@@ -76,6 +79,9 @@ model LawyerProfile {
   nationalIdVerified  Boolean  @default(false)
   lawyerLicenseUrl    String?
   lawyerLicenseVerified Boolean @default(false)
+
+  @@index([specialty, licenseStatus])
+  @@index([licenseStatus, profileScore])
 }
 
 model KycApplication {
@@ -88,6 +94,9 @@ model KycApplication {
   attachments String   @default("[]")
   status      String   @default("pending") // pending, approved, rejected
   createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model Case {
@@ -117,6 +126,11 @@ model Case {
   accessLogs         CaseAccessLog[]
   appointments       Appointment[]
   invoices           Invoice[]
+
+  @@index([clientId, updatedAt])
+  @@index([lawyerId, updatedAt])
+  @@index([isArchived, updatedAt])
+  @@index([status, updatedAt])
 }
 
 model Folder {
@@ -146,6 +160,9 @@ model Document {
   folder         Folder?   @relation(fields: [folderId], references: [id])
   confidential   Boolean   @default(false)
   createdAt      DateTime  @default(now())
+
+  @@index([caseId, createdAt])
+  @@index([folderId, createdAt])
 }
 
 model Transaction {
@@ -158,6 +175,8 @@ model Transaction {
   type      String   // credit, debit
   status    String   @default("pending")
   createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
 }
 
 model SupportTicket {
@@ -168,6 +187,9 @@ model SupportTicket {
   status      String   @default("open")
   priority    String   @default("medium")
   createdAt   DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([status, createdAt])
 }
 
 model ChatSession {
@@ -193,6 +215,9 @@ model Message {
   channel     String      @default("عميل")
   awaitingResponse Boolean @default(false)
   createdAt   DateTime    @default(now())
+
+  @@index([sessionId, createdAt])
+  @@index([senderId, createdAt])
 }
 
 model FeatureFlag {
@@ -266,6 +291,9 @@ model Notification {
   link      String?
   read      Boolean  @default(false)
   createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([userId, read, createdAt])
 }
 
 model UserFollow {
@@ -278,6 +306,8 @@ model UserFollow {
   lawyer     User     @relation("FollowedLawyer", fields: [lawyerId], references: [id])
 
   @@unique([followerId, lawyerId])
+  @@index([followerId, createdAt])
+  @@index([lawyerId, createdAt])
 }
 
 model Review {
@@ -290,6 +320,8 @@ model Review {
 
   author     User     @relation("ReviewAuthor", fields: [authorId], references: [id])
   lawyer     User     @relation("ReviewLawyer", fields: [lawyerId], references: [id])
+
+  @@index([lawyerId, createdAt])
 }
 
 model UserSession {
@@ -303,6 +335,8 @@ model UserSession {
   createdAt  DateTime @default(now())
 
   user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 model ActivityLog {
@@ -315,6 +349,8 @@ model ActivityLog {
   createdAt   DateTime @default(now())
 
   user        User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
 }
 
 model Invoice {
@@ -329,6 +365,9 @@ model Invoice {
 
   user       User     @relation(fields: [userId], references: [id])
   case       Case?    @relation(fields: [caseId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([caseId, createdAt])
 }
 
 model CaseCustomField {
@@ -339,6 +378,8 @@ model CaseCustomField {
   createdAt DateTime @default(now())
 
   case      Case     @relation(fields: [caseId], references: [id])
+
+  @@index([caseId, createdAt])
 }
 
 model CaseTimelineEntry {
@@ -351,6 +392,8 @@ model CaseTimelineEntry {
   createdAt DateTime @default(now())
 
   case      Case     @relation(fields: [caseId], references: [id])
+
+  @@index([caseId, createdAt])
 }
 
 model CaseCollaborator {
@@ -365,6 +408,8 @@ model CaseCollaborator {
   createdAt    DateTime @default(now())
 
   case         Case     @relation(fields: [caseId], references: [id])
+
+  @@index([caseId, createdAt])
 }
 
 model CaseAccessLog {
@@ -376,6 +421,8 @@ model CaseAccessLog {
   createdAt   DateTime @default(now())
 
   case        Case     @relation(fields: [caseId], references: [id])
+
+  @@index([caseId, createdAt])
 }
 
 model Appointment {
@@ -389,6 +436,9 @@ model Appointment {
   createdAt   DateTime @default(now())
 
   case        Case?    @relation(fields: [caseId], references: [id])
+
+  @@index([lawyerId, createdAt])
+  @@index([caseId, createdAt])
 }
 
 model SecurityAlert {

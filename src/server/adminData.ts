@@ -1,7 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
-import { PrismaClient } from '@prisma/client';
-const prisma = new PrismaClient();
+import { prisma } from './prisma';
 
 function parseAttachments(value: string | string[] | null | undefined): string[] {
     if (Array.isArray(value)) return value;
@@ -12,6 +11,25 @@ function parseAttachments(value: string | string[] | null | undefined): string[]
     } catch {
         return [];
     }
+}
+
+const CACHE_TTL_MS = 30_000;
+const cacheStore = new Map<string, { expiresAt: number; value: unknown }>();
+
+async function getCached<T>(key: string, loader: () => Promise<T>): Promise<T> {
+    const cached = cacheStore.get(key);
+    const now = Date.now();
+    if (cached && cached.expiresAt > now) {
+        return cached.value as T;
+    }
+
+    const value = await loader();
+    cacheStore.set(key, { expiresAt: now + CACHE_TTL_MS, value });
+    return value;
+}
+
+function invalidateCache(...keys: string[]) {
+    keys.forEach((key) => cacheStore.delete(key));
 }
 
 export type KycStatus = 'pending' | 'approved' | 'rejected';
@@ -318,14 +336,16 @@ export async function toggleUserBlock(id: string) {
 }
 
 export async function getFeatureFlags(): Promise<FeatureFlag[]> {
-    return prisma.featureFlag.findMany() as any;
+    return getCached('feature-flags', async () => prisma.featureFlag.findMany() as any);
 }
 
 export async function updateFeatureFlag(key: string, enabled: boolean) {
-    return prisma.featureFlag.update({
+    const updated = await prisma.featureFlag.update({
         where: { key },
         data: { enabled }
     }) as any;
+    invalidateCache('feature-flags');
+    return updated;
 }
 
 export async function getSupportTickets(): Promise<SupportTicket[]> {
@@ -340,14 +360,16 @@ export async function updateSupportTicket(id: string, status: string) {
 }
 
 export async function getPolicies(): Promise<PolicySetting[]> {
-    return prisma.systemPolicy.findMany() as any;
+    return getCached('system-policies', async () => prisma.systemPolicy.findMany() as any);
 }
 
 export async function updatePolicySetting(key: string, value: string) {
-    return prisma.systemPolicy.update({
+    const updated = await prisma.systemPolicy.update({
         where: { key },
         data: { value }
     }) as any;
+    invalidateCache('system-policies');
+    return updated;
 }
 
 export async function getSecurityAlerts(): Promise<SecurityAlert[]> {
@@ -384,99 +406,119 @@ export function getExportCsv(type: 'kyc' | 'transactions'): string {
 }
 
 export async function getSystemSettings(): Promise<SystemSettings> {
-    return prisma.systemSetting.findFirst() as any;
+    return getCached('system-settings', async () => prisma.systemSetting.findFirst() as any);
 }
 
 export async function updateSystemSettings(settings: Partial<SystemSettings>) {
     const current = await prisma.systemSetting.findFirst();
-    return prisma.systemSetting.update({
+    const updated = await prisma.systemSetting.update({
         where: { id: current?.id },
         data: settings
     }) as any;
+    invalidateCache('system-settings');
+    return updated;
 }
 
 export async function getAiSettings(): Promise<AiSettings> {
-    return prisma.aiSetting.findFirst() as any;
+    return getCached('ai-settings', async () => prisma.aiSetting.findFirst() as any);
 }
 
 export async function updateAiSettings(settings: Partial<AiSettings>) {
     const current = await prisma.aiSetting.findFirst();
-    return prisma.aiSetting.update({
+    const updated = await prisma.aiSetting.update({
         where: { id: current?.id },
         data: settings
     }) as any;
+    invalidateCache('ai-settings');
+    return updated;
 }
 
 export async function getPaymentGateways(): Promise<PaymentGateway[]> {
-    return prisma.paymentGateway.findMany() as any;
+    return getCached('payment-gateways', async () => prisma.paymentGateway.findMany() as any);
 }
 
 export async function updatePaymentGateway(key: string, enabled: boolean, feePercent?: number) {
-    return prisma.paymentGateway.update({
+    const updated = await prisma.paymentGateway.update({
         where: { key },
         data: { enabled, feePercent }
     }) as any;
+    invalidateCache('payment-gateways');
+    return updated;
 }
 
 export async function getWorkflowSettings(): Promise<WorkflowSettings> {
-    return prisma.workflowSetting.findFirst() as any;
+    return getCached('workflow-settings', async () => prisma.workflowSetting.findFirst() as any);
 }
 
 export async function updateWorkflowSettings(settings: Partial<WorkflowSettings>) {
     const current = await prisma.workflowSetting.findFirst();
-    return prisma.workflowSetting.update({
+    const updated = await prisma.workflowSetting.update({
         where: { id: current?.id },
         data: settings
     }) as any;
+    invalidateCache('workflow-settings');
+    return updated;
 }
 
 export async function getNotificationTemplates(): Promise<NotificationTemplate[]> {
-    return prisma.notificationTemplate.findMany() as any;
+    return getCached('notification-templates', async () => prisma.notificationTemplate.findMany() as any);
 }
 
 export async function updateNotificationTemplate(key: string, partial: Partial<NotificationTemplate>) {
-    return prisma.notificationTemplate.update({
+    const updated = await prisma.notificationTemplate.update({
         where: { key },
         data: partial
     }) as any;
+    invalidateCache('notification-templates');
+    return updated;
 }
 
 export async function getModerationRules(): Promise<ModerationRule[]> {
-    return prisma.moderationRule.findMany() as any;
+    return getCached('moderation-rules', async () => prisma.moderationRule.findMany() as any);
 }
 
 export async function updateModerationRule(id: string, partial: Partial<ModerationRule>) {
-    return prisma.moderationRule.update({
+    const updated = await prisma.moderationRule.update({
         where: { id },
         data: partial
     }) as any;
+    invalidateCache('moderation-rules');
+    return updated;
 }
 
 export async function addModerationRule(rule: Omit<ModerationRule, 'id'>) {
-    return prisma.moderationRule.create({ data: rule }) as any;
+    const created = await prisma.moderationRule.create({ data: rule }) as any;
+    invalidateCache('moderation-rules');
+    return created;
 }
 
 export async function deleteModerationRule(id: string) {
     await prisma.moderationRule.delete({ where: { id } });
+    invalidateCache('moderation-rules');
     return true;
 }
 
 export async function getLegalDocs(): Promise<LegalDoc[]> {
-    return prisma.legalDoc.findMany() as any;
+    return getCached('legal-docs', async () => prisma.legalDoc.findMany() as any);
 }
 
 export async function addLegalDoc(doc: Omit<LegalDoc, 'id'>) {
-    return prisma.legalDoc.create({ data: doc }) as any;
+    const created = await prisma.legalDoc.create({ data: doc }) as any;
+    invalidateCache('legal-docs');
+    return created;
 }
 
 export async function updateLegalDoc(id: string, settings: Partial<Omit<LegalDoc, 'id'>>) {
-    return prisma.legalDoc.update({
+    const updated = await prisma.legalDoc.update({
         where: { id },
         data: settings
     }) as any;
+    invalidateCache('legal-docs');
+    return updated;
 }
 
 export async function deleteLegalDoc(id: string) {
     await prisma.legalDoc.delete({ where: { id } });
+    invalidateCache('legal-docs');
     return true;
 }

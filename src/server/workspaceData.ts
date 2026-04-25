@@ -1,6 +1,4 @@
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from './prisma';
 
 const DEFAULT_AI_RESPONSE = 'تم توليد ملخص أولي للحالة، راجع المستندات والرسائل الأخيرة قبل مشاركة الصياغة النهائية.';
 
@@ -52,6 +50,127 @@ function mapDocType(type: string): 'pdf' | 'image' | 'other' {
   if (['jpg', 'jpeg', 'png', 'image', 'صورة'].some((entry) => type.toLowerCase().includes(entry))) return 'image';
   return 'other';
 }
+
+const workspaceCaseSelect = {
+  id: true,
+  title: true,
+  matter: true,
+  status: true,
+  progress: true,
+  riskScore: true,
+  isArchived: true,
+  totalAgreedFee: true,
+  paidAmount: true,
+  unreadCount: true,
+  createdAt: true,
+  updatedAt: true,
+  client: {
+    select: {
+      id: true,
+      name: true,
+      location: true,
+    },
+  },
+  lawyer: {
+    select: {
+      id: true,
+      name: true,
+      img: true,
+      roleDescription: true,
+      lawyerProfile: {
+        select: {
+          specialty: true,
+          avatar: true,
+        },
+      },
+    },
+  },
+  documents: {
+    select: {
+      id: true,
+      name: true,
+      size: true,
+      type: true,
+      folderId: true,
+      actionRequired: true,
+      expiresAt: true,
+      expiresText: true,
+      previewUrl: true,
+      fileUrl: true,
+      isSigned: true,
+      tags: true,
+      createdAt: true,
+    },
+  },
+  folders: {
+    select: {
+      id: true,
+      name: true,
+    },
+  },
+  customFields: {
+    select: {
+      id: true,
+      label: true,
+      value: true,
+    },
+  },
+  timelineEntries: {
+    select: {
+      id: true,
+      dateLabel: true,
+      title: true,
+      detail: true,
+      type: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'asc' as const },
+  },
+  collaborators: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      permissions: true,
+      img: true,
+      lastSeen: true,
+    },
+  },
+  accessLogs: {
+    select: {
+      id: true,
+      userName: true,
+      action: true,
+      timeLabel: true,
+    },
+    orderBy: { createdAt: 'desc' as const },
+  },
+  chatSessions: {
+    select: {
+      id: true,
+      messages: {
+        select: {
+          id: true,
+          senderRole: true,
+          text: true,
+          createdAt: true,
+        },
+        orderBy: { createdAt: 'asc' as const },
+      },
+    },
+  },
+  invoices: {
+    select: {
+      id: true,
+      amount: true,
+      dateLabel: true,
+      status: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' as const },
+  },
+} as const;
 
 async function ensureCaseSession(caseId: string, userId: string) {
   const existing = await prisma.chatSession.findFirst({
@@ -157,18 +276,7 @@ function mapWorkspaceCase(item: any) {
 export async function getClientWorkspace(userId: string) {
   const cases = await prisma.case.findMany({
     where: { clientId: userId },
-    include: {
-      client: true,
-      lawyer: { include: { lawyerProfile: true } },
-      documents: true,
-      folders: true,
-      customFields: true,
-      timelineEntries: { orderBy: { createdAt: 'asc' } },
-      collaborators: true,
-      accessLogs: { orderBy: { createdAt: 'desc' } },
-      chatSessions: { include: { messages: { orderBy: { createdAt: 'asc' } } } },
-      invoices: { orderBy: { createdAt: 'desc' } },
-    },
+    select: workspaceCaseSelect,
     orderBy: { updatedAt: 'desc' },
   } as any);
 
@@ -226,18 +334,7 @@ export async function createClientCase(userId: string, payload: { title: string;
 export async function getCaseWorkspace(caseId: string) {
   const item = await prisma.case.findUnique({
     where: { id: caseId },
-    include: {
-      client: true,
-      lawyer: { include: { lawyerProfile: true } },
-      documents: true,
-      folders: true,
-      customFields: true,
-      timelineEntries: { orderBy: { createdAt: 'asc' } },
-      collaborators: true,
-      accessLogs: { orderBy: { createdAt: 'desc' } },
-      chatSessions: { include: { messages: { orderBy: { createdAt: 'asc' } } } },
-      invoices: { orderBy: { createdAt: 'desc' } },
-    },
+    select: workspaceCaseSelect,
   } as any);
 
   if (!item) return null;

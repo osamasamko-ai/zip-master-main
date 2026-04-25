@@ -6,7 +6,7 @@ import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
 import NoticePanel from '../components/ui/NoticePanel';
 import StatusBadge from '../components/ui/StatusBadge';
-import { useFollowedLawyers } from '../hooks/useFollowedLawyers';
+import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 import apiClient from '../api/client';
 
 interface AvailabilityAlert {
@@ -19,35 +19,53 @@ interface AvailabilityAlert {
 
 export default function Following() {
   const navigate = useNavigate();
-  const { followedIds, follow, unfollow, isFollowed, totalFollowed } = useFollowedLawyers();
+  const { followedIds, follow, unfollow, isFollowed, isPending, totalFollowed } = useFollowedLawyers();
   const [followedSearch, setFollowedSearch] = useState('');
   const [alerts, setAlerts] = useState<AvailabilityAlert[]>([]);
   const [activeToast, setActiveToast] = useState<AvailabilityAlert | null>(null);
   const [allLawyers, setAllLawyers] = useState<any[]>([]);
-  const [followedData, setFollowedData] = useState<any[]>([]);
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [lawyersResponse, followingResponse] = await Promise.all([
-          apiClient.getLawyers(),
-          apiClient.getFollowing(),
-        ]);
+        const lawyersResponse = await apiClient.getLawyers();
         setAllLawyers(lawyersResponse.data || []);
-        setFollowedData(followingResponse.data || []);
       } catch (error) {
         console.error('Failed to load following page data', error);
       }
     };
 
     load();
-  }, [followedIds]);
+  }, []);
+
+  useEffect(() => {
+    const handleFollowStateChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ lawyerId: string; delta: number; followerCount?: number }>;
+      const { lawyerId, delta, followerCount } = customEvent.detail;
+
+      setAllLawyers((current) =>
+        current.map((lawyer) =>
+          lawyer.id === lawyerId
+            ? {
+                ...lawyer,
+                followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (lawyer.followers ?? 0) + delta),
+              }
+            : lawyer,
+        ),
+      );
+    };
+
+    window.addEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
+    return () => window.removeEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
+  }, []);
 
   const followedLawyers = useMemo(
     () =>
-      followedData.filter((lawyer) => lawyer.name.toLowerCase().includes(followedSearch.trim().toLowerCase()))
+      allLawyers
+        .filter((lawyer) => followedIds.includes(lawyer.id))
+        .filter((lawyer) => lawyer.name.toLowerCase().includes(followedSearch.trim().toLowerCase()))
         .sort((left, right) => Number(right.isOnline) - Number(left.isOnline) || right.rating - left.rating),
-    [followedData, followedSearch]
+    [allLawyers, followedIds, followedSearch]
   );
 
   const suggestedLawyers = useMemo(
@@ -59,7 +77,7 @@ export default function Following() {
     if (!followedIds.length) return;
 
     const interval = window.setInterval(() => {
-      const randomFollowed = followedData.filter((lawyer) => followedIds.includes(lawyer.id) && lawyer.isOnline);
+      const randomFollowed = allLawyers.filter((lawyer) => followedIds.includes(lawyer.id) && lawyer.isOnline);
       const selected = randomFollowed[Math.floor(Math.random() * randomFollowed.length)];
       if (!selected) return;
 
@@ -77,7 +95,7 @@ export default function Following() {
     }, 15000);
 
     return () => window.clearInterval(interval);
-  }, [followedData, followedIds]);
+  }, [allLawyers, followedIds]);
 
   return (
     <div className="app-view fade-in space-y-8 pb-12 text-right">
@@ -210,7 +228,7 @@ export default function Following() {
                       <p className="text-xs font-black text-emerald-700">{lawyer.responseTime}</p>
                       <p className="mt-1 text-[11px] font-bold text-slate-500">يثق به {lawyer.followers.toLocaleString()} متابع</p>
                     </div>
-                    <FollowButton isFollowing={true} onToggle={() => unfollow(lawyer.id)} />
+                    <FollowButton isFollowing={true} isLoading={isPending(lawyer.id)} onToggle={() => unfollow(lawyer.id)} />
                   </div>
 
                   <div className="mt-4 grid grid-cols-2 gap-3">
@@ -265,7 +283,7 @@ export default function Following() {
                     >
                       الملف
                     </ActionButton>
-                    <FollowButton isFollowing={isFollowed(lawyer.id)} onToggle={() => follow(lawyer.id)} className="flex-1" />
+                    <FollowButton isFollowing={isFollowed(lawyer.id)} isLoading={isPending(lawyer.id)} onToggle={() => follow(lawyer.id)} className="flex-1" />
                   </div>
                 </div>
               ))}

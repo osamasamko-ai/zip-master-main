@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import FollowButton from '../components/FollowButton';
 import { useNotifications } from '../context/NotificationContext';
 import NoticePanel from '../components/ui/NoticePanel';
-import { useFollowedLawyers } from '../hooks/useFollowedLawyers';
+import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 import apiClient from '../api/client';
 
 interface MainLayoutContext {
@@ -74,16 +74,19 @@ interface LawyerItem {
   specialty: 'أحوال شخصية' | 'قضايا تجارية' | 'عقارات' | 'ملكية فكرية';
   location: string;
   experience: string;
+  experienceYears: number;
   availability: string;
   isOnline: boolean;
   rating: number;
   reviews: string;
+  reviewCount: number;
   casesHandled: string;
   consultationFee: string;
   verified: boolean;
   accent: string;
   avatar: string;
   tagline: string;
+  followers: number;
 }
 
 const DASHBOARD_TABS: Array<{
@@ -136,7 +139,7 @@ export default function UserDashboard() {
     services: LegalService[];
   } | null>(null);
 
-  const { followedIds: followedLawyers, toggleFollow, totalFollowed } = useFollowedLawyers();
+  const { followedIds: followedLawyers, toggleFollow, isPending, totalFollowed } = useFollowedLawyers();
 
   const [serviceCategory, setServiceCategory] = useState<string>('الكل');
 
@@ -157,21 +160,44 @@ export default function UserDashboard() {
   const [commandQuery, setCommandQuery] = useState('');
 
   useEffect(() => {
-    // محاكاة تحميل البيانات لضمان تجربة مستخدم سلسة
-    const timer = setTimeout(() => setIsInitialLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
-
-  useEffect(() => {
     const load = async () => {
+      setIsInitialLoading(true);
       try {
         const response = await apiClient.getDashboard();
         setDashboardData(response.data);
       } catch (error) {
         console.error('Failed to load dashboard', error);
+      } finally {
+        setIsInitialLoading(false);
       }
     };
     load();
+  }, []);
+
+  useEffect(() => {
+    const handleFollowStateChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{ lawyerId: string; delta: number; followerCount?: number }>;
+      const { lawyerId, delta, followerCount } = customEvent.detail;
+
+      setDashboardData((current) =>
+        current
+          ? {
+              ...current,
+              lawyers: current.lawyers.map((lawyer) =>
+                lawyer.id === lawyerId
+                  ? {
+                      ...lawyer,
+                      followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (lawyer.followers ?? 0) + delta),
+                    }
+                  : lawyer,
+              ),
+            }
+          : current,
+      );
+    };
+
+    window.addEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
+    return () => window.removeEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
   }, []);
 
   useEffect(() => {
@@ -534,6 +560,7 @@ export default function UserDashboard() {
                     </button>
                     <FollowButton
                       isFollowing={followedLawyers.includes(lawyer.id)}
+                      isLoading={isPending(lawyer.id)}
                       onToggle={() => toggleFollow(lawyer.id)}
                       className="w-full rounded-2xl px-3 py-2"
                     />

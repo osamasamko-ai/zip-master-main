@@ -6,11 +6,11 @@ import cors from 'cors';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { answerQuestion, buildLocalAnswer, getTopRelevantDocuments } from './src/server/iraqiLawDataset';
 import { hashPassword, verifyPassword, generateToken, verifyToken, getTokenFromHeader } from './src/server/auth';
-import { PrismaClient } from '@prisma/client';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import multer from 'multer';
 import fs from 'fs';
+import { prisma } from './src/server/prisma';
 import {
   getAdminMetrics,
   getAuditLogs,
@@ -143,7 +143,6 @@ async function startServer() {
   });
 
   const PORT = Number(process.env.PORT || 3000);
-  const prisma = new PrismaClient();
   const adminBootstrapSecret = process.env.ADMIN_BOOTSTRAP_SECRET;
 
   // Setup uploads directory
@@ -524,19 +523,19 @@ async function startServer() {
   app.post('/api/app/lawyers/:id/follow', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
-      await followLawyer(currentUser.userId, req.params.id);
-      res.json({ success: true });
+      const data = await followLawyer(currentUser.userId, req.params.id);
+      res.json({ data, success: true });
     } catch (error) {
       console.error('Follow lawyer error:', error);
-      res.status(500).json({ error: 'Failed to follow lawyer' });
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to follow lawyer' });
     }
   });
 
   app.delete('/api/app/lawyers/:id/follow', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
-      await unfollowLawyer(currentUser.userId, req.params.id);
-      res.json({ success: true });
+      const data = await unfollowLawyer(currentUser.userId, req.params.id);
+      res.json({ data, success: true });
     } catch (error) {
       console.error('Unfollow lawyer error:', error);
       res.status(500).json({ error: 'Failed to unfollow lawyer' });

@@ -335,11 +335,14 @@ export default function ProDashboard() {
   // Data Fetching Hook
   useEffect(() => {
     const fetchDashboardData = async () => {
+      setIsInitialLoading(true);
       try {
         const response = await apiClient.getProWorkspace();
         applyWorkspaceData(response.data);
       } catch (err) {
         console.error("Failed to load dashboard data", err);
+      } finally {
+        setIsInitialLoading(false);
       }
     };
     fetchDashboardData();
@@ -362,11 +365,6 @@ export default function ProDashboard() {
   const [caseViewFilter, setCaseViewFilter] = useState<CaseViewFilter>('all');
   const [vaultFilter, setVaultFilter] = useState<VaultFilter>('all');
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setIsInitialLoading(false), 800);
-    return () => clearTimeout(timer);
-  }, []);
 
   useEffect(() => {
     if (!selectedCaseId && cases.length > 0) setSelectedCaseId(cases[0].id);
@@ -889,9 +887,23 @@ export default function ProDashboard() {
   const handleSendWorkbenchMessage = async () => {
     if (!workbenchReply.trim() || !selectedCase) return;
     try {
-      await apiClient.addCaseMessage(selectedCase.id, workbenchReply, 'lawyer');
-      const response = await apiClient.getProWorkspace();
-      applyWorkspaceData(response.data);
+      const outgoingText = workbenchReply.trim();
+      await apiClient.addCaseMessage(selectedCase.id, outgoingText, 'lawyer');
+      setInboxMessages((prev) => [
+        {
+          id: `local-${Date.now()}`,
+          name: user?.name || 'أنت',
+          time: 'الآن',
+          img: user?.img || (user?.name?.slice(0, 2) ?? 'Yo'),
+          unread: false,
+          text: outgoingText,
+          priority: 'Medium',
+          channel: 'داخلي',
+          caseTitle: selectedCase.title,
+          awaitingResponse: false,
+        },
+        ...prev,
+      ]);
       setWorkbenchReply('');
     } catch (err) {
       console.error("Failed to send message", err);

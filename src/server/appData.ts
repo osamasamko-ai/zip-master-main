@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { prisma } from './prisma';
 import { hashPassword, verifyPassword } from './auth';
-
-const prisma = new PrismaClient();
 
 const USER_DASHBOARD_SERVICES = [
   {
@@ -96,6 +94,35 @@ function buildLawyerCard(user: any, followerCount: number, reviewCount: number, 
     isFollowing,
   };
 }
+
+function getRelatedCount(item: any, key: 'followers' | 'reviewsReceived') {
+  if (typeof item?._count?.[key] === 'number') {
+    return item._count[key];
+  }
+
+  const relation = item?.[key];
+  return Array.isArray(relation) ? relation.length : 0;
+}
+
+const lawyerProfileCardSelect = {
+  licenseNumber: true,
+  specialty: true,
+  experienceYears: true,
+  avatar: true,
+  tagline: true,
+  availability: true,
+  isOnline: true,
+  consultationFee: true,
+  accent: true,
+  responseTime: true,
+  bio: true,
+  highlights: true,
+  rating: true,
+  openCases: true,
+  licenseStatus: true,
+  submittedAt: true,
+  profileScore: true,
+} as const;
 
 export async function getCurrentUserProfile(userId: string) {
   const user = await prisma.user.findUnique({
@@ -262,33 +289,65 @@ export async function getLawyers(currentUserId?: string, search?: string) {
             }
           : {}),
       },
-      include: {
-        lawyerProfile: true,
-        followers: true,
-        reviewsReceived: true,
+      select: {
+        id: true,
+        name: true,
+        location: true,
+        verified: true,
+        img: true,
+        roleDescription: true,
+        createdAt: true,
+        lawyerProfile: {
+          select: lawyerProfileCardSelect,
+        },
+        _count: {
+          select: {
+            followers: true,
+            reviewsReceived: true,
+          },
+        },
       },
       orderBy: [{ verified: 'desc' }, { createdAt: 'desc' }],
     }),
     currentUserId
-      ? prisma.userFollow.findMany({ where: { followerId: currentUserId } })
+      ? prisma.userFollow.findMany({ where: { followerId: currentUserId }, select: { lawyerId: true } })
       : Promise.resolve([]),
   ]);
 
   const followedSet = new Set(follows.map((item) => item.lawyerId));
   return lawyers.map((user) =>
-    buildLawyerCard(user, user.followers.length, user.reviewsReceived.length, followedSet.has(user.id)),
+    buildLawyerCard(
+      user,
+      getRelatedCount(user, 'followers'),
+      getRelatedCount(user, 'reviewsReceived'),
+      followedSet.has(user.id),
+    ),
   );
 }
 
 export async function getFollowingLawyers(userId: string) {
   const following = await prisma.userFollow.findMany({
     where: { followerId: userId },
-    include: {
+    select: {
+      lawyerId: true,
       lawyer: {
-        include: {
-          lawyerProfile: true,
-          followers: true,
-          reviewsReceived: true,
+        select: {
+          id: true,
+          name: true,
+          location: true,
+          verified: true,
+          img: true,
+          roleDescription: true,
+          createdAt: true,
+          lawyerProfile: {
+            select: lawyerProfileCardSelect,
+          },
+          _count: {
+            select: {
+              followers: true,
+              reviewsReceived: true,
+            },
+          },
         },
       },
     },
@@ -296,11 +355,33 @@ export async function getFollowingLawyers(userId: string) {
   });
 
   return following.map((item: any) =>
-    buildLawyerCard(item.lawyer, item.lawyer.followers.length, item.lawyer.reviewsReceived.length, true),
+    buildLawyerCard(
+      item.lawyer,
+      getRelatedCount(item.lawyer, 'followers'),
+      getRelatedCount(item.lawyer, 'reviewsReceived'),
+      true,
+    ),
   );
 }
 
 export async function followLawyer(userId: string, lawyerId: string) {
+  if (userId === lawyerId) {
+    throw new Error('لا يمكنك متابعة نفسك');
+  }
+
+  const lawyer = await prisma.user.findFirst({
+    where: {
+      id: lawyerId,
+      role: { in: ['pro', 'admin'] },
+      lawyerProfile: { isNot: null },
+    },
+    select: { id: true },
+  });
+
+  if (!lawyer) {
+    throw new Error('المحامي غير موجود');
+  }
+
   await prisma.userFollow.upsert({
     where: {
       followerId_lawyerId: { followerId: userId, lawyerId },
@@ -308,25 +389,70 @@ export async function followLawyer(userId: string, lawyerId: string) {
     update: {},
     create: { followerId: userId, lawyerId },
   });
+
+  const followerCount = await prisma.userFollow.count({ where: { lawyerId } });
+  return {
+    lawyerId,
+    isFollowing: true,
+    followerCount,
+  };
 }
 
 export async function unfollowLawyer(userId: string, lawyerId: string) {
   await prisma.userFollow.deleteMany({
     where: { followerId: userId, lawyerId },
   });
+
+  const followerCount = await prisma.userFollow.count({ where: { lawyerId } });
+  return {
+    lawyerId,
+    isFollowing: false,
+    followerCount,
+  };
 }
 
 export async function getLawyerProfile(lawyerId: string, currentUserId?: string) {
   const user = await prisma.user.findUnique({
     where: { id: lawyerId },
-    include: {
-      lawyerProfile: true,
-      followers: true,
+    select: {
+      id: true,
+      name: true,
+      location: true,
+      verified: true,
+      img: true,
+      roleDescription: true,
+      createdAt: true,
+      lawyerProfile: {
+        select: lawyerProfileCardSelect,
+      },
+      _count: {
+        select: {
+          followers: true,
+          reviewsReceived: true,
+        },
+      },
       reviewsReceived: {
-        include: { author: true },
+        select: {
+          id: true,
+          rating: true,
+          text: true,
+          createdAt: true,
+          author: {
+            select: {
+              name: true,
+            },
+          },
+        },
         orderBy: { createdAt: 'desc' },
+        take: 10,
       },
       activityLogs: {
+        select: {
+          id: true,
+          title: true,
+          description: true,
+          timeLabel: true,
+        },
         orderBy: { createdAt: 'desc' },
         take: 6,
       },
@@ -336,11 +462,16 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
   if (!user || !user.lawyerProfile) return null;
 
   const isFollowing = currentUserId
-    ? !!(await prisma.userFollow.findFirst({ where: { followerId: currentUserId, lawyerId } }))
+    ? (await prisma.userFollow.count({ where: { followerId: currentUserId, lawyerId } })) > 0
     : false;
 
   return {
-    lawyer: buildLawyerCard(user, user.followers.length, user.reviewsReceived.length, isFollowing),
+    lawyer: buildLawyerCard(
+      user,
+      getRelatedCount(user, 'followers'),
+      getRelatedCount(user, 'reviewsReceived'),
+      isFollowing,
+    ),
     reviews: user.reviewsReceived.map((review) => ({
       id: review.id,
       author: review.author.name,
@@ -361,17 +492,58 @@ export async function getUserDashboard(userId: string) {
   const [cases, follows, lawyers, invoices, transactions] = await Promise.all([
     prisma.case.findMany({
       where: { clientId: userId, isArchived: false },
-      include: {
-        lawyer: { include: { lawyerProfile: true, followers: true, reviewsReceived: true } },
-        documents: true,
+      select: {
+        id: true,
+        title: true,
+        matter: true,
+        progress: true,
+        status: true,
+        riskScore: true,
+        updatedAt: true,
+        lawyer: {
+          select: {
+            name: true,
+            lawyerProfile: {
+              select: {
+                specialty: true,
+              },
+            },
+          },
+        },
+        documents: {
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            createdAt: true,
+            status: true,
+          },
+        },
       },
       orderBy: { updatedAt: 'desc' },
       take: 8,
     }),
-    prisma.userFollow.findMany({ where: { followerId: userId }, include: { lawyer: { include: { lawyerProfile: true, followers: true, reviewsReceived: true } } } }),
+    prisma.userFollow.findMany({ where: { followerId: userId }, select: { lawyerId: true } }),
     prisma.user.findMany({
       where: { role: 'pro', lawyerProfile: { isNot: null } },
-      include: { lawyerProfile: true, followers: true, reviewsReceived: true },
+      select: {
+        id: true,
+        name: true,
+        location: true,
+        verified: true,
+        img: true,
+        roleDescription: true,
+        createdAt: true,
+        lawyerProfile: {
+          select: lawyerProfileCardSelect,
+        },
+        _count: {
+          select: {
+            followers: true,
+            reviewsReceived: true,
+          },
+        },
+      },
       orderBy: { createdAt: 'desc' },
       take: 8,
     }),
@@ -434,7 +606,12 @@ export async function getUserDashboard(userId: string) {
 
   const followedLawyerIds = new Set(follows.map((item) => item.lawyerId));
   const lawyerItems = lawyers.map((lawyer) =>
-    buildLawyerCard(lawyer, lawyer.followers.length, lawyer.reviewsReceived.length, followedLawyerIds.has(lawyer.id)),
+    buildLawyerCard(
+      lawyer,
+      getRelatedCount(lawyer, 'followers'),
+      getRelatedCount(lawyer, 'reviewsReceived'),
+      followedLawyerIds.has(lawyer.id),
+    ),
   );
 
   return {
