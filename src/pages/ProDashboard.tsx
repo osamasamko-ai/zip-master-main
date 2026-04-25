@@ -560,7 +560,11 @@ export default function ProDashboard() {
 
   const selectedCaseTimeline = caseTimeline.filter(entry => entry.caseId === selectedCase?.id);
   const selectedCaseReminders = deadlineReminders.filter(reminder => reminder.caseId === selectedCase?.id);
-  const linkedMessageCase = cases.find(caseItem => caseItem.id === selectedInboxMessage?.caseId);
+  const linkedMessageCase = cases.find(
+    caseItem =>
+      caseItem.id === selectedInboxMessage?.caseId ||
+      caseItem.title === selectedInboxMessage?.caseTitle,
+  );
 
   const urgentCases = cases.filter(caseItem => caseItem.status === 'At Risk' || caseItem.priority === 'High');
   const pinnedCases = cases.filter(caseItem => caseItem.isPinned);
@@ -937,18 +941,19 @@ export default function ProDashboard() {
   };
 
   const handleSendInboxReply = async () => {
-    if (!replyDraft.trim() || !selectedInboxMessage || !linkedMessageCase) return;
+    const targetCaseId = selectedInboxMessage?.caseId || linkedMessageCase?.id || selectedCase?.id;
+    if (!replyDraft.trim() || !selectedInboxMessage || !targetCaseId) return;
 
     setIsSendingReply(true);
     try {
-      await apiClient.addCaseMessage(linkedMessageCase.id, replyDraft.trim(), 'lawyer');
+      await apiClient.addCaseMessage(targetCaseId, replyDraft.trim(), 'lawyer');
       await apiClient.updateProMessageState(selectedInboxMessage.id, {
         unread: false,
         awaitingResponse: false,
       });
       await fetchWorkspaceData(false);
       setReplyDraft('');
-      setSelectedCaseId(linkedMessageCase.id);
+      setSelectedCaseId(targetCaseId);
       setQuickActionNote(`تم إرسال الرد إلى ${selectedInboxMessage.name} وسيظهر لدى العميل مباشرة.`);
     } catch (err) {
       console.error("Failed to send inbox reply", err);
@@ -1799,7 +1804,7 @@ export default function ProDashboard() {
                   variant="primary"
                   size="sm"
                   onClick={handleSendInboxReply}
-                  disabled={!replyDraft.trim() || !linkedMessageCase || isSendingReply}
+                  disabled={!replyDraft.trim() || (!selectedInboxMessage?.caseId && !linkedMessageCase?.id && !selectedCase?.id) || isSendingReply}
                 >
                   {isSendingReply ? 'جارٍ الإرسال...' : 'إرسال الرد'}
                 </ActionButton>
@@ -1872,13 +1877,17 @@ export default function ProDashboard() {
               />
               <div className="mt-3 flex items-center justify-between gap-3">
                 <span className="text-[11px] font-bold text-gray-400">
-                  {linkedMessageCase ? `سيتم الإرسال ضمن قضية: ${linkedMessageCase.title}` : 'لا توجد قضية مرتبطة بهذه الرسالة'}
+                  {linkedMessageCase
+                    ? `سيتم الإرسال ضمن قضية: ${linkedMessageCase.title}`
+                    : selectedCase
+                      ? `سيتم الإرسال ضمن القضية المفتوحة: ${selectedCase.title}`
+                      : 'لا توجد قضية مرتبطة بهذه الرسالة'}
                 </span>
                 <ActionButton
                   variant="primary"
                   size="sm"
                   onClick={handleSendInboxReply}
-                  disabled={!replyDraft.trim() || !linkedMessageCase || isSendingReply}
+                  disabled={!replyDraft.trim() || (!selectedInboxMessage?.caseId && !linkedMessageCase?.id && !selectedCase?.id) || isSendingReply}
                 >
                   {isSendingReply ? 'جارٍ الإرسال...' : 'إرسال'}
                 </ActionButton>

@@ -185,6 +185,15 @@ async function ensureCaseSession(caseId: string, userId: string) {
 }
 
 function mapWorkspaceCase(item: any) {
+  const sortedMessages = item.chatSessions
+    .flatMap((session: any) =>
+      session.messages.map((message: any) => ({
+        ...message,
+        _createdAt: message.createdAt,
+      })),
+    )
+    .sort((left: any, right: any) => left._createdAt.getTime() - right._createdAt.getTime());
+
   return {
     client: item.client.name,
     id: item.id,
@@ -230,14 +239,12 @@ function mapWorkspaceCase(item: any) {
       date: entry.dateLabel,
       excerpt: DEFAULT_AI_RESPONSE,
     })),
-    messages: item.chatSessions.flatMap((session: any) =>
-      session.messages.map((message: any) => ({
-        id: message.id,
-        sender: message.senderRole === 'lawyer' ? 'lawyer' : 'user',
-        text: message.text,
-        time: formatShortDateLabel(message.createdAt),
-      })),
-    ),
+    messages: sortedMessages.map((message: any) => ({
+      id: message.id,
+      sender: message.senderRole === 'lawyer' ? 'lawyer' : 'user',
+      text: message.text,
+      time: formatShortDateLabel(message.createdAt),
+    })),
     timeline: item.timelineEntries.map((entry: any) => ({
       id: entry.id,
       date: entry.dateLabel,
@@ -470,12 +477,13 @@ export async function addCaseMessage(caseId: string, userId: string, text: strin
       awaitingResponse: senderRole === 'user',
     },
   });
-  if (senderRole === 'user') {
-    await prisma.case.update({
-      where: { id: caseId },
-      data: { unreadCount: { increment: 1 } },
-    });
-  }
+  await prisma.case.update({
+    where: { id: caseId },
+    data: {
+      updatedAt: new Date(),
+      ...(senderRole === 'lawyer' ? { unreadCount: { increment: 1 } } : {}),
+    },
+  });
   return getCaseWorkspace(caseId);
 }
 
