@@ -22,6 +22,30 @@ type MessageItem = {
   deliveryState?: MessageDeliveryState;
 };
 
+type DocumentType = 'pdf' | 'image' | 'other';
+
+interface LegalDocument {
+  id: string;
+  name: string;
+  size: string;
+  date: string; // Formatted date string
+  type: DocumentType;
+  folderId: string | null;
+  actionRequired: 'بانتظار توقيعك' | null;
+  expiresAt?: string | null;
+  expiresText?: string | null;
+  previewUrl?: string;
+  isSigned?: boolean;
+  isUploading?: boolean;
+  progress?: number;
+  tags?: string[];
+  uploadedAt?: string;
+}
+
+// Helper function to determine file icon based on type
+function getFileIconClass(type: DocumentType): string {
+  return type === 'pdf' ? 'fa-file-pdf' : type === 'image' ? 'fa-file-image' : 'fa-file';
+}
 type WorkspaceCase = {
   id: string;
   title: string;
@@ -35,6 +59,7 @@ type WorkspaceCase = {
     img: string;
   };
   messages: MessageItem[];
+  documents: LegalDocument[]; // Add this line
 };
 
 type Conversation = {
@@ -339,7 +364,7 @@ export default function Messages() {
       </section>
 
       {conversations.length > 0 ? (
-        <section className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)] h-[calc(100vh-220px)] min-h-[600px]">
+        <section className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)_280px] h-[calc(100vh-220px)] min-h-[600px]">
           <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm flex flex-col overflow-hidden">
             <div className="relative">
               <input
@@ -556,7 +581,7 @@ export default function Messages() {
                 </div>
               </>
             ) : (
-              <div className="p-8">
+              <div className="flex-1 p-8">
                 <EmptyState
                   icon="comments"
                   title="اختر محادثة للمتابعة"
@@ -565,6 +590,46 @@ export default function Messages() {
               </div>
             )}
           </section>
+
+          {selectedConversation && selectedCase && (
+            <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm flex flex-col overflow-hidden">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-black text-brand-dark">وثائق القضية</h3>
+                <button
+                  onClick={() => navigate(`/cases`, { state: { activeCaseId: selectedCase.id, focusArea: 'docs' } })}
+                  className="text-slate-400 hover:text-brand-navy transition w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-50"
+                  title="عرض كل الوثائق"
+                >
+                  <i className="fa-solid fa-folder-open"></i>
+                </button>
+              </div>
+              <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar">
+                {selectedCase.documents.length > 0 ? (
+                  selectedCase.documents.map((doc) => (
+                    <div key={doc.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                      <div className={`text-xl ${doc.type === 'pdf' ? 'text-red-500' : doc.type === 'image' ? 'text-blue-500' : 'text-gray-500'}`}>
+                        <i className={`fa-solid ${getFileIconClass(doc.type)}`}></i>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-black text-brand-dark truncate">{doc.name}</p>
+                        <p className="text-[10px] font-bold text-slate-400">{doc.size} • {doc.date}</p>
+                      </div>
+                      {doc.actionRequired && (
+                        <span className="rounded-full bg-amber-50 text-amber-600 px-2 py-0.5 text-[9px] font-black">
+                          مطلوب
+                        </span>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-10 text-slate-400">
+                    <i className="fa-solid fa-file-circle-xmark text-3xl mb-3 opacity-20"></i>
+                    <p className="text-xs font-bold">لا توجد وثائق لهذا الملف</p>
+                  </div>
+                )}
+              </div>
+            </aside>
+          )}
         </section>
       ) : (
         <EmptyState
@@ -582,9 +647,8 @@ export default function Messages() {
             </div>
           }
         />
-      )
-      }
-    </div >
+      )}
+    </div>
   );
 }
 
