@@ -731,7 +731,7 @@ async function startServer() {
           title: 'رسالة جديدة',
           message: `لديك رسالة جديدة في قضية: ${caseData.title}`,
           type: 'info',
-          link: senderRole === 'user' ? '/pro' : '/my-cases'
+          link: senderRole === 'user' ? '/pro' : '/cases'
         }
       });
 

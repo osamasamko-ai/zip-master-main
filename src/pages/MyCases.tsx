@@ -602,6 +602,33 @@ export default function MyCases() {
   }, []);
 
   useEffect(() => {
+    const refresh = () => {
+      refreshCases(activeCaseId || undefined);
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    }, 5000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    };
+
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [activeCaseId]);
+
+  useEffect(() => {
     const loadLawyers = async () => {
       try {
         const response = await apiClient.getLawyers();

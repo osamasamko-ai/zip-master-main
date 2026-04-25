@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import FollowButton from '../components/FollowButton';
@@ -167,10 +167,7 @@ export default function Profile() {
   }
 
   const isFollowing = isFollowed(lawyer.id);
-  const socialProofText = useMemo(
-    () => `${lawyer.followers.toLocaleString()} متابع • ${lawyer.reviewCount} مراجعة موثقة • ${lawyer.casesHandled}`,
-    [lawyer.casesHandled, lawyer.followers, lawyer.reviewCount]
-  );
+  const socialProofText = `${lawyer.followers.toLocaleString()} متابع • ${lawyer.reviewCount} مراجعة موثقة • ${lawyer.casesHandled}`;
 
   const credentialBadges = [
     `رقم النقابة: ${lawyer.license}`,

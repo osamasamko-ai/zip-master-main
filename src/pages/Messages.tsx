@@ -75,6 +75,33 @@ export default function Messages() {
     loadCases();
   }, [selectedLawyerIdFromQuery]);
 
+  useEffect(() => {
+    const refresh = () => {
+      loadCases(selectedConversationId || undefined);
+    };
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    }, 5000);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        refresh();
+      }
+    };
+
+    window.addEventListener('focus', refresh);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', refresh);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [selectedConversationId, selectedLawyerIdFromQuery]);
+
   const conversations = useMemo(() => buildConversations(cases), [cases]);
 
   const filteredConversations = useMemo(() => {

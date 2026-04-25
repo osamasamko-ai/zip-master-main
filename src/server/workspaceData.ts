@@ -557,6 +557,7 @@ export async function getProWorkspace(lawyerId: string) {
     item.chatSessions.flatMap((session: any) =>
       session.messages.slice(0, 3).map((message: any) => ({
         id: message.id,
+        caseId: item.id,
         name: message.sender.name,
         time: formatRelativeTime(message.createdAt),
         img: message.sender.img || message.sender.name.slice(0, 2),

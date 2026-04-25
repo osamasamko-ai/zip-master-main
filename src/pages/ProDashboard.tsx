@@ -64,6 +64,7 @@ interface VaultDoc {
 
 interface InboxMessage {
   id: string;
+  caseId: string;
   name: string;
   time: string;
   img: string;
@@ -355,6 +356,23 @@ export default function ProDashboard() {
   const [caseTimeline, setCaseTimeline] = useState<CaseTimelineEntry[]>([]);
   const [deadlineReminders, setDeadlineReminders] = useState<DeadlineReminder[]>([]);
 
+  const fetchWorkspaceData = async (showLoader = false) => {
+    if (showLoader) {
+      setIsInitialLoading(true);
+    }
+
+    try {
+      const response = await apiClient.getProWorkspace();
+      applyWorkspaceData(response.data);
+    } catch (err) {
+      console.error("Failed to load dashboard data", err);
+    } finally {
+      if (showLoader) {
+        setIsInitialLoading(false);
+      }
+    }
+  };
+
   const applyWorkspaceData = (data: any) => {
     setSummary(data.summary || null);
     setCases(data.cases || []);
@@ -369,18 +387,49 @@ export default function ProDashboard() {
 
   // Data Fetching Hook
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      setIsInitialLoading(true);
+    let isMounted = true;
+
+    const fetchDashboardData = async (showLoader = false) => {
       try {
+        if (showLoader && isMounted) {
+          setIsInitialLoading(true);
+        }
+
         const response = await apiClient.getProWorkspace();
+        if (!isMounted) return;
         applyWorkspaceData(response.data);
       } catch (err) {
         console.error("Failed to load dashboard data", err);
       } finally {
-        setIsInitialLoading(false);
+        if (showLoader && isMounted) {
+          setIsInitialLoading(false);
+        }
       }
     };
-    fetchDashboardData();
+
+    const handleVisibilityRefresh = () => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboardData(false);
+      }
+    };
+
+    fetchDashboardData(true);
+
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        fetchDashboardData(false);
+      }
+    }, 5000);
+
+    window.addEventListener('focus', handleVisibilityRefresh);
+    document.addEventListener('visibilitychange', handleVisibilityRefresh);
+
+    return () => {
+      isMounted = false;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleVisibilityRefresh);
+      document.removeEventListener('visibilitychange', handleVisibilityRefresh);
+    };
   }, []);
   const nextPriorityCase = useMemo(
     () => [...cases].sort((left, right) => right.riskScore - left.riskScore)[0],
@@ -400,6 +449,7 @@ export default function ProDashboard() {
   const [caseViewFilter, setCaseViewFilter] = useState<CaseViewFilter>('all');
   const [vaultFilter, setVaultFilter] = useState<VaultFilter>('all');
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [isSendingReply, setIsSendingReply] = useState(false);
 
   useEffect(() => {
     if (!selectedCaseId && cases.length > 0) setSelectedCaseId(cases[0].id);
@@ -510,7 +560,7 @@ export default function ProDashboard() {
 
   const selectedCaseTimeline = caseTimeline.filter(entry => entry.caseId === selectedCase?.id);
   const selectedCaseReminders = deadlineReminders.filter(reminder => reminder.caseId === selectedCase?.id);
-  const linkedMessageCase = cases.find(caseItem => caseItem.title === selectedInboxMessage?.caseTitle);
+  const linkedMessageCase = cases.find(caseItem => caseItem.id === selectedInboxMessage?.caseId);
 
   const urgentCases = cases.filter(caseItem => caseItem.status === 'At Risk' || caseItem.priority === 'High');
   const pinnedCases = cases.filter(caseItem => caseItem.isPinned);
@@ -886,6 +936,28 @@ export default function ProDashboard() {
     setReplyDraft(`${prefix}${template}`);
   };
 
+  const handleSendInboxReply = async () => {
+    if (!replyDraft.trim() || !selectedInboxMessage || !linkedMessageCase) return;
+
+    setIsSendingReply(true);
+    try {
+      await apiClient.addCaseMessage(linkedMessageCase.id, replyDraft.trim(), 'lawyer');
+      await apiClient.updateProMessageState(selectedInboxMessage.id, {
+        unread: false,
+        awaitingResponse: false,
+      });
+      await fetchWorkspaceData(false);
+      setReplyDraft('');
+      setSelectedCaseId(linkedMessageCase.id);
+      setQuickActionNote(`تم إرسال الرد إلى ${selectedInboxMessage.name} وسيظهر لدى العميل مباشرة.`);
+    } catch (err) {
+      console.error("Failed to send inbox reply", err);
+      setQuickActionNote('تعذر إرسال الرد حالياً. حاول مرة أخرى.');
+    } finally {
+      setIsSendingReply(false);
+    }
+  };
+
   const handleUpdateCaseProgress = async (caseId: string, progress: number) => {
     try {
       const token = localStorage.getItem('auth_token');
@@ -938,21 +1010,7 @@ export default function ProDashboard() {
     try {
       const outgoingText = workbenchReply.trim();
       await apiClient.addCaseMessage(selectedCase.id, outgoingText, 'lawyer');
-      setInboxMessages((prev) => [
-        {
-          id: `local-${Date.now()}`,
-          name: user?.name || 'أنت',
-          time: 'الآن',
-          img: user?.img || (user?.name?.slice(0, 2) ?? 'Yo'),
-          unread: false,
-          text: outgoingText,
-          priority: 'Medium',
-          channel: 'داخلي',
-          caseTitle: selectedCase.title,
-          awaitingResponse: false,
-        },
-        ...prev,
-      ]);
+      await fetchWorkspaceData(false);
       setWorkbenchReply('');
     } catch (err) {
       console.error("Failed to send message", err);
@@ -1737,7 +1795,14 @@ export default function ProDashboard() {
             nextStep={<><span className="font-bold">الإجراء المقترح:</span> أرسل رداً موجزاً أو حوّل الرسالة إلى متابعة مرتبطة بالقضية خلال نفس الجلسة.</>}
             actions={
               <>
-                <ActionButton variant="primary" size="sm">إرسال المسودة</ActionButton>
+                <ActionButton
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSendInboxReply}
+                  disabled={!replyDraft.trim() || !linkedMessageCase || isSendingReply}
+                >
+                  {isSendingReply ? 'جارٍ الإرسال...' : 'إرسال الرد'}
+                </ActionButton>
                 <ActionButton variant="secondary" size="sm" onClick={() => linkedMessageCase && setSelectedCaseId(linkedMessageCase.id)}>فتح القضية</ActionButton>
                 <ActionButton variant="secondary" size="sm" onClick={() => handleToggleAwaitingResponse(selectedInboxMessage.id)}>
                   {selectedInboxMessage.awaitingResponse ? 'تمييز كمكتمل' : 'إعادة للمتابعة'}
@@ -1796,9 +1861,28 @@ export default function ProDashboard() {
               <textarea
                 value={replyDraft}
                 onChange={event => setReplyDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                    event.preventDefault();
+                    handleSendInboxReply();
+                  }
+                }}
                 placeholder="اكتب الرد القانوني أو استخدم أحد القوالب أعلاه..."
                 className="min-h-[120px] w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-right focus:border-brand-gold focus:outline-none"
               />
+              <div className="mt-3 flex items-center justify-between gap-3">
+                <span className="text-[11px] font-bold text-gray-400">
+                  {linkedMessageCase ? `سيتم الإرسال ضمن قضية: ${linkedMessageCase.title}` : 'لا توجد قضية مرتبطة بهذه الرسالة'}
+                </span>
+                <ActionButton
+                  variant="primary"
+                  size="sm"
+                  onClick={handleSendInboxReply}
+                  disabled={!replyDraft.trim() || !linkedMessageCase || isSendingReply}
+                >
+                  {isSendingReply ? 'جارٍ الإرسال...' : 'إرسال'}
+                </ActionButton>
+              </div>
             </div>
           </div>
         )}
