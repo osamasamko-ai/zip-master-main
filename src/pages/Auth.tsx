@@ -244,30 +244,30 @@ export default function Auth() {
       {/* Left Side: Branding */}
       <div className="hidden lg:flex w-1/2 grad-navy flex-col items-center justify-center text-white text-center px-12">
         <div className="max-w-lg">
-          <h2 className="text-4xl font-black mb-8 leading-tight">العدالة لم تعد بعيدة… الآن أصبحت أقرب لك من أي وقت</h2>
+          <h2 className="text-4xl font-black mb-8 leading-tight">العدالة لم تعد بعيدة.. حقك الآن أقرب إليك من أي وقت مضى</h2>
 
           <div className="space-y-3 mb-10 text-gray-200 text-lg font-bold">
-            <p>هل تحتاج استشارة قانونية موثوقة؟</p>
-            <p>هل تواجه صعوبة في متابعة قضيتك أو لا تعرف من أين تبدأ؟</p>
+            <p>هل تبحث عن استشارة قانونية رصينة وموثوقة؟</p>
+            <p>هل تواجه صعوبة في تتبع مسار قضيتك أو تائه في الخطوات الأولى؟</p>
           </div>
 
           <div className="mb-10">
-            <p className="text-xl font-black mb-6 text-brand-gold ">منصتنا القانونية الذكية توفر لك الحل:</p>
+            <p className="text-xl font-black mb-6 text-brand-gold ">منصتنا الرقمية المتكاملة تضع الحل بين يديك:</p>
             <div className="space-y-5 inline-block text-right">
-              <div className="flex flex-row-reverse items-right gap-4 text-right">
-                <p className="font-bold text-lg text-right">تواصل مباشر مع محامين محترفين ومعتمدين</p>
+              <div className="flex flex-row-reverse items-center gap-4 text-right">
+                <p className="font-bold text-lg text-right">تواصل فوري ومباشر مع نخبة من المحامين المعتمدين</p>
                 <div className="w-8 h-8 rounded-full bg-brand-gold/20 flex items-center justify-center shrink-0">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
               </div>
-              <div className="flex flex-row-reverse items-right gap-4 text-right">
-                <p className="font-bold text-lg text-right">متابعة مستمرة لقضيتك بكل وضوح وسهولة</p>
+              <div className="flex flex-row-reverse items-center gap-4 text-right">
+                <p className="font-bold text-lg text-right">شفافية تامة في تتبع سير الدعوى لحظة بلحظة</p>
                 <div className="w-8 h-8 rounded-full bg-brand-gold/20 flex items-center justify-center shrink-0">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
               </div>
-              <div className="flex flex-row-reverse items-right gap-4 text-right">
-                <p className="font-bold text-lg text-right">نصائح قانونية دقيقة من خبراء مختصين</p>
+              <div className="flex flex-row-reverse items-center gap-4 text-right">
+                <p className="font-bold text-lg text-right">حلول قانونية دقيقة مبنية على خبرات تخصصية</p>
                 <div className="w-8 h-8 rounded-full bg-brand-gold/20 flex items-center justify-center shrink-0">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
@@ -279,18 +279,18 @@ export default function Auth() {
             <p className="text-xl font-black text-brand-gold mb-4 border-b border-white/10 pb-4 ">نحن لا نقدم خدمة فقط، بل نضمن حقك</p>
             <div className="space-y-3 text-sm md:text-base font-bold text-gray-200 ">
               <div className="flex flex-row-reverse items-start gap-3 ">
-                <p>في حال تخلّف المحامي عن متابعة الدعوى يتم استرجاع كامل المبلغ</p>
+                <p>ضمان استرجاع كامل الأتعاب في حال تخلّف المحامي عن المتابعة</p>
                 <i className="fa-solid fa-shield-halved text-brand-gold mt-1"></i>
               </div>
               <div className="flex flex-row-reverse items-start gap-3 ">
-                <p>ويتم توفير محامٍ بديل بأسرع وقت ممكن</p>
+                <p>توفير محامٍ بديل فوراً لضمان استمرارية دعواك دون انقطاع</p>
                 <i className="fa-solid fa-user-tie text-brand-gold mt-1"></i>
               </div>
             </div>
           </div>
 
           <div className="space-y-4 ">
-            <p className="text-lg font-bold text-gray-300">ابدأ الآن وخذ الخطوة الأولى نحو حقك</p>
+            <p className="text-lg font-bold text-gray-300">اتخذ الخطوة الأولى نحو استعادة حقوقك اليوم</p>
             <h3 className="text-4xl font-black text-brand-gold tracking-tight">العدالة في متناول الجميع</h3>
           </div>
         </div>
