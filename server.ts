@@ -588,11 +588,16 @@ async function startServer() {
     try {
       const currentUser = (req as any).user;
       const { title, matter, lawyerId, totalAgreedFee, caseType } = req.body;
+
+      if (!title || !matter || !lawyerId) {
+        return res.status(400).json({ error: 'عنوان القضية ونوعها والمحامي المسؤول مطلوبة.' });
+      }
+
       const data = await createClientCase(currentUser.userId, { title, matter, lawyerId, totalAgreedFee, caseType });
       res.status(201).json({ data });
     } catch (error) {
       console.error('Create workspace case error:', error);
-      res.status(500).json({ error: 'Failed to create case' });
+      res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر إنشاء القضية.' });
     }
   });
 

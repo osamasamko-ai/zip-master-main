@@ -103,6 +103,13 @@ interface LegalCase {
   accessLogs?: Array<{ id: string; userName: string; action: string; time: string }>;
 }
 
+interface AvailableLawyer {
+  id: string;
+  name: string;
+  role: string;
+  img: string;
+}
+
 const QUICK_REPLIES = ['نعم، أوافق على ذلك', 'هل هناك تحديث جديد؟', 'تم تجهيز المستندات', 'أحتاج توضيحاً أكثر'];
 
 const CASE_TYPES = [
@@ -111,7 +118,7 @@ const CASE_TYPES = [
   { id: 'commercial', label: 'تجارية' }
 ];
 
-const AVAILABLE_LAWYERS = [
+const FALLBACK_LAWYERS: AvailableLawyer[] = [
   { id: 'lawyer-1', name: 'د. عمر النعيمي', role: 'محامي نقض - تجاري وشركات', img: 'https://i.pravatar.cc/150?img=33' },
   { id: 'lawyer-2', name: 'المحامية سجا كاظم', role: 'ملكية فكرية', img: 'https://i.pravatar.cc/150?img=47' },
   { id: 'lawyer-3', name: 'علي الجبوري', role: 'عقارات', img: 'https://ui-avatars.com/api/?name=Ali+Jubouri&background=0d2a59&color=ffffff' },
@@ -590,6 +597,30 @@ export default function MyCases() {
     refreshCases();
   }, []);
 
+  useEffect(() => {
+    const loadLawyers = async () => {
+      try {
+        const response = await apiClient.getLawyers();
+        const nextLawyers: AvailableLawyer[] = (response.data || []).map((lawyer: any) => ({
+          id: lawyer.id,
+          name: lawyer.name,
+          role: lawyer.specialty || lawyer.tagline || lawyer.experience || 'محامٍ',
+          img: lawyer.avatar,
+        }));
+
+        const resolvedLawyers = nextLawyers.length > 0 ? nextLawyers : FALLBACK_LAWYERS;
+        setAvailableLawyers(resolvedLawyers);
+        setNewCaseLawyerId((current) => current || resolvedLawyers[0]?.id || '');
+      } catch (error) {
+        console.error('Failed to load lawyers for case creation', error);
+        setAvailableLawyers(FALLBACK_LAWYERS);
+        setNewCaseLawyerId((current) => current || FALLBACK_LAWYERS[0]?.id || '');
+      }
+    };
+
+    loadLawyers();
+  }, []);
+
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isSplitView, setIsSplitView] = useState(false);
   const [splitWidth, setSplitWidth] = useState(400);
@@ -615,21 +646,24 @@ export default function MyCases() {
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseType, setNewCaseType] = useState('civil');
-  const [newCaseLawyerId, setNewCaseLawyerId] = useState('lawyer-1');
+  const [availableLawyers, setAvailableLawyers] = useState<AvailableLawyer[]>([]);
+  const [newCaseLawyerId, setNewCaseLawyerId] = useState('');
   const [newCaseAmount, setNewCaseAmount] = useState('');
+  const [isCreatingCase, setIsCreatingCase] = useState(false);
+  const [createCaseError, setCreateCaseError] = useState('');
   const [isLawyerDropdownOpen, setIsLawyerDropdownOpen] = useState(false);
   const [lawyerSearchQuery, setLawyerSearchQuery] = useState('');
 
   const filteredLawyersInModal = useMemo(() => {
-    return AVAILABLE_LAWYERS.filter(l =>
+    return availableLawyers.filter(l =>
       l.name.toLowerCase().includes(lawyerSearchQuery.toLowerCase()) ||
       l.role.toLowerCase().includes(lawyerSearchQuery.toLowerCase())
     );
-  }, [lawyerSearchQuery]);
+  }, [availableLawyers, lawyerSearchQuery]);
 
   const currentModalLawyer = useMemo(() =>
-    AVAILABLE_LAWYERS.find(l => l.id === newCaseLawyerId) || AVAILABLE_LAWYERS[0]
-    , [newCaseLawyerId]);
+    availableLawyers.find(l => l.id === newCaseLawyerId) || availableLawyers[0] || FALLBACK_LAWYERS[0]
+    , [availableLawyers, newCaseLawyerId]);
 
   const handleLogout = () => {
     logout();
@@ -659,19 +693,38 @@ export default function MyCases() {
   };
 
   const handleCreateCase = async () => {
-    if (!newCaseTitle.trim()) return;
+    if (!newCaseTitle.trim() || !newCaseLawyerId) return;
+    setCreateCaseError('');
+    setIsCreatingCase(true);
     const caseTypeLabel = CASE_TYPES.find(t => t.id === newCaseType)?.label || 'مدنية';
-    const response = await apiClient.createWorkspaceCase({
-      title: newCaseTitle,
-      matter: caseTypeLabel,
-      lawyerId: newCaseLawyerId.replace('lawyer-1', 'pro-1').replace('lawyer-2', 'pro-2').replace('lawyer-3', 'pro-3'),
-      totalAgreedFee: Number(newCaseAmount) || 0,
-      caseType: caseTypeLabel,
-    });
-    await refreshCases(response.data?.id || null);
-    setNewCaseTitle('');
-    setNewCaseAmount('');
-    setIsNewCaseModalOpen(false);
+    try {
+      const response = await apiClient.createWorkspaceCase({
+        title: newCaseTitle.trim(),
+        matter: caseTypeLabel,
+        lawyerId: newCaseLawyerId,
+        totalAgreedFee: Number(newCaseAmount) || 0,
+        caseType: caseTypeLabel,
+      });
+
+      const createdCase = response.data;
+      if (createdCase?.id) {
+        setCases((prev) => [createdCase, ...prev.filter((item) => item.id !== createdCase.id)]);
+        setActiveCaseId(createdCase.id);
+      } else {
+        await refreshCases();
+      }
+
+      setNewCaseTitle('');
+      setNewCaseAmount('');
+      setNewCaseType('civil');
+      setCreateCaseError('');
+      setIsNewCaseModalOpen(false);
+    } catch (error: any) {
+      console.error('Failed to create case', error);
+      setCreateCaseError(error.response?.data?.error || 'تعذر إنشاء الملف. تأكد من اختيار محامٍ صالح ثم حاول مرة أخرى.');
+    } finally {
+      setIsCreatingCase(false);
+    }
   };
 
   const handleDownloadQr = async () => {
@@ -2247,6 +2300,12 @@ export default function MyCases() {
               <p className="text-sm font-bold text-slate-500 mb-6">أدخل عنواناً واضحاً للقضية لبدء العمل مع المحامي المتخصص.</p>
 
               <div className="space-y-4 mb-8">
+                {createCaseError && (
+                  <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
+                    {createCaseError}
+                  </div>
+                )}
+
                 <div>
                   <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">عنوان القضية</label>
                   <input
@@ -2352,17 +2411,21 @@ export default function MyCases() {
 
               <div className="flex gap-3">
                 <button
-                  onClick={() => { setIsNewCaseModalOpen(false); setNewCaseTitle(''); }}
+                  onClick={() => {
+                    setIsNewCaseModalOpen(false);
+                    setNewCaseTitle('');
+                    setCreateCaseError('');
+                  }}
                   className="flex-1 py-3 font-black text-slate-400 hover:text-slate-600 transition"
                 >
                   إلغاء
                 </button>
                 <button
                   onClick={handleCreateCase}
-                  disabled={!newCaseTitle.trim()}
+                  disabled={!newCaseTitle.trim() || !newCaseLawyerId || isCreatingCase}
                   className="flex-[2] rounded-2xl bg-brand-navy text-white py-3 px-6 font-black shadow-lg shadow-brand-navy/20 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  فتح الملف
+                  {isCreatingCase ? 'جاري الإنشاء...' : 'فتح الملف'}
                 </button>
               </div>
             </motion.div>

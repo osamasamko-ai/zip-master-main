@@ -284,6 +284,18 @@ export async function getClientWorkspace(userId: string) {
 }
 
 export async function createClientCase(userId: string, payload: { title: string; matter: string; lawyerId: string; totalAgreedFee?: number; caseType?: string; }) {
+  const assignedLawyer = await prisma.user.findFirst({
+    where: {
+      id: payload.lawyerId,
+      role: { in: ['pro', 'admin'] },
+    },
+    select: { id: true },
+  });
+
+  if (!assignedLawyer) {
+    throw new Error('المحامي المحدد غير صالح.');
+  }
+
   const created = await prisma.case.create({
     data: {
       title: payload.title,
