@@ -120,12 +120,6 @@ const CASE_TYPES = [
   { id: 'commercial', label: 'تجارية' }
 ];
 
-const FALLBACK_LAWYERS: AvailableLawyer[] = [
-  { id: 'lawyer-1', name: 'د. عمر النعيمي', role: 'محامي نقض - تجاري وشركات', img: 'https://i.pravatar.cc/150?img=33' },
-  { id: 'lawyer-2', name: 'المحامية سجا كاظم', role: 'ملكية فكرية', img: 'https://i.pravatar.cc/150?img=47' },
-  { id: 'lawyer-3', name: 'علي الجبوري', role: 'عقارات', img: 'https://ui-avatars.com/api/?name=Ali+Jubouri&background=0d2a59&color=ffffff' },
-];
-
 // --- Sub-Components ---
 
 const CaseSidebar = ({
@@ -615,16 +609,17 @@ export default function MyCases() {
           id: lawyer.id,
           name: lawyer.name,
           role: lawyer.specialty || lawyer.tagline || lawyer.experience || 'محامٍ',
-          img: lawyer.avatar,
+          img: lawyer.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(lawyer.name)}&background=0d2a59&color=ffffff`,
         }));
 
-        const resolvedLawyers = nextLawyers.length > 0 ? nextLawyers : FALLBACK_LAWYERS;
-        setAvailableLawyers(resolvedLawyers);
-        setNewCaseLawyerId((current) => current || resolvedLawyers[0]?.id || '');
+        setAvailableLawyers(nextLawyers);
+        setNewCaseLawyerId((current) =>
+          nextLawyers.some((lawyer) => lawyer.id === current) ? current : nextLawyers[0]?.id || ''
+        );
       } catch (error) {
         console.error('Failed to load lawyers for case creation', error);
-        setAvailableLawyers(FALLBACK_LAWYERS);
-        setNewCaseLawyerId((current) => current || FALLBACK_LAWYERS[0]?.id || '');
+        setAvailableLawyers([]);
+        setNewCaseLawyerId('');
       }
     };
 
@@ -672,7 +667,7 @@ export default function MyCases() {
   }, [availableLawyers, lawyerSearchQuery]);
 
   const currentModalLawyer = useMemo(() =>
-    availableLawyers.find(l => l.id === newCaseLawyerId) || availableLawyers[0] || FALLBACK_LAWYERS[0]
+    availableLawyers.find(l => l.id === newCaseLawyerId) || availableLawyers[0] || null
     , [availableLawyers, newCaseLawyerId]);
 
   useEffect(() => {
@@ -2383,20 +2378,28 @@ export default function MyCases() {
                     <button
                       type="button"
                       onClick={() => {
+                        if (availableLawyers.length === 0) return;
                         setIsLawyerDropdownOpen(!isLawyerDropdownOpen);
                         if (!isLawyerDropdownOpen) setLawyerSearchQuery('');
                       }}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pr-4 pl-3 flex items-center justify-between text-sm font-bold text-right outline-none focus:border-brand-navy transition-all"
+                      disabled={availableLawyers.length === 0}
+                      className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pr-4 pl-3 flex items-center justify-between text-sm font-bold text-right outline-none focus:border-brand-navy transition-all disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <i className={`fa-solid fa-chevron-down text-slate-400 transition-transform ${isLawyerDropdownOpen ? 'rotate-180' : ''}`}></i>
                       <div className="flex items-center gap-3">
-                        <span className="text-brand-dark">{currentModalLawyer.name}</span>
-                        <img src={currentModalLawyer.img} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="" />
+                        <span className="text-brand-dark">{currentModalLawyer?.name || 'لا يوجد محامون متاحون حالياً'}</span>
+                        {currentModalLawyer ? (
+                          <img src={currentModalLawyer.img} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="" />
+                        ) : (
+                          <div className="flex h-8 w-8 items-center justify-center rounded-full border border-dashed border-slate-300 text-slate-300">
+                            <i className="fa-solid fa-user-slash text-xs"></i>
+                          </div>
+                        )}
                       </div>
                     </button>
 
                     <AnimatePresence>
-                      {isLawyerDropdownOpen && (
+                      {isLawyerDropdownOpen && availableLawyers.length > 0 && (
                         <motion.div
                           initial={{ opacity: 0, y: -10 }}
                           animate={{ opacity: 1, y: 0 }}
@@ -2454,6 +2457,12 @@ export default function MyCases() {
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-right outline-none focus:border-brand-navy"
                   />
                 </div>
+
+                {availableLawyers.length === 0 && (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">
+                    لا يمكن فتح ملف جديد الآن لأنه لا يوجد محامون مسجلون في النظام حالياً.
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3">

@@ -42,6 +42,32 @@ async function main() {
   });
   console.log('Created lawyer:', lawyer.email);
 
+  await prisma.lawyerProfile.upsert({
+    where: { userId: lawyer.id },
+    update: {
+      specialty: 'القانون المدني',
+      experienceYears: 8,
+      tagline: 'محامٍ متخصص في القانون المدني',
+      availability: 'متاح حسب الجدول',
+      consultationFee: 'غير محدد',
+      responseTime: 'يرد خلال ساعة',
+      licenseStatus: 'verified',
+      profileScore: 80,
+    },
+    create: {
+      userId: lawyer.id,
+      specialty: 'القانون المدني',
+      experienceYears: 8,
+      tagline: 'محامٍ متخصص في القانون المدني',
+      availability: 'متاح حسب الجدول',
+      consultationFee: 'غير محدد',
+      responseTime: 'يرد خلال ساعة',
+      licenseStatus: 'verified',
+      profileScore: 80,
+    },
+  });
+  console.log('Ensured lawyer profile:', lawyer.email);
+
   // Create regular User
   const user = await prisma.user.upsert({
     where: { email: 'user@example.com' },
