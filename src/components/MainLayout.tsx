@@ -84,8 +84,10 @@ export default function MainLayout() {
       { id: 'n2', type: 'ملاحة', title: 'القضايا', subtitle: 'متابعة سير العمل والمهام المطلوبة', icon: 'fa-folder-open', path: '/cases' },
       { id: 'n3', type: 'ملاحة', title: 'المحامون', subtitle: 'ابحث وتواصل وافتح قضية بسرعة', icon: 'fa-scale-balanced', path: '/lawyers' },
       { id: 'n4', type: 'ملاحة', title: 'الرسائل', subtitle: 'جميع المحادثات القانونية في مكان واحد', icon: 'fa-comments', path: '/messages' },
-      { id: 'n5', type: 'ملاحة', title: 'المدفوعات', subtitle: 'الرصيد والفواتير والمعاملات', icon: 'fa-wallet', path: '/billing' },
-      { id: 'n6', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
+      { id: 'n5', type: 'ملاحة', title: 'المكتبة', subtitle: 'مراجع ووثائق قانونية جاهزة للبحث', icon: 'fa-book-open', path: '/legal' },
+      { id: 'n6', type: 'ملاحة', title: 'مستشارك الذكي', subtitle: 'اسأل واحصل على تلخيص وتحليل قانوني سريع', icon: 'fa-robot', path: '/aichat' },
+      { id: 'n7', type: 'ملاحة', title: 'المدفوعات', subtitle: 'الرصيد والفواتير والمعاملات', icon: 'fa-wallet', path: '/billing' },
+      { id: 'n8', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
     ];
 
     if (user?.role === 'admin') {
@@ -145,6 +147,8 @@ export default function MainLayout() {
         { name: 'القضايا', icon: 'fa-folder-open', path: '/cases' },
         { name: 'المحامون', icon: 'fa-scale-balanced', path: '/lawyers' },
         { name: 'الرسائل', icon: 'fa-comments', path: '/messages' },
+        { name: 'المكتبة القانونية', icon: 'fa-book-open', path: '/legal' },
+        { name: 'المساعد الذكي', icon: 'fa-robot', path: '/aichat' },
         { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },
         { name: 'المحامي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
         { name: 'الإدارة', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
@@ -297,11 +301,10 @@ export default function MainLayout() {
                     key={item.path}
                     to={item.path}
                     onClick={() => setMobileNavOpen(false)}
-                    className={`flex items-center gap-4 rounded-2xl p-4 transition-all ${
-                      isActive
-                        ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20'
-                        : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
-                    }`}
+                    className={`flex items-center gap-4 rounded-2xl p-4 transition-all ${isActive
+                      ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20'
+                      : 'bg-slate-50 text-slate-600 hover:bg-slate-100'
+                      }`}
                   >
                     <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${isActive ? 'bg-white/20' : 'bg-white shadow-sm border border-slate-100'}`}>
                       <i className={`fa-solid ${item.icon} ${isActive ? 'text-white' : 'text-brand-navy'}`}></i>
@@ -321,7 +324,7 @@ export default function MainLayout() {
                   <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{user?.roleDescription}</p>
                 </div>
               </div>
-              
+
               <div className="grid grid-cols-2 gap-3">
                 <button onClick={() => { navigate('/settings'); setMobileNavOpen(false); }} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-100 p-5 text-slate-600 transition hover:bg-slate-200">
                   <i className="fa-regular fa-user-circle text-xl"></i>
