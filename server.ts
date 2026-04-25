@@ -81,6 +81,8 @@ import {
   signCaseDocument,
   toggleCaseArchive,
   updateCaseProgress,
+  markCaseMessagesAsRead,
+  mapWorkspaceCase,
   updateProCaseStatuses,
   updateProMessageState,
   uploadProVaultDocument,
@@ -713,6 +715,20 @@ async function startServer() {
     }
   });
 
+  app.post('/api/app/workspace/cases/:id/mark-read', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const updatedCase = await markCaseMessagesAsRead(req.params.id, currentUser.userId);
+      if (!updatedCase) {
+        return res.status(404).json({ error: 'Case not found' });
+      }
+      res.json({ data: mapWorkspaceCase(updatedCase) });
+    } catch (error) {
+      console.error('Mark messages as read error:', error);
+      res.status(500).json({ error: 'Failed to mark messages as read' });
+    }
+  });
+
   app.post('/api/app/workspace/cases/:id/messages', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
@@ -849,200 +865,200 @@ async function startServer() {
     return res.json({ success: true, application: updated });
   });
 
-  app.get('/api/admin/alerts', authenticateToken, adminOnly, (req, res) => {
-    res.json(getSecurityAlerts());
+  app.get('/api/admin/alerts', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await getSecurityAlerts());
   });
 
-  app.get('/api/admin/audit-logs', authenticateToken, adminOnly, (req, res) => {
+  app.get('/api/admin/audit-logs', authenticateToken, adminOnly, async (req, res) => {
     const type = typeof req.query.type === 'string' ? req.query.type : undefined;
-    res.json(getAuditLogs(type));
+    res.json(await getAuditLogs(type));
   });
 
-  app.get('/api/admin/transactions', authenticateToken, adminOnly, (req, res) => {
-    res.json(getTransactionRecords());
+  app.get('/api/admin/transactions', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await getTransactionRecords());
   });
 
-  app.put('/api/admin/users/:id', (req, res) => {
-    const updated = updateUserProfile(req.params.id, req.body);
+  app.put('/api/admin/users/:id', async (req, res) => {
+    const updated = await updateUserProfile(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'user not found' });
     }
     return res.json(updated);
   });
 
-  app.post('/api/admin/users/:id/role', (req, res) => {
+  app.post('/api/admin/users/:id/role', async (req, res) => {
     const { role } = req.body;
     if (!['user', 'pro', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'role must be user, pro, or admin' });
     }
-    const updated = updateUserRole(req.params.id, role);
+    const updated = await updateUserRole(req.params.id, role);
     if (!updated) {
       return res.status(404).json({ error: 'user not found' });
     }
     return res.json(updated);
   });
 
-  app.post('/api/admin/users/:id/block', (req, res) => {
-    const updated = toggleUserBlock(req.params.id);
+  app.post('/api/admin/users/:id/block', async (req, res) => {
+    const updated = await toggleUserBlock(req.params.id);
     if (!updated) {
       return res.status(404).json({ error: 'user not found' });
     }
     return res.json(updated);
   });
 
-  app.get('/api/admin/feature-flags', (req, res) => {
-    res.json(getFeatureFlags());
+  app.get('/api/admin/feature-flags', async (req, res) => {
+    res.json(await getFeatureFlags());
   });
 
-  app.post('/api/admin/feature-flags/:key', (req, res) => {
+  app.post('/api/admin/feature-flags/:key', async (req, res) => {
     const { enabled } = req.body;
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'enabled must be boolean' });
     }
-    const updated = updateFeatureFlag(req.params.key, enabled);
+    const updated = await updateFeatureFlag(req.params.key, enabled);
     if (!updated) {
       return res.status(404).json({ error: 'feature flag not found' });
     }
     return res.json(updated);
   });
 
-  app.get('/api/admin/support-tickets', (req, res) => {
-    res.json(getSupportTickets());
+  app.get('/api/admin/support-tickets', async (req, res) => {
+    res.json(await getSupportTickets());
   });
 
-  app.post('/api/admin/support-tickets/:id', (req, res) => {
+  app.post('/api/admin/support-tickets/:id', async (req, res) => {
     const { status } = req.body;
     if (!['open', 'pending', 'resolved', 'escalated'].includes(status)) {
       return res.status(400).json({ error: 'invalid ticket status' });
     }
-    const updated = updateSupportTicket(req.params.id, status);
+    const updated = await updateSupportTicket(req.params.id, status);
     if (!updated) {
       return res.status(404).json({ error: 'ticket not found' });
     }
     return res.json(updated);
   });
 
-  app.get('/api/admin/policies', (req, res) => {
-    res.json(getPolicies());
+  app.get('/api/admin/policies', async (req, res) => {
+    res.json(await getPolicies());
   });
 
-  app.post('/api/admin/policies/:key', (req, res) => {
+  app.post('/api/admin/policies/:key', async (req, res) => {
     const { value } = req.body;
     if (typeof value !== 'string') {
       return res.status(400).json({ error: 'value must be a string' });
     }
-    const updated = updatePolicySetting(req.params.key, value);
+    const updated = await updatePolicySetting(req.params.key, value);
     if (!updated) {
       return res.status(404).json({ error: 'policy not found' });
     }
     return res.json(updated);
   });
 
-  app.get('/api/admin/system-settings', (req, res) => {
-    res.json(getSystemSettings());
+  app.get('/api/admin/system-settings', async (req, res) => {
+    res.json(await getSystemSettings());
   });
 
-  app.post('/api/admin/system-settings', (req, res) => {
-    const updated = updateSystemSettings(req.body);
+  app.post('/api/admin/system-settings', async (req, res) => {
+    const updated = await updateSystemSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/ai-settings', (req, res) => {
-    res.json(getAiSettings());
+  app.get('/api/admin/ai-settings', async (req, res) => {
+    res.json(await getAiSettings());
   });
 
-  app.post('/api/admin/ai-settings', (req, res) => {
-    const updated = updateAiSettings(req.body);
+  app.post('/api/admin/ai-settings', async (req, res) => {
+    const updated = await updateAiSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/payment-gateways', (req, res) => {
-    res.json(getPaymentGateways());
+  app.get('/api/admin/payment-gateways', async (req, res) => {
+    res.json(await getPaymentGateways());
   });
 
-  app.post('/api/admin/payment-gateways/:key', (req, res) => {
+  app.post('/api/admin/payment-gateways/:key', async (req, res) => {
     const { enabled, feePercent } = req.body;
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'enabled must be boolean' });
     }
-    const updated = updatePaymentGateway(req.params.key, enabled, feePercent);
+    const updated = await updatePaymentGateway(req.params.key, enabled, feePercent);
     if (!updated) {
       return res.status(404).json({ error: 'payment gateway not found' });
     }
     return res.json(updated);
   });
 
-  app.get('/api/admin/workflow-settings', (req, res) => {
-    res.json(getWorkflowSettings());
+  app.get('/api/admin/workflow-settings', async (req, res) => {
+    res.json(await getWorkflowSettings());
   });
 
-  app.post('/api/admin/workflow-settings', (req, res) => {
-    const updated = updateWorkflowSettings(req.body);
+  app.post('/api/admin/workflow-settings', async (req, res) => {
+    const updated = await updateWorkflowSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/notification-templates', (req, res) => {
-    res.json(getNotificationTemplates());
+  app.get('/api/admin/notification-templates', async (req, res) => {
+    res.json(await getNotificationTemplates());
   });
 
-  app.post('/api/admin/notification-templates/:key', (req, res) => {
-    const updated = updateNotificationTemplate(req.params.key, req.body);
+  app.post('/api/admin/notification-templates/:key', async (req, res) => {
+    const updated = await updateNotificationTemplate(req.params.key, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'notification template not found' });
     }
     return res.json(updated);
   });
 
-  app.get('/api/admin/moderation-rules', (req, res) => {
-    res.json(getModerationRules());
+  app.get('/api/admin/moderation-rules', async (req, res) => {
+    res.json(await getModerationRules());
   });
 
-  app.post('/api/admin/moderation-rules', (req, res) => {
+  app.post('/api/admin/moderation-rules', async (req, res) => {
     const { type, value, active } = req.body;
     if (!type || !value) {
       return res.status(400).json({ error: 'type and value are required' });
     }
-    const newRule = addModerationRule({ type, value, active: active !== false });
+    const newRule = await addModerationRule({ type, value, active: active !== false });
     return res.status(201).json(newRule);
   });
 
-  app.post('/api/admin/moderation-rules/:id', (req, res) => {
-    const updated = updateModerationRule(req.params.id, req.body);
+  app.post('/api/admin/moderation-rules/:id', async (req, res) => {
+    const updated = await updateModerationRule(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'moderation rule not found' });
     }
     return res.json(updated);
   });
 
-  app.delete('/api/admin/moderation-rules/:id', (req, res) => {
-    if (!deleteModerationRule(req.params.id)) {
+  app.delete('/api/admin/moderation-rules/:id', async (req, res) => {
+    if (!(await deleteModerationRule(req.params.id))) {
       return res.status(404).json({ error: 'moderation rule not found' });
     }
     return res.json({ success: true });
   });
 
-  app.get('/api/admin/legal-docs', (req, res) => {
-    res.json(getLegalDocs());
+  app.get('/api/admin/legal-docs', async (req, res) => {
+    res.json(await getLegalDocs());
   });
 
-  app.post('/api/admin/legal-docs', (req, res) => {
+  app.post('/api/admin/legal-docs', async (req, res) => {
     const { title, law, article, category, summary, source } = req.body;
     if (!title || !law || !article || !category || !summary || !source) {
       return res.status(400).json({ error: 'missing document fields' });
     }
-    const newDoc = addLegalDoc({ title, law, article, category, summary, source });
+    const newDoc = await addLegalDoc({ title, law, article, category, summary, source });
     return res.status(201).json(newDoc);
   });
 
-  app.delete('/api/admin/legal-docs/:id', (req, res) => {
-    if (!deleteLegalDoc(req.params.id)) {
+  app.delete('/api/admin/legal-docs/:id', async (req, res) => {
+    if (!(await deleteLegalDoc(req.params.id))) {
       return res.status(404).json({ error: 'document not found' });
     }
     return res.json({ success: true });
   });
 
-  app.put('/api/admin/legal-docs/:id', (req, res) => {
-    const updated = updateLegalDoc(req.params.id, req.body);
+  app.put('/api/admin/legal-docs/:id', async (req, res) => {
+    const updated = await updateLegalDoc(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'document not found' });
     }
@@ -1145,7 +1161,7 @@ async function startServer() {
     }
 
     try {
-      const aiConfig = getAiSettings();
+      const aiConfig = await getAiSettings();
       if (!aiConfig.enabled) {
         return res.json({
           question,

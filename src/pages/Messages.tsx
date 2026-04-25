@@ -86,6 +86,7 @@ export default function Messages() {
   const [query, setQuery] = useState('');
   const [selectedConversationId, setSelectedConversationId] = useState('');
   const [draft, setDraft] = useState('');
+  const [isLoadingConversations, setIsLoadingConversations] = useState(true); // New state for loading skeleton
   const [isSending, setIsSending] = useState(false);
   const [isLawyerTyping, setIsLawyerTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -123,6 +124,34 @@ export default function Messages() {
     });
   }, []);
 
+  const conversations = useMemo(() => buildConversations(cases), [cases]);
+
+  const filteredConversations = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    if (!normalizedQuery) return conversations;
+
+    return conversations.filter((conversation) =>
+      conversation.lawyerName.toLowerCase().includes(normalizedQuery) ||
+      conversation.cases.some((item) => item.title.toLowerCase().includes(normalizedQuery)),
+    );
+  }, [conversations, query]);
+
+  const selectedConversation =
+    filteredConversations.find((conversation) => conversation.id === selectedConversationId) ||
+    conversations.find((conversation) => conversation.id === selectedConversationId) ||
+    null;
+
+  const selectedCase = useMemo(() => selectedConversation?.cases[0] || null, [selectedConversation]);
+
+  const threadMessages = useMemo(() => {
+    return selectedCase?.messages || [];
+  }, [selectedCase?.messages]);
+
+  const latestClientMessage = [...threadMessages].reverse().find((message) => message.sender === 'user') || null;
+  const draftLength = draft.trim().length;
+  const conversationHealthLabel = latestClientMessage?.awaitingResponse ? 'بانتظار رد المحامي' : 'المحادثة محدثة';
+  const isUrgent = selectedCase?.statusText?.includes('خطر') || selectedCase?.statusText?.includes('عاجل');
+
   const replaceCaseInState = useCallback((nextCase: WorkspaceCase) => {
     setCases((current) => {
       const existingIndex = current.findIndex((item) => item.id === nextCase.id);
@@ -137,6 +166,7 @@ export default function Messages() {
   }, []);
 
   const loadCases = useCallback(async (isInitial = false) => {
+    if (isInitial) setIsLoadingConversations(true); // Set loading true only for initial fetch
     try {
       const response = await apiClient.getWorkspaceCases();
       const nextCases = response.data || [];
@@ -164,8 +194,32 @@ export default function Messages() {
       }
     } catch (error) {
       console.error('Failed to load messages', error);
+    } finally {
+      if (isInitial) setIsLoadingConversations(false); // Set loading false after initial fetch
     }
   }, [mergeCasesWithPendingMessages, selectedLawyerIdFromQuery]);
+
+  const markConversationMessagesAsRead = useCallback(async (caseId: string) => {
+    try {
+      const response = await apiClient.markCaseMessagesAsRead(caseId);
+      if (response.data) {
+        replaceCaseInState(response.data);
+      }
+    } catch (error) {
+      console.error('Failed to mark messages as read:', error);
+    }
+  }, [replaceCaseInState]);
+
+  // Mark messages as read when a new conversation or case is selected
+  useEffect(() => {
+    if (selectedConversation) {
+      selectedConversation.cases.forEach((c) => {
+        if ((c.unreadCount ?? 0) > 0) {
+          markConversationMessagesAsRead(c.id);
+        }
+      });
+    }
+  }, [selectedConversation, markConversationMessagesAsRead]);
 
   useEffect(() => {
     loadCases(true);
@@ -192,28 +246,6 @@ export default function Messages() {
     };
   }, [loadCases]);
 
-  const conversations = useMemo(() => buildConversations(cases), [cases]);
-
-  const filteredConversations = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return conversations;
-
-    return conversations.filter((conversation) =>
-      conversation.lawyerName.toLowerCase().includes(normalizedQuery) ||
-      conversation.cases.some((item) => item.title.toLowerCase().includes(normalizedQuery)),
-    );
-  }, [conversations, query]);
-
-  const selectedConversation =
-    filteredConversations.find((conversation) => conversation.id === selectedConversationId) ||
-    conversations.find((conversation) => conversation.id === selectedConversationId) ||
-    null;
-  const selectedCase = useMemo(() => selectedConversation?.cases[0] || null, [selectedConversation]);
-
-  const threadMessages = useMemo(() => {
-    return selectedCase?.messages || [];
-  }, [selectedCase?.messages]);
-
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTo({
@@ -223,15 +255,26 @@ export default function Messages() {
     }
   }, [threadMessages, isLawyerTyping]);
 
-  const latestClientMessage = [...threadMessages].reverse().find((message) => message.sender === 'user') || null;
-  const draftLength = draft.trim().length;
-  const conversationHealthLabel = latestClientMessage?.awaitingResponse ? 'بانتظار رد المحامي' : 'المحادثة محدثة';
-  const isUrgent = selectedCase?.statusText?.includes('خطر') || selectedCase?.statusText?.includes('عاجل');
+  const ConversationSkeleton = () => (
+    <div className="space-y-2">
+      {[...Array(5)].map((_, i) => (
+        <div key={i} className="p-3 rounded-2xl bg-slate-50/50 border border-slate-100 animate-pulse">
+          <div className="flex flex-row-reverse items-start gap-3">
+            <div className="h-11 w-11 rounded-xl bg-slate-200 shrink-0"></div>
+            <div className="flex-1 space-y-2">
+              <div className="h-4 bg-slate-200 rounded w-3/4"></div>
+              <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 
   // Detect if a message is a "Request" (e.g., asking for docs)
   const isRequestMessage = (text: string) => {
     const keywords = ['يرجى', 'مستند', 'وثيقة', 'توقيع', 'إرسال', 'تزويدنا'];
-    return keywords.some(k => text.includes(keywords[0]));
+    return keywords.some(k => text.includes(k));
   };
 
   const updateMessageDeliveryState = useCallback((caseId: string, messageId: string, deliveryState: MessageDeliveryState) => {
@@ -363,7 +406,7 @@ export default function Messages() {
       </section>
 
       {conversations.length > 0 ? (
-        <section className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)_280px] h-[calc(100vh-220px)] min-h-[600px]">
+        <section className={`grid gap-6 h-[calc(100vh-220px)] min-h-[600px] ${selectedConversation && selectedCase ? 'xl:grid-cols-[300px_minmax(0,1fr)_280px]' : 'xl:grid-cols-[300px_minmax(0,1fr)]'}`}>
           <aside className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm flex flex-col overflow-hidden">
             <div className="relative">
               <input
@@ -371,41 +414,45 @@ export default function Messages() {
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="ابحث عن محامٍ أو قضية"
-                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pl-11 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 pl-11 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy" // Added pl-11 for icon
               />
               <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
             </div>
 
             <div className="mt-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar pr-1">
-              {filteredConversations.map((conversation) => (
-                <button
-                  key={conversation.id}
-                  type="button"
-                  onClick={() => setSelectedConversationId(conversation.id)}
-                  className={`w-full rounded-2xl p-3 text-right transition-all duration-200 border-2 ${selectedConversation?.id === conversation.id
-                    ? 'border-brand-navy/10 bg-brand-navy/5 shadow-sm'
-                    : 'border-transparent hover:bg-slate-50'}`}
-                >
-                  <div className="flex flex-row-reverse items-start gap-3">
-                    <div className="relative shrink-0">
-                      <img src={conversation.lawyerImg} alt={conversation.lawyerName} className="h-11 w-11 rounded-xl object-cover shadow-sm" />
-                      {conversation.unreadCount > 0 && (
-                        <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-white ring-2 ring-red-500/10"></span>
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1 text-right">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-[9px] font-bold text-slate-400 uppercase">{conversation.lastMessage?.time || conversation.cases[0]?.date}</span>
-                        <p className={`truncate text-sm font-black ${conversation.unreadCount > 0 ? 'text-brand-dark' : 'text-slate-600'}`}>{conversation.lawyerName}</p>
+              {isLoadingConversations ? (
+                <ConversationSkeleton />
+              ) : (
+                filteredConversations.map((conversation) => (
+                  <button
+                    key={conversation.id}
+                    type="button"
+                    onClick={() => setSelectedConversationId(conversation.id)}
+                    className={`w-full rounded-2xl p-3 text-right transition-all duration-200 border-2 ${selectedConversation?.id === conversation.id
+                      ? 'border-brand-navy/10 bg-brand-navy/5 shadow-sm'
+                      : 'border-transparent hover:bg-slate-50'}`}
+                  >
+                    <div className="flex flex-row-reverse items-start gap-3">
+                      <div className="relative shrink-0">
+                        <img src={conversation.lawyerImg} alt={conversation.lawyerName} className="h-11 w-11 rounded-xl object-cover shadow-sm" />
+                        {conversation.unreadCount > 0 && (
+                          <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-white ring-2 ring-red-500/10"></span>
+                        )}
                       </div>
-                      <p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{conversation.cases[0]?.title}</p>
-                      <p className={`mt-1 truncate text-xs font-medium ${conversation.unreadCount > 0 ? 'text-brand-navy font-bold' : 'text-slate-400'}`}>
-                        {conversation.lastMessage?.text || conversation.cases[0]?.title}
-                      </p>
+                      <div className="min-w-0 flex-1 text-right">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[9px] font-bold text-slate-400 uppercase">{conversation.lastMessage?.time || conversation.cases[0]?.date}</span>
+                          <p className={`truncate text-sm font-black ${conversation.unreadCount > 0 ? 'text-brand-dark' : 'text-slate-600'}`}>{conversation.lawyerName}</p>
+                        </div>
+                        <p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{conversation.cases[0]?.title}</p>
+                        <p className={`mt-1 truncate text-xs font-medium ${conversation.unreadCount > 0 ? 'text-brand-navy font-bold' : 'text-slate-400'}`}>
+                          {conversation.lastMessage?.text || conversation.cases[0]?.title}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))
+              )}
             </div>
           </aside>
 
