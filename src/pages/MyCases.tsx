@@ -30,6 +30,7 @@ interface CaseMessage {
   id: number | string;
   sender: CaseMessageSender;
   text: string;
+  awaitingResponse?: boolean;
   time: string;
 }
 
@@ -140,7 +141,12 @@ const CaseSidebar = ({
   const filtered = cases.filter((c) => {
     const matchesArchive = showArchived ? c.isArchived : !c.isArchived;
     const matchesSearch = c.title.toLowerCase().includes(searchQuery.toLowerCase()) || c.lawyer.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const hasAction = c.status === 'pending' || (c.unreadCount ?? 0) > 0 || c.documents.some((doc) => doc.actionRequired || doc.expiresAt);
+    const latestClientMessage = [...c.messages].reverse().find((message) => message.sender === 'user');
+    const hasAction =
+      c.status === 'pending' ||
+      (c.unreadCount ?? 0) > 0 ||
+      c.documents.some((doc) => doc.actionRequired || doc.expiresAt) ||
+      !!latestClientMessage?.awaitingResponse;
     const matchesStatus =
       statusFilter === 'all' ||
       (statusFilter === 'needs_action' && hasAction) ||
@@ -343,6 +349,11 @@ const ChatTab = ({
             : 'bg-white border border-slate-100 text-slate-700 rounded-tr-none before:absolute before:-right-1.5 before:top-4 before:w-3 before:h-3 before:bg-white before:rotate-45 before:border-t before:border-r before:border-slate-100'
             }`}>
             <p className="font-medium">{msg.text}</p>
+            {msg.sender === 'user' && (
+              <p className={`mt-2 text-[10px] font-black ${msg.awaitingResponse ? 'text-amber-200' : 'text-emerald-200'}`}>
+                {msg.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
+              </p>
+            )}
             <div className={`flex items-center justify-end gap-1.5 mt-2 text-[9px] font-black ${msg.sender === 'user' ? 'text-blue-200/70' : 'text-slate-400'}`}>
               <span className="uppercase">{msg.time}</span>
               {msg.sender === 'user' && <i className={`fa-solid fa-check-double ${msg.time === 'الآن' ? 'opacity-50' : 'text-blue-300'}`}></i>}
@@ -1453,6 +1464,11 @@ export default function MyCases() {
                               : 'bg-white border border-slate-100 text-slate-700 rounded-tr-none before:absolute before:-right-1.5 before:top-4 before:w-3 before:h-3 before:bg-white before:rotate-45 before:border-t before:border-r before:border-slate-100'
                               }`}>
                               <p className="font-medium">{msg.text}</p>
+                              {msg.sender === 'user' && (
+                                <p className={`mt-2 text-[10px] font-black ${msg.awaitingResponse ? 'text-amber-200' : 'text-emerald-200'}`}>
+                                  {msg.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
+                                </p>
+                              )}
                               <div className={`flex items-center justify-end gap-1.5 mt-2 text-[9px] font-black ${msg.sender === 'user' ? 'text-blue-200/70' : 'text-slate-400'}`}>
                                 <span className="uppercase">{msg.time}</span>
                                 {msg.sender === 'user' && (

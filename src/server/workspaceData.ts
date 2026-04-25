@@ -154,6 +154,7 @@ const workspaceCaseSelect = {
           id: true,
           senderRole: true,
           text: true,
+          awaitingResponse: true,
           createdAt: true,
         },
         orderBy: { createdAt: 'asc' as const },
@@ -243,6 +244,7 @@ function mapWorkspaceCase(item: any) {
       id: message.id,
       sender: message.senderRole === 'lawyer' ? 'lawyer' : 'user',
       text: message.text,
+      awaitingResponse: message.awaitingResponse,
       time: formatShortDateLabel(message.createdAt),
     })),
     timeline: item.timelineEntries.map((entry: any) => ({
@@ -775,10 +777,47 @@ export async function updateCaseProgress(caseId: string, progress: number) {
 }
 
 export async function updateProMessageState(messageId: string, data: { unread?: boolean; awaitingResponse?: boolean }) {
+  const currentMessage = await prisma.message.findUnique({
+    where: { id: messageId },
+    select: {
+      id: true,
+      unread: true,
+      awaitingResponse: true,
+      session: {
+        select: {
+          caseId: true,
+          case: {
+            select: {
+              unreadCount: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!currentMessage?.session.caseId) {
+    return;
+  }
+
   await prisma.message.update({
     where: { id: messageId },
     data,
   });
+
+  if (typeof data.awaitingResponse === 'boolean' && data.awaitingResponse !== currentMessage.awaitingResponse) {
+    const currentUnreadCount = currentMessage.session.case?.unreadCount ?? 0;
+    const nextUnreadCount = data.awaitingResponse
+      ? currentUnreadCount + 1
+      : Math.max(0, currentUnreadCount - 1);
+
+    await prisma.case.update({
+      where: { id: currentMessage.session.caseId },
+      data: {
+        unreadCount: nextUnreadCount,
+      },
+    });
+  }
 }
 
 export async function updateProCaseStatuses(caseIds: string[], status: string) {

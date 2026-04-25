@@ -8,6 +8,7 @@ type MessageItem = {
   id: string | number;
   sender: 'user' | 'lawyer';
   text: string;
+  awaitingResponse?: boolean;
   time: string;
 };
 
@@ -208,6 +209,11 @@ export default function Messages() {
                       <p className="mt-2 truncate text-xs font-bold text-slate-500">
                         {conversation.lastMessage?.text || conversation.cases[0]?.title}
                       </p>
+                      {conversation.lastMessage?.sender === 'user' && (
+                        <p className={`mt-2 text-[10px] font-black ${conversation.lastMessage.awaitingResponse ? 'text-amber-600' : 'text-emerald-600'}`}>
+                          {conversation.lastMessage.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة طلبك'}
+                        </p>
+                      )}
                     </div>
                   </div>
                   <div className="mt-3 flex items-center justify-between">
@@ -267,6 +273,11 @@ export default function Messages() {
                     <div key={message.id} className={`flex ${message.sender === 'user' ? 'justify-start' : 'justify-end'}`}>
                       <div className={`max-w-[78%] rounded-[1.5rem] px-4 py-3 text-right shadow-sm ${message.sender === 'user' ? 'bg-white border border-slate-200 text-slate-700' : 'bg-brand-navy text-white'}`}>
                         <p className="text-sm font-bold leading-7">{message.text}</p>
+                        {message.sender === 'user' && (
+                          <p className={`mt-2 text-[10px] font-black ${message.awaitingResponse ? 'text-amber-600' : 'text-emerald-600'}`}>
+                            {message.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
+                          </p>
+                        )}
                         <p className={`mt-2 text-[10px] font-black ${message.sender === 'user' ? 'text-slate-400' : 'text-white/70'}`}>{message.time}</p>
                       </div>
                     </div>
