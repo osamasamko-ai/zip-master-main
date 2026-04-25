@@ -1,0 +1,388 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                    String         @id @default(uuid())
+  email                 String         @unique
+  passwordHash          String
+  name                  String
+  role                  String         @default("user")
+  phone                 String?
+  company               String?
+  language              String         @default("العربية")
+  img                   String?
+  roleDescription       String?
+  location              String?
+  blocked               Boolean        @default(false)
+  verified              Boolean        @default(false)
+  subscriptionTier      String         @default("basic") // basic, pro, enterprise
+  accountBalance        Float          @default(0)
+  notificationsEnabled  Boolean        @default(true)
+  twoFactorEnabled      Boolean        @default(false)
+  emailAlerts           Boolean        @default(true)
+  pushNotifications     Boolean        @default(true)
+  billingReminders      Boolean        @default(true)
+  securityAlerts        Boolean        @default(true)
+  marketingEmails       Boolean        @default(false)
+  notes                 String?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+
+  lawyerProfile         LawyerProfile?
+  kycApplications       KycApplication[]
+  casesAsClient         Case[]         @relation("ClientCases")
+  casesAsLawyer         Case[]         @relation("LawyerCases")
+  supportTickets        SupportTicket[]
+  transactions          Transaction[]
+  messages              Message[]
+  chatSessions          ChatSession[]
+  following             UserFollow[]   @relation("Follower")
+  followers             UserFollow[]   @relation("FollowedLawyer")
+  sessions              UserSession[]
+  activityLogs          ActivityLog[]
+  invoices              Invoice[]
+  reviewsAuthored       Review[]       @relation("ReviewAuthor")
+  reviewsReceived       Review[]       @relation("ReviewLawyer")
+  notifications         Notification[]
+}
+
+model LawyerProfile {
+  userId              String   @id
+  user                User     @relation(fields: [userId], references: [id])
+  licenseNumber       String?  @unique
+  specialty           String?
+  experienceYears     Int      @default(0)
+  avatar              String?
+  tagline             String?
+  availability        String?
+  isOnline            Boolean  @default(false)
+  consultationFee     String?
+  accent              String?
+  responseTime        String?
+  bio                 String?
+  highlights          String   @default("[]")
+  rating              Float    @default(0)
+  openCases           Int      @default(0)
+  licenseStatus       String   @default("pending") // pending, verified, rejected
+  submittedAt         String?
+  profileScore        Int      @default(0)
+}
+
+model KycApplication {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  name        String
+  city        String
+  license     String
+  attachments String   @default("[]")
+  status      String   @default("pending") // pending, approved, rejected
+  createdAt   DateTime @default(now())
+}
+
+model Case {
+  id                 String     @id @default(uuid())
+  title              String
+  matter             String
+  clientId           String
+  client             User       @relation("ClientCases", fields: [clientId], references: [id])
+  lawyerId           String
+  lawyer             User       @relation("LawyerCases", fields: [lawyerId], references: [id])
+  status             String     @default("pending")
+  progress           Int        @default(0)
+  riskScore          Int        @default(0)
+  isArchived         Boolean    @default(false)
+  totalAgreedFee     Float      @default(0)
+  paidAmount         Float      @default(0)
+  unreadCount        Int        @default(0)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  documents          Document[]
+  folders            Folder[]
+  chatSessions       ChatSession[]
+  customFields       CaseCustomField[]
+  timelineEntries    CaseTimelineEntry[]
+  collaborators      CaseCollaborator[]
+  accessLogs         CaseAccessLog[]
+  appointments       Appointment[]
+  invoices           Invoice[]
+}
+
+model Folder {
+  id        String     @id @default(uuid())
+  name      String
+  caseId    String
+  case      Case       @relation(fields: [caseId], references: [id])
+  documents Document[]
+}
+
+model Document {
+  id             String    @id @default(uuid())
+  name           String
+  fileUrl        String
+  size           String
+  type           String
+  status         String   @default("Draft")
+  actionRequired String?
+  expiresAt      String?
+  expiresText    String?
+  previewUrl     String?
+  isSigned       Boolean   @default(false)
+  tags           String    @default("[]")
+  caseId         String
+  case           Case      @relation(fields: [caseId], references: [id])
+  folderId       String?
+  folder         Folder?   @relation(fields: [folderId], references: [id])
+  confidential   Boolean   @default(false)
+  createdAt      DateTime  @default(now())
+}
+
+model Transaction {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  amount    Float
+  label     String
+  source    String
+  type      String   // credit, debit
+  status    String   @default("pending")
+  createdAt DateTime @default(now())
+}
+
+model SupportTicket {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  subject     String
+  status      String   @default("open")
+  priority    String   @default("medium")
+  createdAt   DateTime @default(now())
+}
+
+model ChatSession {
+  id        String    @id @default(uuid())
+  caseId    String?
+  case      Case?     @relation(fields: [caseId], references: [id])
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  messages  Message[]
+  createdAt DateTime  @default(now())
+}
+
+model Message {
+  id          String      @id @default(uuid())
+  sessionId   String
+  session     ChatSession @relation(fields: [sessionId], references: [id])
+  senderId    String
+  sender      User        @relation(fields: [senderId], references: [id])
+  text        String
+  senderRole  String      @default("user")
+  unread      Boolean     @default(true)
+  priority    String      @default("Medium")
+  channel     String      @default("عميل")
+  awaitingResponse Boolean @default(false)
+  createdAt   DateTime    @default(now())
+}
+
+model FeatureFlag {
+  key         String  @id
+  label       String
+  description String
+  enabled     Boolean @default(false)
+}
+
+model LegalDoc {
+  id       String @id @default(uuid())
+  title    String
+  law      String
+  article  String
+  category String
+  summary  String
+  source   String
+}
+
+model SystemPolicy {
+  key         String @id
+  label       String
+  value       String
+  description String
+}
+
+model SystemSetting {
+  id             Int     @id @default(1)
+  maintenanceMode Boolean @default(false)
+  announcement    String  @default("")
+  offlineMessage  String  @default("")
+  supportEmail    String  @default("")
+}
+
+model AiSetting {
+  id           Int     @id @default(1)
+  enabled      Boolean @default(true)
+  topK         Int     @default(3)
+  fallbackMode Boolean @default(false)
+  maxTokens    Int     @default(500)
+}
+
+model PaymentGateway {
+  key        String  @id
+  label      String
+  enabled    Boolean @default(false)
+  feePercent Float   @default(0.0)
+}
+
+model NotificationTemplate {
+  key    String  @id
+  label  String
+  value  String
+  active Boolean @default(false)
+}
+
+model ModerationRule {
+  id     String  @id @default(uuid())
+  type   String
+  value  String
+  active Boolean @default(true)
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  message   String
+  type      String   // info, warning, success, critical
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model UserFollow {
+  id         String   @id @default(uuid())
+  followerId String
+  lawyerId   String
+  createdAt  DateTime @default(now())
+
+  follower   User     @relation("Follower", fields: [followerId], references: [id])
+  lawyer     User     @relation("FollowedLawyer", fields: [lawyerId], references: [id])
+
+  @@unique([followerId, lawyerId])
+}
+
+model Review {
+  id         String   @id @default(uuid())
+  authorId   String
+  lawyerId   String
+  rating     Int
+  text       String
+  createdAt  DateTime @default(now())
+
+  author     User     @relation("ReviewAuthor", fields: [authorId], references: [id])
+  lawyer     User     @relation("ReviewLawyer", fields: [lawyerId], references: [id])
+}
+
+model UserSession {
+  id         String   @id @default(uuid())
+  userId     String
+  device     String
+  location   String
+  lastSeen   String
+  current    Boolean  @default(false)
+  ipAddress  String
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  userId      String
+  title       String
+  description String
+  type        String
+  timeLabel   String
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+model Invoice {
+  id         String   @id @default(uuid())
+  userId     String
+  caseId     String?
+  label      String
+  amount     String
+  dateLabel  String
+  status     String
+  createdAt  DateTime @default(now())
+
+  user       User     @relation(fields: [userId], references: [id])
+  case       Case?    @relation(fields: [caseId], references: [id])
+}
+
+model CaseCustomField {
+  id        String   @id @default(uuid())
+  caseId    String
+  label     String
+  value     String
+  createdAt DateTime @default(now())
+
+  case      Case     @relation(fields: [caseId], references: [id])
+}
+
+model CaseTimelineEntry {
+  id        String   @id @default(uuid())
+  caseId    String
+  dateLabel String
+  title     String
+  detail    String
+  type      String
+  createdAt DateTime @default(now())
+
+  case      Case     @relation(fields: [caseId], references: [id])
+}
+
+model CaseCollaborator {
+  id          String   @id @default(uuid())
+  caseId       String
+  name         String
+  email        String
+  role         String
+  permissions  String
+  img          String
+  lastSeen     String?
+  createdAt    DateTime @default(now())
+
+  case         Case     @relation(fields: [caseId], references: [id])
+}
+
+model CaseAccessLog {
+  id         String   @id @default(uuid())
+  caseId      String
+  userName    String
+  action      String
+  timeLabel   String
+  createdAt   DateTime @default(now())
+
+  case        Case     @relation(fields: [caseId], references: [id])
+}
+
+model Appointment {
+  id         String   @id @default(uuid())
+  caseId      String?
+  lawyerId    String
+  title       String
+  timeLabel   String
+  clientName  String
+  type        String
+  createdAt   DateTime @default(now())
+
+  case        Case?    @relation(fields: [caseId], references: [id])
+}
