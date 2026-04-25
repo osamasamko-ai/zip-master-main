@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
@@ -10,12 +10,15 @@ const QUICK_MESSAGE_PROMPTS = [
   'هل يمكن تحديد الخطوة التالية بوضوح؟',
 ];
 
+type MessageDeliveryState = 'sending' | 'failed';
+
 type MessageItem = {
   id: string | number;
   sender: 'user' | 'lawyer';
   text: string;
   awaitingResponse?: boolean;
   time: string;
+  deliveryState?: MessageDeliveryState;
 };
 
 type WorkspaceCase = {
@@ -58,11 +61,57 @@ export default function Messages() {
   const [draft, setDraft] = useState('');
   const [isSending, setIsSending] = useState(false);
 
-  const loadCases = async (preferredConversationId?: string) => {
+  const mergeCasesWithPendingMessages = useCallback((serverCases: WorkspaceCase[], localCases: WorkspaceCase[]) => {
+    return serverCases.map((serverCase) => {
+      const localCase = localCases.find((item) => item.id === serverCase.id);
+      if (!localCase) {
+        return serverCase;
+      }
+
+      const pendingMessages = localCase.messages.filter((message) => message.deliveryState);
+      if (pendingMessages.length === 0) {
+        return serverCase;
+      }
+
+      const mergedPendingMessages = pendingMessages.filter((pendingMessage) => {
+        if (pendingMessage.deliveryState === 'failed') {
+          return true;
+        }
+
+        return !serverCase.messages.some(
+          (message) => message.sender === pendingMessage.sender && message.text === pendingMessage.text,
+        );
+      });
+
+      if (mergedPendingMessages.length === 0) {
+        return serverCase;
+      }
+
+      return {
+        ...serverCase,
+        messages: [...serverCase.messages, ...mergedPendingMessages],
+      };
+    });
+  }, []);
+
+  const replaceCaseInState = useCallback((nextCase: WorkspaceCase) => {
+    setCases((current) => {
+      const existingIndex = current.findIndex((item) => item.id === nextCase.id);
+      if (existingIndex === -1) {
+        return [nextCase, ...current];
+      }
+
+      const next = [...current];
+      next[existingIndex] = nextCase;
+      return next;
+    });
+  }, []);
+
+  const loadCases = useCallback(async (preferredConversationId?: string) => {
     try {
       const response = await apiClient.getWorkspaceCases();
       const nextCases = response.data || [];
-      setCases(nextCases);
+      setCases((current) => mergeCasesWithPendingMessages(nextCases, current));
 
       const grouped = buildConversations(nextCases);
       const preferred =
@@ -76,11 +125,11 @@ export default function Messages() {
       console.error('Failed to load messages', error);
       setCases([]);
     }
-  };
+  }, [mergeCasesWithPendingMessages, selectedLawyerIdFromQuery]);
 
   useEffect(() => {
     loadCases();
-  }, [selectedLawyerIdFromQuery]);
+  }, [loadCases]);
 
   useEffect(() => {
     const refresh = () => {
@@ -107,7 +156,7 @@ export default function Messages() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [selectedConversationId, selectedLawyerIdFromQuery]);
+  }, [loadCases, selectedConversationId]);
 
   const conversations = useMemo(() => buildConversations(cases), [cases]);
 
@@ -137,20 +186,93 @@ export default function Messages() {
   const draftLength = draft.trim().length;
   const conversationHealthLabel = latestClientMessage?.awaitingResponse ? 'بانتظار رد المحامي' : 'المحادثة محدثة';
 
-  const handleSend = async () => {
-    if (!draft.trim() || !selectedCase) return;
+  const updateMessageDeliveryState = useCallback((caseId: string, messageId: string, deliveryState: MessageDeliveryState) => {
+    setCases((current) =>
+      current.map((item) =>
+        item.id === caseId
+          ? {
+              ...item,
+              messages: item.messages.map((message) =>
+                message.id === messageId
+                  ? {
+                      ...message,
+                      deliveryState,
+                      time: deliveryState === 'failed' ? 'فشل الإرسال' : 'الآن',
+                    }
+                  : message,
+              ),
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  const appendOptimisticMessage = useCallback((caseId: string, message: MessageItem) => {
+    setCases((current) =>
+      current.map((item) =>
+        item.id === caseId
+          ? {
+              ...item,
+              unreadCount: item.unreadCount ?? 0,
+              messages: [...item.messages, message],
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  const submitMessage = useCallback(async (caseId: string, outgoingText: string, optimisticId?: string) => {
+    if (!outgoingText.trim()) {
+      return false;
+    }
+
+    const nextOptimisticId = optimisticId || `temp-message-${Date.now()}`;
+
+    if (!optimisticId) {
+      appendOptimisticMessage(caseId, {
+        id: nextOptimisticId,
+        sender: 'user',
+        text: outgoingText,
+        awaitingResponse: true,
+        time: 'الآن',
+        deliveryState: 'sending',
+      });
+      setDraft('');
+    } else {
+      updateMessageDeliveryState(caseId, nextOptimisticId, 'sending');
+    }
 
     setIsSending(true);
+
     try {
-      await apiClient.addCaseMessage(selectedCase.id, draft.trim(), 'user');
-      setDraft('');
-      await loadCases(selectedConversation?.id);
+      const response = await apiClient.addCaseMessage(caseId, outgoingText, 'user');
+      if (response.data) {
+        replaceCaseInState(response.data);
+      } else {
+        await loadCases(selectedConversationId || undefined);
+      }
+      return true;
     } catch (error) {
       console.error('Failed to send message', error);
+      updateMessageDeliveryState(caseId, nextOptimisticId, 'failed');
+      if (!optimisticId) {
+        setDraft((current) => (current.trim().length ? current : outgoingText));
+      }
+      return false;
     } finally {
       setIsSending(false);
     }
-  };
+  }, [appendOptimisticMessage, loadCases, replaceCaseInState, selectedConversationId, updateMessageDeliveryState]);
+
+  const handleSend = useCallback(async () => {
+    if (!draft.trim() || !selectedCase) return;
+    await submitMessage(selectedCase.id, draft.trim());
+  }, [draft, selectedCase, submitMessage]);
+
+  const handleRetryMessage = useCallback(async (message: MessageItem) => {
+    if (!selectedCase || message.sender !== 'user') return;
+    await submitMessage(selectedCase.id, message.text, String(message.id));
+  }, [selectedCase, submitMessage]);
 
   return (
     <div className="app-view fade-in space-y-8 pb-12 text-right">
@@ -307,9 +429,25 @@ export default function Messages() {
                       <div className={`max-w-[78%] rounded-[1.5rem] px-4 py-3 text-right shadow-sm ${message.sender === 'user' ? 'bg-white border border-slate-200 text-slate-700' : 'bg-brand-navy text-white'}`}>
                         <p className="text-sm font-bold leading-7">{message.text}</p>
                         {message.sender === 'user' && (
-                          <p className={`mt-2 text-[10px] font-black ${message.awaitingResponse ? 'text-amber-600' : 'text-emerald-600'}`}>
-                            {message.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
-                          </p>
+                          <div className="mt-2 flex flex-wrap items-center gap-2">
+                            <p className={`text-[10px] font-black ${message.awaitingResponse ? 'text-amber-600' : 'text-emerald-600'}`}>
+                              {message.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
+                            </p>
+                            {message.deliveryState === 'sending' && (
+                              <span className="rounded-full bg-brand-navy/5 px-2.5 py-1 text-[10px] font-black text-brand-navy">
+                                جارٍ الإرسال...
+                              </span>
+                            )}
+                            {message.deliveryState === 'failed' && (
+                              <button
+                                type="button"
+                                onClick={() => handleRetryMessage(message)}
+                                className="rounded-full bg-red-50 px-2.5 py-1 text-[10px] font-black text-red-600 transition hover:bg-red-100"
+                              >
+                                فشل الإرسال - إعادة المحاولة
+                              </button>
+                            )}
+                          </div>
                         )}
                         <p className={`mt-2 text-[10px] font-black ${message.sender === 'user' ? 'text-slate-400' : 'text-white/70'}`}>{message.time}</p>
                       </div>

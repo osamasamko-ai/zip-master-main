@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
@@ -16,6 +16,7 @@ type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded';
 type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed';
 
 type CaseMessageSender = 'user' | 'lawyer';
+type MessageDeliveryState = 'sending' | 'failed';
 
 type DocAction = 'بانتظار توقيعك' | null;
 
@@ -32,6 +33,7 @@ interface CaseMessage {
   text: string;
   awaitingResponse?: boolean;
   time: string;
+  deliveryState?: MessageDeliveryState;
 }
 
 interface LegalDocument {
@@ -329,7 +331,7 @@ const ChatTab = ({
   activeCase: LegalCase,
   newMessage: string,
   setNewMessage: (msg: string) => void,
-  sendMessage: (text?: string) => void,
+  sendMessage: (text?: string, optimisticId?: string) => void,
   isLawyerTyping: boolean,
   isRecording: boolean,
   setIsRecording: (r: boolean) => void
@@ -350,9 +352,25 @@ const ChatTab = ({
             }`}>
             <p className="font-medium">{msg.text}</p>
             {msg.sender === 'user' && (
-              <p className={`mt-2 text-[10px] font-black ${msg.awaitingResponse ? 'text-amber-200' : 'text-emerald-200'}`}>
-                {msg.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
-              </p>
+              <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                <p className={`text-[10px] font-black ${msg.awaitingResponse ? 'text-amber-200' : 'text-emerald-200'}`}>
+                  {msg.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
+                </p>
+                {msg.deliveryState === 'sending' && (
+                  <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-black text-blue-100">
+                    جارٍ الإرسال...
+                  </span>
+                )}
+                {msg.deliveryState === 'failed' && (
+                  <button
+                    type="button"
+                    onClick={() => sendMessage(msg.text, String(msg.id))}
+                    className="rounded-full bg-red-500/15 px-2.5 py-1 text-[10px] font-black text-red-100 transition hover:bg-red-500/25"
+                  >
+                    فشل الإرسال - إعادة المحاولة
+                  </button>
+                )}
+              </div>
             )}
             <div className={`flex items-center justify-end gap-1.5 mt-2 text-[9px] font-black ${msg.sender === 'user' ? 'text-blue-200/70' : 'text-slate-400'}`}>
               <span className="uppercase">{msg.time}</span>
@@ -592,12 +610,58 @@ export default function MyCases() {
 
   const [activeCaseId, setActiveCaseId] = useState<string>('');
   const [cases, setCases] = useState<LegalCase[]>([]);
-  const refreshCases = async (nextActiveCaseId?: string | null) => {
+  const mergeCasesWithPendingMessages = useCallback((serverCases: LegalCase[], localCases: LegalCase[]) => {
+    return serverCases.map((serverCase) => {
+      const localCase = localCases.find((item) => item.id === serverCase.id);
+      if (!localCase) {
+        return serverCase;
+      }
+
+      const pendingMessages = localCase.messages.filter((message) => message.deliveryState);
+      if (pendingMessages.length === 0) {
+        return serverCase;
+      }
+
+      const mergedPendingMessages = pendingMessages.filter((pendingMessage) => {
+        if (pendingMessage.deliveryState === 'failed') {
+          return true;
+        }
+
+        return !serverCase.messages.some(
+          (message) => message.sender === pendingMessage.sender && message.text === pendingMessage.text,
+        );
+      });
+
+      if (mergedPendingMessages.length === 0) {
+        return serverCase;
+      }
+
+      return {
+        ...serverCase,
+        messages: [...serverCase.messages, ...mergedPendingMessages],
+      };
+    });
+  }, []);
+
+  const replaceCaseInState = useCallback((nextCase: LegalCase) => {
+    setCases((current) => {
+      const existingIndex = current.findIndex((item) => item.id === nextCase.id);
+      if (existingIndex === -1) {
+        return [nextCase, ...current];
+      }
+
+      const next = [...current];
+      next[existingIndex] = nextCase;
+      return next;
+    });
+  }, []);
+
+  const refreshCases = useCallback(async (nextActiveCaseId?: string | null) => {
     try {
       const response = await apiClient.getWorkspaceCases();
       const nextCases = response.data || [];
       if (nextCases.length > 0) {
-        setCases(nextCases);
+        setCases((current) => mergeCasesWithPendingMessages(nextCases, current));
         setActiveCaseId(nextActiveCaseId || nextCases[0].id);
       } else {
         setCases([]);
@@ -605,12 +669,12 @@ export default function MyCases() {
     } catch (error) {
       console.error('Failed to refresh cases', error);
     }
-  };
+  }, [mergeCasesWithPendingMessages]);
 
   useEffect(() => {
     const state = location.state as { activeCaseId?: string } | null;
     refreshCases(state?.activeCaseId);
-  }, []);
+  }, [location.state, refreshCases]);
 
   useEffect(() => {
     const refresh = () => {
@@ -637,7 +701,7 @@ export default function MyCases() {
       window.removeEventListener('focus', refresh);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [activeCaseId]);
+  }, [activeCaseId, refreshCases]);
 
   useEffect(() => {
     const loadLawyers = async () => {
@@ -1068,11 +1132,75 @@ export default function MyCases() {
     else if (e.type === "dragleave") setIsDragActive(false);
   };
 
-  const sendMessage = async (text: string = newMessage) => {
+  const updateMessageDeliveryState = useCallback((caseId: string, messageId: string, deliveryState: MessageDeliveryState) => {
+    setCases((current) =>
+      current.map((item) =>
+        item.id === caseId
+          ? {
+              ...item,
+              messages: item.messages.map((message) =>
+                message.id === messageId
+                  ? {
+                      ...message,
+                      deliveryState,
+                      time: deliveryState === 'failed' ? 'فشل الإرسال' : 'الآن',
+                    }
+                  : message,
+              ),
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  const appendOptimisticMessage = useCallback((caseId: string, message: CaseMessage) => {
+    setCases((current) =>
+      current.map((item) =>
+        item.id === caseId
+          ? {
+              ...item,
+              messages: [...item.messages, message],
+            }
+          : item,
+      ),
+    );
+  }, []);
+
+  const sendMessage = useCallback(async (text: string = newMessage, optimisticId?: string) => {
     if (!text.trim() || !activeCase) return;
-    const response = await apiClient.addCaseMessage(activeCaseId, text, 'user');
-    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-    setNewMessage('');
+
+    const outgoingText = text.trim();
+    const nextOptimisticId = optimisticId || `temp-message-${Date.now()}`;
+
+    if (!optimisticId) {
+      appendOptimisticMessage(activeCase.id, {
+        id: nextOptimisticId,
+        sender: 'user',
+        text: outgoingText,
+        awaitingResponse: true,
+        time: 'الآن',
+        deliveryState: 'sending',
+      });
+      setNewMessage('');
+    } else {
+      updateMessageDeliveryState(activeCase.id, nextOptimisticId, 'sending');
+    }
+
+    try {
+      const response = await apiClient.addCaseMessage(activeCase.id, outgoingText, 'user');
+      if (response.data) {
+        replaceCaseInState(response.data);
+      } else {
+        await refreshCases(activeCase.id);
+      }
+    } catch (error) {
+      console.error('Failed to send message', error);
+      updateMessageDeliveryState(activeCase.id, nextOptimisticId, 'failed');
+      if (!optimisticId) {
+        setNewMessage((current) => (current.trim().length ? current : outgoingText));
+      }
+      return;
+    }
 
     // Mock lawyer typing
     setIsLawyerTyping(true);
@@ -1080,7 +1208,7 @@ export default function MyCases() {
       setIsLawyerTyping(false);
       // We could mock a reply here if we really wanted to, but typing is enough UX.
     }, 3000);
-  };
+  }, [activeCase, appendOptimisticMessage, newMessage, refreshCases, replaceCaseInState, updateMessageDeliveryState]);
 
   return (
     <div className="app-view fade-in space-y-6">
@@ -1465,9 +1593,25 @@ export default function MyCases() {
                               }`}>
                               <p className="font-medium">{msg.text}</p>
                               {msg.sender === 'user' && (
-                                <p className={`mt-2 text-[10px] font-black ${msg.awaitingResponse ? 'text-amber-200' : 'text-emerald-200'}`}>
-                                  {msg.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
-                                </p>
+                                <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
+                                  <p className={`text-[10px] font-black ${msg.awaitingResponse ? 'text-amber-200' : 'text-emerald-200'}`}>
+                                    {msg.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
+                                  </p>
+                                  {msg.deliveryState === 'sending' && (
+                                    <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-black text-blue-100">
+                                      جارٍ الإرسال...
+                                    </span>
+                                  )}
+                                  {msg.deliveryState === 'failed' && (
+                                    <button
+                                      type="button"
+                                      onClick={() => sendMessage(msg.text, String(msg.id))}
+                                      className="rounded-full bg-red-500/15 px-2.5 py-1 text-[10px] font-black text-red-100 transition hover:bg-red-500/25"
+                                    >
+                                      فشل الإرسال - إعادة المحاولة
+                                    </button>
+                                  )}
+                                </div>
                               )}
                               <div className={`flex items-center justify-end gap-1.5 mt-2 text-[9px] font-black ${msg.sender === 'user' ? 'text-blue-200/70' : 'text-slate-400'}`}>
                                 <span className="uppercase">{msg.time}</span>
