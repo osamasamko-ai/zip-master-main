@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { motion } from 'framer-motion';
-import { useNavigate, useParams } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import FollowButton from '../components/FollowButton';
 import ActionButton from '../components/ui/ActionButton';
 import { useNotifications } from '../context/NotificationContext';
@@ -76,6 +76,7 @@ function PublicStat({ label, value, note }: { label: string; value: string; note
 
 export default function Profile() {
   const navigate = useNavigate();
+  const location = useLocation();
   const params = useParams<{ id: string }>();
   const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications(); // Use global notifications
   const [activeTab, setActiveTab] = useState<PublicTab>('overview');
@@ -85,25 +86,34 @@ export default function Profile() {
   const [reviews, setReviews] = useState<any[]>([]);
   const [activityItems, setActivityItems] = useState<any[]>([]);
   const [relatedLawyers, setRelatedLawyers] = useState<any[]>([]);
+  const [loadError, setLoadError] = useState('');
 
   React.useEffect(() => {
     const load = async () => {
       if (!params.id) return;
+      const routeState = location.state as { lawyer?: any } | null;
+
+      if (routeState?.lawyer) {
+        setLawyer((current) => current || routeState.lawyer);
+      }
+
       try {
         const [profileResponse, lawyersResponse] = await Promise.all([
           apiClient.getLawyerProfile(params.id),
           apiClient.getLawyers(),
         ]);
+        setLoadError('');
         setLawyer(profileResponse.data.lawyer);
         setReviews(profileResponse.data.reviews || []);
         setActivityItems(profileResponse.data.activity || []);
         setRelatedLawyers((lawyersResponse.data || []).filter((item: any) => item.id !== params.id && item.specialty === profileResponse.data.lawyer.specialty).slice(0, 2));
       } catch (error) {
         console.error('Failed to load lawyer profile', error);
+        setLoadError('تعذر فتح ملف المحامي حالياً. حاول مرة أخرى.');
       }
     };
     load();
-  }, [params.id]);
+  }, [location.state, params.id]);
 
   React.useEffect(() => {
     const handleFollowStateChange = (event: Event) => {
@@ -134,6 +144,23 @@ export default function Profile() {
     window.addEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
     return () => window.removeEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
   }, []);
+
+  if (!lawyer && loadError) {
+    return (
+      <div className="app-view text-right">
+        <div className="rounded-[2rem] border border-red-200 bg-red-50 p-6 text-red-700">
+          <p className="text-base font-black">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => navigate('/lawyers')}
+            className="mt-4 rounded-2xl bg-white px-4 py-2 text-sm font-black text-brand-navy shadow-sm"
+          >
+            العودة إلى قائمة المحامين
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (!lawyer) {
     return <div className="app-view text-right">جاري تحميل الملف...</div>;
