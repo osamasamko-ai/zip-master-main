@@ -9,6 +9,8 @@ import { hashPassword, verifyPassword, generateToken, verifyToken, getTokenFromH
 import { PrismaClient } from '@prisma/client';
 import { Server } from 'socket.io';
 import { createServer } from 'http';
+import multer from 'multer';
+import fs from 'fs';
 import {
   getAdminMetrics,
   getAuditLogs,
@@ -1050,8 +1052,9 @@ async function startServer() {
     }
   });
 
-  app.get('/api/legal/docs', (req, res) => {
-    res.json(getLegalDocs());
+  app.get('/api/legal/docs', async (req, res) => {
+    const docs = await getLegalDocs();
+    res.json(docs);
   });
 
   app.post('/api/legal/ask', async (req, res) => {

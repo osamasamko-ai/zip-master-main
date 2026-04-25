@@ -72,6 +72,10 @@ model LawyerProfile {
   licenseStatus       String   @default("pending") // pending, verified, rejected
   submittedAt         String?
   profileScore        Int      @default(0)
+  nationalIdUrl       String?
+  nationalIdVerified  Boolean  @default(false)
+  lawyerLicenseUrl    String?
+  lawyerLicenseVerified Boolean @default(false)
 }
 
 model KycApplication {
@@ -385,4 +389,28 @@ model Appointment {
   createdAt   DateTime @default(now())
 
   case        Case?    @relation(fields: [caseId], references: [id])
+}
+
+model SecurityAlert {
+  id        String   @id @default(uuid())
+  type      String
+  message   String
+  severity  String
+  createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  type      String
+  action    String
+  userId    String?
+  details   String?
+  createdAt DateTime @default(now())
+}
+
+model WorkflowSetting {
+  id          Int     @id @default(1)
+  autoApprove Boolean @default(false)
+  notifyOnChange Boolean @default(true)
+  retentionDays Int @default(30)
 }

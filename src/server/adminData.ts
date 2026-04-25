@@ -340,11 +340,11 @@ export async function updateSupportTicket(id: string, status: string) {
 }
 
 export async function getPolicies(): Promise<PolicySetting[]> {
-    return prisma.policySetting.findMany() as any;
+    return prisma.systemPolicy.findMany() as any;
 }
 
 export async function updatePolicySetting(key: string, value: string) {
-    return prisma.policySetting.update({
+    return prisma.systemPolicy.update({
         where: { key },
         data: { value }
     }) as any;
