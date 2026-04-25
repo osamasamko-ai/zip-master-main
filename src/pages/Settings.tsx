@@ -7,8 +7,10 @@ import { useNotifications } from '../context/NotificationContext';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
 import { motion, AnimatePresence } from 'framer-motion';
+import { DocumentUpload } from '../components/DocumentUpload';
+import { useDocumentUpload } from '../hooks/useDocumentUpload';
 
-type SettingsSection = 'account' | 'security' | 'billing' | 'notifications' | 'integrations' | 'activity';
+type SettingsSection = 'account' | 'security' | 'billing' | 'notifications' | 'integrations' | 'activity' | 'documents';
 
 type SessionItem = {
   id: string;

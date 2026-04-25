@@ -146,6 +146,40 @@ async function startServer() {
   const prisma = new PrismaClient();
   const adminBootstrapSecret = process.env.ADMIN_BOOTSTRAP_SECRET;
 
+  // Setup uploads directory
+  const uploadsDir = path.join(process.cwd(), 'uploads');
+  if (!fs.existsSync(uploadsDir)) {
+    fs.mkdirSync(uploadsDir, { recursive: true });
+  }
+
+  // Configure multer for document uploads
+  const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+      cb(null, uploadsDir);
+    },
+    filename: (req, file, cb) => {
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+      cb(null, uniqueSuffix + path.extname(file.originalname));
+    },
+  });
+
+  const fileFilter = (req: express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'application/pdf'];
+    const maxSize = 5 * 1024 * 1024; // 5MB
+
+    if (!allowedMimes.includes(file.mimetype)) {
+      return cb(new Error('نوع الملف غير مدعوم. استخدم JPG, PNG, أو PDF فقط.'));
+    }
+
+    cb(null, true);
+  };
+
+  const upload = multer({
+    storage,
+    fileFilter,
+    limits: { fileSize: 5 * 1024 * 1024 },
+  });
+
   // Socket.io Connection Logic
   io.on('connection', (socket) => {
     const userId = socket.handshake.query.userId as string;
@@ -1157,6 +1191,75 @@ async function startServer() {
       }
     }
   });
+
+  // ============================================
+  // Document Upload Routes
+  // ============================================
+
+  app.post('/api/profile/documents/national-id', authenticateToken, upload.single('document'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'لم يتم تحديد ملف' });
+      }
+
+      const user = (req as any).user;
+      const fileUrl = `/uploads/${req.file.filename}`;
+
+      const lawyerProfile = await prisma.lawyerProfile.upsert({
+        where: { userId: user.id },
+        update: { nationalIdUrl: fileUrl, nationalIdVerified: false },
+        create: {
+          userId: user.id,
+          nationalIdUrl: fileUrl,
+          nationalIdVerified: false,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'تم تحميل البطاقة الوطنية بنجاح',
+        fileUrl,
+        lawyerProfile,
+      });
+    } catch (error) {
+      console.error('National ID upload failed:', error);
+      res.status(500).json({ error: 'فشل في تحميل البطاقة الوطنية' });
+    }
+  });
+
+  app.post('/api/profile/documents/lawyer-license', authenticateToken, upload.single('document'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'لم يتم تحديد ملف' });
+      }
+
+      const user = (req as any).user;
+      const fileUrl = `/uploads/${req.file.filename}`;
+
+      const lawyerProfile = await prisma.lawyerProfile.upsert({
+        where: { userId: user.id },
+        update: { lawyerLicenseUrl: fileUrl, lawyerLicenseVerified: false },
+        create: {
+          userId: user.id,
+          lawyerLicenseUrl: fileUrl,
+          lawyerLicenseVerified: false,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'تم تحميل بطاقة المحاماة بنجاح',
+        fileUrl,
+        lawyerProfile,
+      });
+    } catch (error) {
+      console.error('Lawyer license upload failed:', error);
+      res.status(500).json({ error: 'فشل في تحميل بطاقة المحاماة' });
+    }
+  });
+
+  // Serve uploaded files
+  app.use('/uploads', express.static(uploadsDir));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
