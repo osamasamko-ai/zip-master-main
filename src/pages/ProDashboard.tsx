@@ -57,6 +57,7 @@ interface VaultDoc {
   type: 'pdf' | 'word' | 'image';
   date: string;
   status: 'Draft' | 'Reviewed' | 'Signed' | 'Needs Review';
+  actionRequired?: string | null;
   caseTitle: string;
   owner: string;
   confidential: boolean;
@@ -1020,6 +1021,30 @@ export default function ProDashboard() {
       setQuickActionNote('تم حفظ الملاحظة الخاصة بنجاح.');
     } catch (err) {
       console.error("Failed to save note", err);
+    }
+  };
+
+  const handleReviewDocument = async (status: 'Reviewed' | 'Needs Review', note?: string) => {
+    if (!selectedVaultDoc) return;
+
+    const targetCase = cases.find(c => c.title === selectedVaultDoc.caseTitle);
+    if (!targetCase) return;
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      await fetch(`/api/app/workspace/cases/${targetCase.id}/documents/${selectedVaultDoc.id}/review`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ status, note })
+      });
+
+      setVaultDocs(prev => prev.map(d => d.id === selectedVaultDoc.id ? { ...d, status, actionRequired: note || null } : d));
+      setQuickActionNote(status === 'Reviewed' ? 'تم تأكيد مراجعة المستند بنجاح.' : 'تم تمييز المستند كمحتاج للمراجعة.');
+    } catch (err) {
+      console.error("Failed to review document", err);
     }
   };
 
@@ -2311,7 +2336,17 @@ export default function ProDashboard() {
             title={selectedVaultDoc.name}
             subtitle={selectedVaultDoc.caseTitle}
             status={<span className={`rounded-full px-3 py-1 text-[10px] font-bold ${vaultStatusClassMap[selectedVaultDoc.status]}`}>{vaultStatusLabelMap[selectedVaultDoc.status]}</span>}
-            summary={selectedVaultDoc.status === 'Needs Review' ? 'هذه الوثيقة ما زالت تحتاج مراجعة وربط ملاحظات واضحة قبل إرسالها أو اعتمادها.' : 'الوثيقة جاهزة للمشاركة أو الحفظ النهائي ضمن ملف القضية، مع إمكانية إضافة ملاحظات داخلية عند الحاجة.'}
+            summary={
+              <div className="space-y-3">
+                <p>{selectedVaultDoc.status === 'Needs Review' ? 'هذه الوثيقة ما زالت تحتاج مراجعة وربط ملاحظات واضحة قبل إرسالها أو اعتمادها.' : 'الوثيقة جاهزة للمشاركة أو الحفظ النهائي ضمن ملف القضية، مع إمكانية إضافة ملاحظات داخلية عند الحاجة.'}</p>
+                {selectedVaultDoc.actionRequired && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-800">
+                    <i className="fa-solid fa-comment-dots ml-2"></i>
+                    ملاحظة المراجعة: {selectedVaultDoc.actionRequired}
+                  </div>
+                )}
+              </div>
+            }
             meta={[
               { label: 'المالك', value: selectedVaultDoc.owner },
               { label: 'آخر تحديث', value: selectedVaultDoc.date },
@@ -2321,10 +2356,22 @@ export default function ProDashboard() {
             nextStep={<><span className="font-bold">الإجراء المقترح:</span> {selectedVaultDoc.status === 'Needs Review' ? 'ابدأ بمراجعة الوثيقة وربط ملاحظاتك بالملف قبل إرسالها.' : 'أكمل المشاركة الداخلية أو اربطها بخطوة القضية التالية.'}</>}
             actions={
               <>
-                <ActionButton variant="primary" size="sm">فتح الملف</ActionButton>
-                <ActionButton variant="secondary" size="sm">مشاركة داخلية</ActionButton>
-                <ActionButton variant="secondary" size="sm">إضافة ملاحظة</ActionButton>
-                <ActionButton variant="ghost" size="sm">ربط بالقضية</ActionButton>
+                {selectedVaultDoc.status === 'Needs Review' ? (
+                  <ActionButton variant="primary" size="sm" onClick={() => handleReviewDocument('Reviewed')}>تأكيد المراجعة</ActionButton>
+                ) : (
+                  <ActionButton
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const note = window.prompt('يرجى إدخال ملاحظات التعديل المطلوبة:');
+                      if (note) handleReviewDocument('Needs Review', note);
+                    }}
+                  >
+                    طلب تعديل
+                  </ActionButton>
+                )}
+                <ActionButton variant="secondary" size="sm">فتح الملف</ActionButton>
+                <ActionButton variant="ghost" size="sm">إضافة ملاحظة</ActionButton>
               </>
             }
           />

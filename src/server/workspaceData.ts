@@ -228,7 +228,7 @@ export function mapWorkspaceCase(item: any) {
       date: formatShortDateLabel(doc.createdAt),
       type: mapDocType(doc.type),
       folderId: doc.folderId,
-      actionRequired: (doc.actionRequired as 'بانتظار توقيعك' | null) || null,
+      actionRequired: doc.actionRequired || null,
       expiresAt: doc.expiresAt,
       expiresText: doc.expiresText,
       previewUrl: doc.previewUrl || doc.fileUrl,
@@ -471,6 +471,17 @@ export async function signCaseDocument(caseId: string, documentId: string) {
   return getCaseWorkspace(caseId);
 }
 
+export async function reviewCaseDocument(caseId: string, documentId: string, status: 'Reviewed' | 'Needs Review', note?: string) {
+  await prisma.document.update({
+    where: { id: documentId },
+    data: {
+      status,
+      actionRequired: note || (status === 'Reviewed' ? null : undefined),
+    },
+  });
+  return getCaseWorkspace(caseId);
+}
+
 export async function addCaseDocument(caseId: string, payload: { name: string; size: string; type: string; folderId?: string | null; }) {
   const previewUrl = `https://dummyimage.com/600x400/f3f4f6/1f2937&text=${encodeURIComponent(payload.name)}`;
   await prisma.document.create({
@@ -616,6 +627,7 @@ export async function getProWorkspace(lawyerId: string) {
       caseTitle: item.title,
       owner: item.client.name,
       confidential: doc.confidential,
+      actionRequired: doc.actionRequired,
     })),
   );
 

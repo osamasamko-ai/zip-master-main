@@ -79,6 +79,7 @@ import {
   moveCaseDocuments,
   removeCaseCollaborator,
   signCaseDocument,
+  reviewCaseDocument,
   toggleCaseArchive,
   updateCaseProgress,
   markCaseMessagesAsRead,
@@ -712,6 +713,16 @@ async function startServer() {
     } catch (error) {
       console.error('Sign document error:', error);
       res.status(500).json({ error: 'Failed to sign document' });
+    }
+  });
+
+  app.post('/api/app/workspace/cases/:caseId/documents/:documentId/review', authenticateToken, async (req, res) => {
+    try {
+      const { status, note } = req.body;
+      res.json({ data: await reviewCaseDocument(req.params.caseId, req.params.documentId, status, note) });
+    } catch (error) {
+      console.error('Review document error:', error);
+      res.status(500).json({ error: 'Failed to review document' });
     }
   });
 

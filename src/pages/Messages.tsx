@@ -31,7 +31,7 @@ interface LegalDocument {
   date: string; // Formatted date string
   type: DocumentType;
   folderId: string | null;
-  actionRequired: 'بانتظار توقيعك' | null;
+  actionRequired: string | null;
   expiresAt?: string | null;
   expiresText?: string | null;
   previewUrl?: string;

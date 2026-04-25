@@ -18,7 +18,7 @@ type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'compl
 type CaseMessageSender = 'user' | 'lawyer';
 type MessageDeliveryState = 'sending' | 'failed';
 
-type DocAction = 'بانتظار توقيعك' | null;
+type DocAction = string | null;
 
 interface CaseLawyer {
   id?: string;
