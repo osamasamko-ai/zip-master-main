@@ -565,6 +565,13 @@ export default function ProDashboard() {
       caseItem.id === selectedInboxMessage?.caseId ||
       caseItem.title === selectedInboxMessage?.caseTitle,
   );
+  const replyTargetCase = linkedMessageCase ?? selectedCase ?? null;
+  const canSendInboxReply = Boolean(
+    replyDraft.trim() &&
+    selectedInboxMessage &&
+    (selectedInboxMessage?.caseId || linkedMessageCase?.id || selectedCase?.id),
+  );
+  const replyDraftLength = replyDraft.trim().length;
 
   const urgentCases = cases.filter(caseItem => caseItem.status === 'At Risk' || caseItem.priority === 'High');
   const pinnedCases = cases.filter(caseItem => caseItem.isPinned);
@@ -1804,7 +1811,7 @@ export default function ProDashboard() {
                   variant="primary"
                   size="sm"
                   onClick={handleSendInboxReply}
-                  disabled={!replyDraft.trim() || (!selectedInboxMessage?.caseId && !linkedMessageCase?.id && !selectedCase?.id) || isSendingReply}
+                  disabled={!canSendInboxReply || isSendingReply}
                 >
                   {isSendingReply ? 'جارٍ الإرسال...' : 'إرسال الرد'}
                 </ActionButton>
@@ -1845,52 +1852,98 @@ export default function ProDashboard() {
         )}
 
         {selectedInboxMessage && (
-          <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
-            <div className="mt-4">
-              <p className="mb-2 text-xs font-bold text-gray-500">قوالب ردود سريعة</p>
-              <div className="grid grid-cols-1 gap-2">
-                {responseTemplates.map(template => (
-                  <button
-                    key={template}
-                    type="button"
-                    onClick={() => handleUseReplyTemplate(template)}
-                    className="rounded-2xl border border-gray-200 bg-gray-50 px-3 py-2 text-right text-xs text-gray-700 transition hover:border-brand-gold hover:bg-white"
-                  >
-                    {template}
-                  </button>
-                ))}
+          <div className="overflow-hidden rounded-3xl border border-brand-navy/10 bg-white shadow-sm">
+            <div className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(15,39,78,0.05),rgba(255,255,255,1))] p-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                <div className="text-right">
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-brand-navy/50">Reply Desk</p>
+                  <h3 className="mt-2 text-lg font-bold text-brand-dark">صياغة رد سريع وواضح</h3>
+                  <p className="mt-1 text-sm text-slate-500">اختر قالبًا مناسبًا، عدّل الصياغة، ثم أرسل الرد مباشرة إلى العميل ضمن القضية الصحيحة.</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:min-w-[260px]">
+                  <div className="rounded-2xl border border-white bg-white/90 p-3 text-center shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">الهدف</p>
+                    <p className="mt-2 text-xs font-black text-brand-dark">{replyTargetCase?.title || 'غير محدد'}</p>
+                  </div>
+                  <div className="rounded-2xl border border-white bg-white/90 p-3 text-center shadow-sm">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">المسودة</p>
+                    <p className={`mt-2 text-xs font-black ${replyDraftLength > 0 ? 'text-brand-dark' : 'text-slate-400'}`}>
+                      {replyDraftLength > 0 ? `${replyDraftLength} حرف` : 'فارغة'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="mt-4">
-              <label className="mb-2 block text-xs font-bold text-gray-500">مسودة الرد</label>
-              <textarea
-                value={replyDraft}
-                onChange={event => setReplyDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-                    event.preventDefault();
-                    handleSendInboxReply();
-                  }
-                }}
-                placeholder="اكتب الرد القانوني أو استخدم أحد القوالب أعلاه..."
-                className="min-h-[120px] w-full resize-none rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm text-right focus:border-brand-gold focus:outline-none"
-              />
-              <div className="mt-3 flex items-center justify-between gap-3">
-                <span className="text-[11px] font-bold text-gray-400">
-                  {linkedMessageCase
-                    ? `سيتم الإرسال ضمن قضية: ${linkedMessageCase.title}`
-                    : selectedCase
-                      ? `سيتم الإرسال ضمن القضية المفتوحة: ${selectedCase.title}`
-                      : 'لا توجد قضية مرتبطة بهذه الرسالة'}
-                </span>
-                <ActionButton
-                  variant="primary"
-                  size="sm"
-                  onClick={handleSendInboxReply}
-                  disabled={!replyDraft.trim() || (!selectedInboxMessage?.caseId && !linkedMessageCase?.id && !selectedCase?.id) || isSendingReply}
-                >
-                  {isSendingReply ? 'جارٍ الإرسال...' : 'إرسال'}
-                </ActionButton>
+            <div className="p-5">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-xs font-bold text-slate-500">قوالب ردود سريعة</p>
+                  <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-slate-400 shadow-sm">
+                    اختر قالبًا للبدء
+                  </span>
+                </div>
+                <div className="mt-3 grid grid-cols-1 gap-2">
+                  {responseTemplates.map(template => (
+                    <button
+                      key={template}
+                      type="button"
+                      onClick={() => handleUseReplyTemplate(template)}
+                      className="rounded-2xl border border-gray-200 bg-white px-4 py-3 text-right text-xs leading-6 text-gray-700 transition hover:border-brand-gold hover:shadow-sm"
+                    >
+                      {template}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label className="block text-xs font-bold text-gray-500">مسودة الرد</label>
+                  <span className="text-[10px] font-black text-slate-400">اختصار الإرسال: `Ctrl/Cmd + Enter`</span>
+                </div>
+                <textarea
+                  value={replyDraft}
+                  onChange={event => setReplyDraft(event.target.value)}
+                  onKeyDown={(event) => {
+                    if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                      event.preventDefault();
+                      handleSendInboxReply();
+                    }
+                  }}
+                  placeholder="اكتب الرد القانوني بلغة واضحة ومباشرة، واذكر الخطوة التالية للعميل إن لزم..."
+                  className="min-h-[160px] w-full resize-none rounded-[1.75rem] border border-slate-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-4 text-sm leading-7 text-right focus:border-brand-gold focus:outline-none"
+                />
+                <div className="mt-3 flex flex-col gap-3 rounded-2xl border border-slate-200 bg-slate-50/70 p-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="text-right">
+                    <p className="text-xs font-black text-brand-dark">
+                      {replyTargetCase
+                        ? `سيتم الإرسال ضمن قضية: ${replyTargetCase.title}`
+                        : 'لا توجد قضية مرتبطة بهذه الرسالة'}
+                    </p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-500">
+                      {canSendInboxReply ? 'الرد جاهز للإرسال إلى العميل.' : 'أضف نصًا أو تأكد من وجود قضية مرتبطة قبل الإرسال.'}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setReplyDraft('')}
+                      disabled={!replyDraft.length || isSendingReply}
+                      className="rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-500 transition hover:border-slate-300 hover:text-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      مسح المسودة
+                    </button>
+                    <ActionButton
+                      variant="primary"
+                      size="sm"
+                      onClick={handleSendInboxReply}
+                      disabled={!canSendInboxReply || isSendingReply}
+                      className="min-w-[132px]"
+                    >
+                      {isSendingReply ? 'جارٍ الإرسال...' : 'إرسال الآن'}
+                    </ActionButton>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
