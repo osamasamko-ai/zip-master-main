@@ -62,6 +62,24 @@ function formatRelativeDate(date: Date) {
   }).format(date);
 }
 
+function formatConsultationFee(value?: string | null) {
+  const digitsOnly = String(value || '').replace(/[^\d]/g, '');
+  if (!digitsOnly) {
+    return 'غير محدد';
+  }
+
+  return `${Number(digitsOnly).toLocaleString('en-US')} د.ع`;
+}
+
+function normalizeConsultationFee(value?: string | null) {
+  const digitsOnly = String(value || '').replace(/[^\d]/g, '');
+  if (!digitsOnly) {
+    return '';
+  }
+
+  return `${Number(digitsOnly).toLocaleString('en-US')} د.ع`;
+}
+
 function buildLawyerCard(user: any, followerCount: number, reviewCount: number, isFollowing = false) {
   const profile = user.lawyerProfile;
   return {
@@ -77,7 +95,7 @@ function buildLawyerCard(user: any, followerCount: number, reviewCount: number, 
     reviews: `${reviewCount} مراجعة`,
     reviewCount,
     casesHandled: `+${profile?.openCases || 0} قضية`,
-    consultationFee: profile?.consultationFee || 'غير محدد',
+    consultationFee: formatConsultationFee(profile?.consultationFee),
     verified: user.verified,
     accent: profile?.accent || 'from-slate-950 via-brand-dark to-brand-navy',
     avatar: profile?.avatar || user.img || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0d2a59&color=ffffff&rounded=true&font-size=0.4`,
@@ -153,6 +171,7 @@ export async function getCurrentUserProfile(userId: string) {
     securityAlerts: user.securityAlerts,
     marketingEmails: user.marketingEmails,
     roleDescription: user.roleDescription || '',
+    consultationFee: normalizeConsultationFee(user.lawyerProfile?.consultationFee),
     nationalIdUrl: user.lawyerProfile?.nationalIdUrl || '',
     nationalIdVerified: user.lawyerProfile?.nationalIdVerified || false,
     lawyerLicenseUrl: user.lawyerProfile?.lawyerLicenseUrl || '',
@@ -161,6 +180,15 @@ export async function getCurrentUserProfile(userId: string) {
 }
 
 export async function updateCurrentUserProfile(userId: string, updates: Record<string, any>) {
+  const existingUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+
+  if (!existingUser) {
+    return null;
+  }
+
   const user = await prisma.user.update({
     where: { id: userId },
     data: {
@@ -174,6 +202,19 @@ export async function updateCurrentUserProfile(userId: string, updates: Record<s
     },
     include: { lawyerProfile: true },
   });
+
+  if (existingUser.role === 'pro' || existingUser.role === 'admin') {
+    await prisma.lawyerProfile.upsert({
+      where: { userId },
+      update: {
+        consultationFee: normalizeConsultationFee(updates.consultationFee),
+      },
+      create: {
+        userId,
+        consultationFee: normalizeConsultationFee(updates.consultationFee),
+      },
+    });
+  }
 
   return getCurrentUserProfile(user.id);
 }

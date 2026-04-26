@@ -48,6 +48,26 @@ type VerificationDocument = {
   required: boolean;
 };
 
+function formatConsultationFeeInput(value: string) {
+  const digitsOnly = value.replace(/[^\d]/g, '');
+  if (!digitsOnly) {
+    return '';
+  }
+
+  return `${Number(digitsOnly).toLocaleString('en-US')} د.ع`;
+}
+
+function isValidConsultationFee(value: string) {
+  return /\d/.test(value);
+}
+
+const SUGGESTED_CONSULTATION_FEES = [
+  '25,000 د.ع',
+  '50,000 د.ع',
+  '75,000 د.ع',
+  '100,000 د.ع',
+];
+
 function SettingsCard({
   title,
   description,
@@ -139,11 +159,13 @@ export default function Settings() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
+  const [consultationFeeError, setConsultationFeeError] = useState('');
   const [form, setForm] = useState({
     name: user?.name ?? 'أحمد العراقي',
     email: user?.email ?? '',
     phone: '',
     company: user?.role === 'pro' ? 'مكتب النعيمي للمحاماة' : 'حساب فردي',
+    consultationFee: '',
     language: 'العربية',
     twoFactor: false,
     emailAlerts: true,
@@ -173,6 +195,7 @@ export default function Settings() {
           email: data.profile.email || '',
           phone: data.profile.phone || '',
           company: data.profile.company || '',
+          consultationFee: data.profile.consultationFee || '',
           language: data.profile.language || 'العربية',
           twoFactor: !!data.profile.twoFactor,
           emailAlerts: !!data.profile.emailAlerts,
@@ -288,12 +311,20 @@ export default function Settings() {
   }, [documentNotice]);
 
   const saveChanges = async () => {
+    if (isProfessionalAccount && !isValidConsultationFee(form.consultationFee)) {
+      setConsultationFeeError('يرجى إدخال سعر استشارة قانونية صحيح قبل الحفظ.');
+      setSavedToast('تعذر حفظ الإعدادات');
+      return;
+    }
+
+    setConsultationFeeError('');
     try {
       await Promise.all([
         apiClient.updateSettingsProfile({
           name: form.name,
           phone: form.phone,
           company: form.company,
+          consultationFee: form.consultationFee,
           language: form.language,
         }),
         apiClient.updateSettingsPreferences({
@@ -509,6 +540,51 @@ export default function Settings() {
                     </label>
                   ))}
                 </div>
+                {isProfessionalAccount && (
+                  <div className="mt-4">
+                    <label className="block">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="flex flex-wrap gap-2">
+                          {SUGGESTED_CONSULTATION_FEES.map((suggestion) => (
+                            <button
+                              key={suggestion}
+                              type="button"
+                              onClick={() => {
+                                setForm((current) => ({ ...current, consultationFee: suggestion }));
+                                setConsultationFeeError('');
+                              }}
+                              className={`rounded-full border px-3 py-1 text-[10px] font-black transition ${
+                                form.consultationFee === suggestion
+                                  ? 'border-brand-navy bg-brand-navy text-white'
+                                  : 'border-brand-gold/20 bg-brand-gold/10 text-brand-dark hover:bg-brand-gold/20'
+                              }`}
+                            >
+                              {suggestion}
+                            </button>
+                          ))}
+                        </div>
+                        <span className="block text-sm font-black text-brand-dark">سعر الاستشارة القانونية</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={form.consultationFee}
+                        onChange={(event) => {
+                          const nextValue = formatConsultationFeeInput(event.target.value);
+                          setForm((current) => ({ ...current, consultationFee: nextValue }));
+                          setConsultationFeeError(nextValue ? '' : 'يرجى إدخال سعر استشارة قانونية صحيح.');
+                        }}
+                        placeholder="مثال: 50,000 د.ع"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                      />
+                      <p className="mt-2 text-xs font-bold text-slate-400">
+                        هذا السعر سيظهر للعملاء في صفحة المحامي ويُستخدم عند بدء الاستشارة المباشرة.
+                      </p>
+                      {consultationFeeError && (
+                        <p className="mt-2 text-xs font-black text-red-500">{consultationFeeError}</p>
+                      )}
+                    </label>
+                  </div>
+                )}
               </SettingsCard>
 
               <SettingsCard title="بيئة العمل المرتبطة" description="تفاصيل تشغيلية مستمدة من سجلات الحساب وهي مخصصة للقراءة فقط.">
