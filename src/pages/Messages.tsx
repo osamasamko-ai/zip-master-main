@@ -27,6 +27,7 @@ type MessageItem = {
   awaitingResponse?: boolean;
   time: string;
   deliveryState?: MessageDeliveryState;
+  uploadProgress?: number;
 };
 
 type DocumentType = 'pdf' | 'image' | 'other';
@@ -42,6 +43,7 @@ interface LegalDocument {
   expiresAt?: string | null;
   expiresText?: string | null;
   previewUrl?: string;
+  fileUrl?: string;
   isSigned?: boolean;
   isUploading?: boolean;
   progress?: number;
@@ -57,6 +59,7 @@ type WorkspaceCase = {
   id: string;
   title: string;
   statusText: string;
+  progress: number;
   date: string;
   unreadCount?: number;
   lawyer: {
@@ -111,8 +114,12 @@ export default function Messages() {
   const [replyingToMessage, setReplyingToMessage] = useState<MessageItem | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isLawyerTyping, setIsLawyerTyping] = useState(false);
+  const [isAiConsulting, setIsAiConsulting] = useState(false);
+  const [aiResponse, setAiResponse] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const activeUploads = useRef<Map<string | number, XMLHttpRequest>>(new Map());
 
   const viewerRole: 'user' | 'lawyer' = useMemo(() => (user?.role === 'pro' || user?.role === 'admin' ? 'lawyer' : 'user'), [user]);
 
@@ -440,6 +447,132 @@ export default function Messages() {
     }
   }, [draft, isConversationClosed, selectedCase, submitMessage, viewerRole]);
 
+  const handleAskAI = useCallback(async () => {
+    if (!draft.trim() || !selectedCase) return;
+
+    setIsAiConsulting(true);
+    setAiResponse('');
+
+    try {
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('lexigate_token');
+      const response = await fetch('/api/legal/ask', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          question: draft.trim(),
+          tone: 'formal',
+          topK: 3
+        })
+      });
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      while (reader) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value);
+        // Simple SSE parsing for the demo
+        const lines = chunk.split('\n');
+        lines.forEach(line => {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+              if (data.chunk) setAiResponse(prev => (prev || '') + data.chunk);
+            } catch (e) { }
+          }
+        });
+      }
+    } catch (error) {
+      console.error('AI Consultation failed:', error);
+    } finally {
+      setIsAiConsulting(false);
+    }
+  }, [draft, selectedCase]);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !selectedCase) return;
+
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+    if (file.size > MAX_FILE_SIZE) {
+      alert('حجم الملف يتجاوز الحد المسموح به (5 ميجابايت). يرجى اختيار ملف أصغر.');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
+
+    const tempMsgId = `upload-${Date.now()}`;
+    const senderName = viewerRole === 'lawyer' ? 'المحامي' : 'العميل';
+    const msgText = `قام ${senderName} برفع مستند جديد: ${file.name}`;
+
+    // Add optimistic upload message
+    appendOptimisticMessage(selectedCase.id, {
+      id: tempMsgId,
+      sender: viewerRole,
+      text: msgText,
+      time: 'الآن',
+      uploadProgress: 0,
+      deliveryState: 'sending'
+    });
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setIsSending(true);
+    const xhr = new XMLHttpRequest();
+    activeUploads.current.set(tempMsgId, xhr);
+    const token = localStorage.getItem('auth_token') || localStorage.getItem('lexigate_token');
+
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setCases(current => current.map(c =>
+          c.id === selectedCase.id
+            ? { ...c, messages: c.messages.map(m => m.id === tempMsgId ? { ...m, uploadProgress: percent } : m) }
+            : c
+        ));
+      }
+    };
+
+    xhr.onload = () => {
+      activeUploads.current.delete(tempMsgId);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const result = JSON.parse(xhr.responseText);
+        if (result.data) replaceCaseInState(result.data);
+      } else {
+        updateMessageDeliveryState(selectedCase.id, tempMsgId, 'failed');
+      }
+      setIsSending(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    xhr.onerror = () => {
+      activeUploads.current.delete(tempMsgId);
+      updateMessageDeliveryState(selectedCase.id, tempMsgId, 'failed');
+      setIsSending(false);
+    };
+
+    xhr.onabort = () => {
+      activeUploads.current.delete(tempMsgId);
+      updateMessageDeliveryState(selectedCase.id, tempMsgId, 'failed');
+      setIsSending(false);
+    };
+
+    xhr.open('POST', `/api/app/workspace/cases/${selectedCase.id}/documents/upload`);
+    xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    xhr.send(formData);
+  };
+
+  const handleCancelUpload = useCallback((messageId: string | number) => {
+    const xhr = activeUploads.current.get(messageId);
+    if (xhr) {
+      xhr.abort();
+    }
+  }, []);
+
   const handleRetryMessage = useCallback(async (message: MessageItem) => {
     if (!selectedCase || message.sender !== viewerRole) return;
     await submitMessage(selectedCase.id, message.text, String(message.id));
@@ -633,7 +766,16 @@ export default function Messages() {
                           <span className="text-[9px] font-bold text-slate-400 uppercase">{conversation.lastMessage?.time || conversation.cases[0]?.date}</span>
                           <p className={`truncate text-sm font-black ${conversation.unreadCount > 0 ? 'text-brand-dark' : 'text-slate-600'}`}>{conversation.lawyerName}</p>
                         </div>
-                        <p className="mt-0.5 truncate text-[11px] font-bold text-slate-400">{conversation.cases[0]?.title}</p>
+                        <div className="mt-0.5 flex flex-row-reverse items-center gap-2">
+                          <div className="relative h-4 w-4 shrink-0">
+                            <svg className="h-full w-full" viewBox="0 0 36 36">
+                              <circle className="text-slate-100" strokeWidth="4" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" />
+                              <circle className="text-brand-gold transition-all duration-1000" strokeWidth="4" strokeDasharray={`${conversation.cases[0]?.progress}, 100`} strokeLinecap="round" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" transform="rotate(-90 18 18)" />
+                            </svg>
+                            <span className="absolute inset-0 flex items-center justify-center text-[5px] font-black text-slate-500">{conversation.cases[0]?.progress}%</span>
+                          </div>
+                          <p className="truncate text-[11px] font-bold text-slate-400">{conversation.cases[0]?.title}</p>
+                        </div>
                         <p className={`mt-1 truncate text-xs font-medium ${conversation.unreadCount > 0 ? 'text-brand-navy font-bold' : 'text-slate-400'}`}>
                           {conversation.lastMessage?.text || conversation.cases[0]?.title}
                         </p>
@@ -652,9 +794,18 @@ export default function Messages() {
                             }}
                             className={`rounded-xl p-2 text-[10px] flex items-center justify-between border cursor-pointer transition-all ${activeCaseId === c.id ? 'bg-brand-navy/10 border-brand-navy/20 shadow-inner' : 'bg-white/50 border-slate-100/50 hover:bg-white hover:shadow-sm'}`}
                           >
-                            <div className="text-right">
-                              <p className="font-bold text-slate-700 truncate max-w-[120px]">{c.title}</p>
-                              <p className="text-slate-400 mt-0.5">{c.date}</p>
+                            <div className="flex flex-row-reverse items-center gap-2">
+                              <div className="relative h-7 w-7 shrink-0">
+                                <svg className="h-full w-full" viewBox="0 0 36 36">
+                                  <circle className="text-slate-100" strokeWidth="3" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" />
+                                  <circle className="text-brand-gold transition-all duration-1000" strokeWidth="3" strokeDasharray={`${c.progress}, 100`} strokeLinecap="round" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" transform="rotate(-90 18 18)" />
+                                </svg>
+                                <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black text-slate-500">{c.progress}%</span>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-slate-700 truncate max-w-[100px]">{c.title}</p>
+                                <p className="text-slate-400 mt-0.5">{c.date}</p>
+                              </div>
                             </div>
                             <span className="rounded-lg bg-brand-navy/5 px-2 py-1 font-black text-brand-navy">{c.statusText}</span>
                           </div>
@@ -764,6 +915,11 @@ export default function Messages() {
 
                   {threadMessages.map((message) => {
                     const isMe = message.sender === viewerRole;
+
+                    const isUploadNotification = message.text.includes('برفع مستند جديد:');
+                    const attachedFileName = isUploadNotification ? message.text.split(':').pop()?.trim() : null;
+                    const attachedDoc = attachedFileName ? selectedCase?.documents.find(d => d.name === attachedFileName) : null;
+
                     return (
                       <div key={message.id} className="max-w-4xl mx-auto w-full">
                         <motion.div
@@ -804,7 +960,70 @@ export default function Messages() {
                                 <i className="fa-solid fa-reply text-xs"></i>
                               </button>
                             )}
+                            {message.uploadProgress !== undefined && (
+                              <div className="mt-3 mb-2 space-y-2">
+                                <div className="flex items-center justify-between text-[10px] font-black">
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={() => handleCancelUpload(message.id)}
+                                      className={`hover:text-red-500 transition-colors ${isMe ? 'text-white/50' : 'text-slate-400'}`}
+                                      title="إلغاء الرفع"
+                                    >
+                                      <i className="fa-solid fa-circle-xmark"></i>
+                                    </button>
+                                    <span className={isMe ? 'text-white/70' : 'text-slate-400'}>{message.uploadProgress}%</span>
+                                  </div>
+                                  <span className={isMe ? 'text-white/70' : 'text-slate-400'}>جاري الرفع</span>
+                                </div>
+                                <div className={`h-1.5 w-full rounded-full overflow-hidden ${isMe ? 'bg-white/20' : 'bg-slate-100 shadow-inner'}`}>
+                                  <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${message.uploadProgress}%` }}
+                                    className={`h-full rounded-full ${isMe ? 'bg-brand-gold' : 'bg-brand-navy'}`}
+                                  />
+                                </div>
+                              </div>
+                            )}
                             <p className="text-[14px] md:text-[15px] font-medium leading-relaxed">{message.text}</p>
+
+                            {attachedDoc && (
+                              <div
+                                className={`mt-3 p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all ${isMe ? 'bg-white/10 border-white/20 hover:bg-white/20' : 'bg-slate-50 border-slate-100 hover:border-brand-navy/30'}`}
+                              >
+                                <div
+                                  onClick={() => setActivePreviewDoc(attachedDoc)}
+                                  className="flex items-center gap-3 min-w-0 cursor-pointer flex-1 group/file"
+                                >
+                                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform active:scale-95 ${isMe ? 'bg-white/10' : 'bg-white shadow-sm'} ${attachedDoc.type === 'pdf' ? 'text-red-500' : 'text-blue-500'}`}>
+                                    <i className={`fa-solid ${getFileIconClass(attachedDoc.type)} text-base`}></i>
+                                  </div>
+                                  <div className="text-right min-w-0">
+                                    <p className={`text-[11px] font-black truncate group-hover/file:underline ${isMe ? 'text-white' : 'text-brand-dark'}`}>{attachedDoc.name}</p>
+                                    <p className={`text-[9px] font-bold ${isMe ? 'text-white/60' : 'text-slate-400'}`}>{attachedDoc.size}</p>
+                                  </div>
+                                </div>
+                                <div className="flex gap-1.5">
+                                  <button
+                                    onClick={() => setActivePreviewDoc(attachedDoc)}
+                                    className={`h-8 w-8 flex items-center justify-center rounded-xl transition-all shadow-sm ${isMe ? 'bg-white/10 text-white hover:bg-white/30' : 'bg-slate-100 text-slate-400 hover:text-brand-navy'}`}
+                                    title="معاينة فورية"
+                                  >
+                                    <i className="fa-solid fa-eye text-[10px]"></i>
+                                  </button>
+                                  <a
+                                    href={attachedDoc.previewUrl || attachedDoc.fileUrl || '#'}
+                                    download={attachedDoc.name}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className={`h-8 w-8 flex items-center justify-center rounded-xl transition-all shadow-sm ${isMe ? 'bg-white text-brand-navy hover:bg-brand-gold' : 'bg-brand-navy text-white hover:bg-brand-dark'}`}
+                                    title="تنزيل الملف"
+                                  >
+                                    <i className="fa-solid fa-download text-[10px]"></i>
+                                  </a>
+                                </div>
+                              </div>
+                            )}
+
                             {isMe && (
                               <div className="mt-2 flex flex-wrap items-center gap-2">
                                 <p className={`text-[10px] font-black ${message.awaitingResponse ? (viewerRole === 'user' ? 'text-blue-200/80' : 'text-amber-200/80') : 'text-emerald-200/80'}`}>
@@ -936,7 +1155,12 @@ export default function Messages() {
                               className="min-h-[80px] max-h-[200px] w-full rounded-[1.5rem] border border-slate-200 bg-white px-5 py-4 pb-14 text-[14px] font-medium text-slate-700 outline-none transition focus:border-brand-navy focus:ring-4 focus:ring-brand-navy/5 resize-none shadow-inner overflow-y-auto"
                             />
                             <div className="absolute right-4 bottom-3 flex gap-2">
-                              <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:text-brand-navy hover:bg-white border border-transparent hover:border-slate-100 shadow-sm transition"><i className="fa-solid fa-paperclip text-sm"></i></button>
+                              <button
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isSending || isConversationClosed}
+                                className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:text-brand-navy hover:bg-white border border-transparent hover:border-slate-100 shadow-sm transition disabled:opacity-50"
+                                title="إرفاق مستند"
+                              ><i className="fa-solid fa-paperclip text-sm"></i></button>
                             </div>
                             <div className="absolute left-3 bottom-3 flex gap-2">
                               {draft.length > 0 && (
@@ -951,6 +1175,19 @@ export default function Messages() {
                                   <i className="fa-solid fa-trash-can text-sm"></i>
                                 </button>
                               )}
+                              <button
+                                onClick={handleAskAI}
+                                disabled={!draft.trim() || isAiConsulting}
+                                className="h-9 px-3 bg-brand-gold/10 text-brand-gold border border-brand-gold/20 rounded-xl font-black text-[10px] hover:bg-brand-gold/20 transition disabled:opacity-30 flex items-center justify-center gap-2"
+                                title="استشارة الذكاء الاصطناعي حول هذه المسودة"
+                              >
+                                {isAiConsulting ? (
+                                  <div className="h-3 w-3 border-2 border-brand-gold border-t-transparent rounded-full animate-spin"></div>
+                                ) : (
+                                  <i className="fa-solid fa-wand-magic-sparkles"></i>
+                                )}
+                                مساعد ذكي
+                              </button>
                               <button
                                 onClick={handleSend}
                                 disabled={!draft.trim() || isSending || isConversationClosed}
@@ -1195,6 +1432,14 @@ export default function Messages() {
           </div>
         )}
       </AnimatePresence>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        onChange={handleFileUpload}
+        accept="image/*,.pdf,.doc,.docx,.txt"
+        className="hidden"
+      />
     </div>
   );
 }

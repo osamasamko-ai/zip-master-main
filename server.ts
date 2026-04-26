@@ -3,7 +3,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import cors from 'cors';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
 import { answerQuestion, buildLocalAnswer, getTopRelevantDocuments } from './src/server/iraqiLawDataset';
 import { hashPassword, verifyPassword, generateToken, verifyToken, getTokenFromHeader } from './src/server/auth';
 import { Server } from 'socket.io';
@@ -128,12 +128,27 @@ const buildGeminiSystemPrompt = (tone: ToneMode, referenceSummary: string) => `�
 ${referenceSummary || 'لا توجد مراجع مطابقة بشكل مباشر في قاعدة البيانات الحالية.'}`;
 
 const mapHistoryToGeminiContents = (history: ChatHistoryItem[], latestQuestion: string) => {
-  const recentTurns = history.slice(-8);
+  const recentTurns = (history || []).slice(-10);
+  const processedHistory: any[] = [];
+
+  recentTurns.forEach((item) => {
+    const role = item.role === 'assistant' ? 'model' : 'user';
+    // Gemini requires alternating roles (user -> model -> user)
+    if (processedHistory.length > 0 && processedHistory[processedHistory.length - 1].role === role) {
+      processedHistory[processedHistory.length - 1].parts[0].text += `\n${item.content}`;
+    } else {
+      processedHistory.push({ role, parts: [{ text: item.content }] });
+    }
+  });
+
+  // Ensure the chain doesn't end with a user message before we add the latest question
+  if (processedHistory.length > 0 && processedHistory[processedHistory.length - 1].role === 'user') {
+    processedHistory[processedHistory.length - 1].parts[0].text += `\n${latestQuestion}`;
+    return processedHistory;
+  }
+
   return [
-    ...recentTurns.map((item) => ({
-      role: item.role === 'assistant' ? 'model' : 'user',
-      parts: [{ text: item.content }],
-    })),
+    ...processedHistory,
     {
       role: 'user',
       parts: [{ text: latestQuestion }],
@@ -749,6 +764,40 @@ async function startServer() {
     }
   });
 
+  app.post('/api/app/workspace/cases/:caseId/documents/upload', authenticateToken, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'لم يتم اختيار ملف للرفع' });
+      }
+
+      const { caseId } = req.params;
+      const currentUser = (req as any).user;
+      const fileUrl = `/uploads/${req.file.filename}`;
+      const senderRole = currentUser.role === 'pro' || currentUser.role === 'admin' ? 'lawyer' : 'user';
+
+      const document = await prisma.document.create({
+        data: {
+          caseId,
+          name: req.file.originalname,
+          fileUrl,
+          previewUrl: fileUrl,
+          size: (req.file.size / (1024 * 1024)).toFixed(2) + ' MB',
+          type: req.file.mimetype.includes('pdf') ? 'pdf' : 'image',
+          status: 'Draft',
+          tags: '[]',
+        },
+      });
+
+      // Automatically send a message about the new document
+      const updatedCase = await addCaseMessage(caseId, currentUser.userId, `قام ${senderRole === 'lawyer' ? 'المحامي' : 'العميل'} برفع مستند جديد: ${req.file.originalname}`, senderRole);
+
+      res.json({ data: updatedCase, document });
+    } catch (error) {
+      console.error('Chat document upload error:', error);
+      res.status(500).json({ error: 'فشل رفع المستند' });
+    }
+  });
+
   app.post('/api/app/workspace/cases/:caseId/documents/:documentId/sign', authenticateToken, async (req, res) => {
     try {
       res.json({ data: await signCaseDocument(req.params.caseId, req.params.documentId) });
@@ -1261,6 +1310,24 @@ async function startServer() {
       const model = geminiClient.getGenerativeModel({
         model: 'gemini-1.5-flash',
         systemInstruction: buildGeminiSystemPrompt(selectedTone, referenceSummary),
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+          },
+        ],
       });
 
       const result = await model.generateContentStream({
