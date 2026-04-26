@@ -175,13 +175,28 @@ const workspaceCaseSelect = {
 
 async function ensureCaseSession(caseId: string, userId: string) {
   const existing = await prisma.chatSession.findFirst({
-    where: { caseId, userId },
+    where: { caseId },
+    orderBy: { createdAt: 'asc' },
   });
 
   if (existing) return existing;
 
   return prisma.chatSession.create({
     data: { caseId, userId },
+  });
+}
+
+async function getLatestClientMessage(caseId: string) {
+  return prisma.message.findFirst({
+    where: {
+      senderRole: 'user',
+      session: { caseId },
+    },
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      awaitingResponse: true,
+    },
   });
 }
 
@@ -288,6 +303,16 @@ export function mapWorkspaceCase(item: any) {
 export async function getClientWorkspace(userId: string) {
   const cases = await prisma.case.findMany({
     where: { clientId: userId },
+    select: workspaceCaseSelect,
+    orderBy: { updatedAt: 'desc' },
+  } as any);
+
+  return cases.map(mapWorkspaceCase);
+}
+
+export async function getLawyerWorkspace(userId: string) {
+  const cases = await prisma.case.findMany({
+    where: { lawyerId: userId },
     select: workspaceCaseSelect,
     orderBy: { updatedAt: 'desc' },
   } as any);
@@ -509,6 +534,12 @@ export async function addCaseDocument(caseId: string, payload: { name: string; s
 }
 
 export async function addCaseMessage(caseId: string, userId: string, text: string, senderRole: 'user' | 'lawyer') {
+  const latestClientMessage = await getLatestClientMessage(caseId);
+
+  if (latestClientMessage && !latestClientMessage.awaitingResponse) {
+    throw new Error('تم إغلاق هذه المحادثة من جهة المحامي. لا يمكن إرسال رسائل جديدة حتى يعاد فتحها.');
+  }
+
   const session = await ensureCaseSession(caseId, userId);
   await prisma.message.create({
     data: {
@@ -526,7 +557,7 @@ export async function addCaseMessage(caseId: string, userId: string, text: strin
     where: { id: caseId },
     data: {
       updatedAt: new Date(),
-      ...(senderRole === 'lawyer' ? { unreadCount: { increment: 1 } } : {}),
+      unreadCount: senderRole === 'user' ? { increment: 1 } : 0,
     },
   });
   return getCaseWorkspace(caseId);
@@ -879,39 +910,38 @@ export async function deleteProCases(caseIds: string[]) {
 }
 
 export async function markCaseMessagesAsRead(caseId: string, userId: string) {
-  // Find the chat session for this user and case
-  const session = await prisma.chatSession.findFirst({
-    where: { caseId, userId },
-    select: { id: true },
+  const caseRecord = await prisma.case.findUnique({
+    where: { id: caseId },
+    select: {
+      id: true,
+      clientId: true,
+      lawyerId: true,
+    },
   });
 
-  if (!session) {
-    // No session found for this user and case, return current case state
-    return prisma.case.findUnique({
-      where: { id: caseId },
-      select: workspaceCaseSelect,
-    });
+  if (!caseRecord) {
+    return null;
   }
 
-  // Mark all messages sent by the lawyer in this session as read for the user
+  const counterpartRole = userId === caseRecord.lawyerId ? 'user' : 'lawyer';
+
   await prisma.message.updateMany({
     where: {
-      sessionId: session.id,
-      senderRole: 'lawyer', // Assuming 'user' is the client, 'lawyer' is the pro
+      session: { caseId },
+      senderRole: counterpartRole,
       unread: true,
     },
     data: {
       unread: false,
+      awaitingResponse: false,
     },
   });
 
-  // Reset the unread count for the case
   await prisma.case.update({
     where: { id: caseId },
     data: { unreadCount: 0 },
   });
 
-  // Return the updated case to refresh the client
   return prisma.case.findUnique({
     where: { id: caseId },
     select: workspaceCaseSelect,

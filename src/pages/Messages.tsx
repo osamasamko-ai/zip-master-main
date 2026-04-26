@@ -1,14 +1,21 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useAuth } from '../context/AuthContext';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
 import apiClient from '../api/client';
 
-const QUICK_MESSAGE_PROMPTS = [
+const USER_QUICK_MESSAGE_PROMPTS = [
   'أحتاج تحديثاً سريعاً على آخر خطوة في القضية.',
   'هل هناك مستندات مطلوبة مني اليوم؟',
   'هل يمكن تحديد الخطوة التالية بوضوح؟',
+];
+
+const LAWYER_QUICK_MESSAGE_PROMPTS = [
+  'اطلعت على رسالتك وسأتابع الإجراء اليوم.',
+  'أحتاج منك تزويدي بالمستندات الداعمة في أقرب وقت.',
+  'الخطوة التالية هي مراجعة الملف ثم تزويدك بالتحديث.',
 ];
 
 type MessageDeliveryState = 'sending' | 'failed';
@@ -58,6 +65,8 @@ type WorkspaceCase = {
     role: string;
     img: string;
   };
+  client: string;
+  clientId: string;
   messages: MessageItem[];
   documents: LegalDocument[]; // Add this line
 };
@@ -81,6 +90,7 @@ function useSelectedLawyerId() {
 
 export default function Messages() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const selectedLawyerIdFromQuery = useSelectedLawyerId();
   const [cases, setCases] = useState<WorkspaceCase[]>([]);
   const [query, setQuery] = useState('');
@@ -88,11 +98,17 @@ export default function Messages() {
   const [draft, setDraft] = useState('');
   const [isLoadingConversations, setIsLoadingConversations] = useState(true); // New state for loading skeleton
   const [replyModalDoc, setReplyModalDoc] = useState<LegalDocument | null>(null);
+  const [activePreviewDoc, setActivePreviewDoc] = useState<LegalDocument | null>(null);
+  const [activeCaseId, setActiveCaseId] = useState('');
+  const [showCaseSummary, setShowCaseSummary] = useState(false);
   const [replyText, setReplyText] = useState('');
+  const [replyingToMessage, setReplyingToMessage] = useState<MessageItem | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isLawyerTyping, setIsLawyerTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const viewerRole: 'user' | 'lawyer' = useMemo(() => (user?.role === 'pro' || user?.role === 'admin' ? 'lawyer' : 'user'), [user]);
 
   const mergeCasesWithPendingMessages = useCallback((serverCases: WorkspaceCase[], localCases: WorkspaceCase[]) => {
     return serverCases.map((serverCase) => {
@@ -127,7 +143,7 @@ export default function Messages() {
     });
   }, []);
 
-  const conversations = useMemo(() => buildConversations(cases), [cases]);
+  const conversations = useMemo(() => buildConversations(cases, viewerRole), [cases, viewerRole]);
 
   const filteredConversations = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
@@ -144,7 +160,10 @@ export default function Messages() {
     conversations.find((conversation) => conversation.id === selectedConversationId) ||
     null;
 
-  const selectedCase = useMemo(() => selectedConversation?.cases[0] || null, [selectedConversation]);
+  const selectedCase = useMemo(() => {
+    if (!selectedConversation) return null;
+    return selectedConversation.cases.find(c => c.id === activeCaseId) || selectedConversation.cases[0];
+  }, [selectedConversation, activeCaseId]);
 
   const threadMessages = useMemo(() => {
     return selectedCase?.messages || [];
@@ -152,8 +171,15 @@ export default function Messages() {
 
   const latestClientMessage = [...threadMessages].reverse().find((message) => message.sender === 'user') || null;
   const draftLength = draft.trim().length;
-  const conversationHealthLabel = latestClientMessage?.awaitingResponse ? 'بانتظار رد المحامي' : 'المحادثة محدثة';
+  const isConversationClosed = Boolean(latestClientMessage) && !latestClientMessage.awaitingResponse;
+  const conversationHealthLabel = isConversationClosed ? 'المحادثة مغلقة' : latestClientMessage?.awaitingResponse ? 'بانتظار رد المحامي' : 'المحادثة محدثة';
   const isUrgent = selectedCase?.statusText?.includes('خطر') || selectedCase?.statusText?.includes('عاجل');
+  const quickMessagePrompts = viewerRole === 'lawyer' ? LAWYER_QUICK_MESSAGE_PROMPTS : USER_QUICK_MESSAGE_PROMPTS;
+  const composerPlaceholder = isConversationClosed
+    ? 'تم إغلاق هذه المحادثة من جهة المحامي.'
+    : viewerRole === 'lawyer'
+      ? 'اكتب ردك للعميل هنا...'
+      : 'اكتب رسالتك أو استفسارك هنا...';
 
   const replaceCaseInState = useCallback((nextCase: WorkspaceCase) => {
     setCases((current) => {
@@ -176,31 +202,51 @@ export default function Messages() {
 
       setCases((current) => {
         const merged = mergeCasesWithPendingMessages(nextCases, current);
-        // Skip update if core data hasn't changed to prevent expensive downstream re-renders
-        if (merged.length === current.length && merged.every((item, idx) =>
-          item.id === current[idx].id &&
-          item.messages.length === current[idx].messages.length &&
-          item.unreadCount === current[idx].unreadCount
-        )) {
+        // Skip update only when the thread content and state are unchanged.
+        if (merged.length === current.length && merged.every((item, idx) => {
+          const currentItem = current[idx];
+          if (
+            item.id !== currentItem.id ||
+            item.messages.length !== currentItem.messages.length ||
+            item.unreadCount !== currentItem.unreadCount
+          ) {
+            return false;
+          }
+
+          return item.messages.every((message, messageIdx) => {
+            const currentMessage = currentItem.messages[messageIdx];
+            return (
+              message.id === currentMessage?.id &&
+              message.awaitingResponse === currentMessage?.awaitingResponse &&
+              message.text === currentMessage?.text &&
+              message.sender === currentMessage?.sender
+            );
+          });
+        })) {
           return current;
         }
         return merged;
       });
 
       if (isInitial) {
-        const grouped = buildConversations(nextCases);
+        const grouped = buildConversations(nextCases, viewerRole);
         const preferred =
           selectedLawyerIdFromQuery && grouped.some((c) => c.lawyerId === selectedLawyerIdFromQuery)
             ? grouped.find((c) => c.lawyerId === selectedLawyerIdFromQuery)?.id || ''
             : grouped[0]?.id || '';
         setSelectedConversationId(preferred);
+
+        const initialConv = grouped.find(c => c.id === preferred);
+        if (initialConv) {
+          setActiveCaseId(initialConv.cases[0]?.id || '');
+        }
       }
     } catch (error) {
       console.error('Failed to load messages', error);
     } finally {
       if (isInitial) setIsLoadingConversations(false); // Set loading false after initial fetch
     }
-  }, [mergeCasesWithPendingMessages, selectedLawyerIdFromQuery]);
+  }, [mergeCasesWithPendingMessages, selectedLawyerIdFromQuery, viewerRole]);
 
   const markConversationMessagesAsRead = useCallback(async (caseId: string) => {
     try {
@@ -333,9 +379,9 @@ export default function Messages() {
     if (!optimisticId) {
       appendOptimisticMessage(caseId, {
         id: nextOptimisticId,
-        sender: 'user',
+        sender: viewerRole,
         text: outgoingText,
-        awaitingResponse: true,
+        awaitingResponse: viewerRole === 'user',
         time: 'الآن',
         deliveryState: 'sending',
       });
@@ -347,11 +393,11 @@ export default function Messages() {
     setIsSending(true);
 
     try {
-      const response = await apiClient.addCaseMessage(caseId, outgoingText, 'user');
+      const response = await apiClient.addCaseMessage(caseId, outgoingText, viewerRole);
       if (response.data) {
         replaceCaseInState(response.data);
       } else {
-        await loadCases(selectedConversationId || undefined);
+        await loadCases(false);
       }
       return true;
     } catch (error) {
@@ -364,13 +410,17 @@ export default function Messages() {
     } finally {
       setIsSending(false);
     }
-  }, [appendOptimisticMessage, loadCases, replaceCaseInState, selectedConversationId, updateMessageDeliveryState]);
+  }, [appendOptimisticMessage, loadCases, replaceCaseInState, updateMessageDeliveryState, viewerRole]);
 
   const handleSend = useCallback(async () => {
-    if (!draft.trim() || !selectedCase) return;
+    if (!draft.trim() || !selectedCase || isConversationClosed) return;
     const success = await submitMessage(selectedCase.id, draft.trim());
 
     if (success) {
+      setReplyingToMessage(null);
+    }
+
+    if (success && viewerRole === 'user') {
       // Mock lawyer typing response to user's message
       setIsLawyerTyping(true);
       // Usually this would be driven by a socket event 'lawyer_typing'
@@ -378,12 +428,42 @@ export default function Messages() {
         setIsLawyerTyping(false);
       }, 3000);
     }
-  }, [draft, selectedCase, submitMessage]);
+  }, [draft, isConversationClosed, selectedCase, submitMessage, viewerRole]);
 
   const handleRetryMessage = useCallback(async (message: MessageItem) => {
-    if (!selectedCase || message.sender !== 'user') return;
+    if (!selectedCase || message.sender !== viewerRole) return;
     await submitMessage(selectedCase.id, message.text, String(message.id));
-  }, [selectedCase, submitMessage]);
+  }, [selectedCase, submitMessage, viewerRole]);
+
+  const handleReplyToMessage = useCallback((message: MessageItem) => {
+    setReplyingToMessage(message);
+    setDraft((current) => {
+      if (current.trim()) {
+        return current;
+      }
+
+      return viewerRole === 'lawyer'
+        ? `بخصوص رسالتك: "${message.text}"\n`
+        : `رداً على رسالتك: "${message.text}"\n`;
+    });
+    textareaRef.current?.focus();
+  }, [viewerRole]);
+
+  const handleToggleConversationCompletion = useCallback(async () => {
+    if (viewerRole !== 'lawyer' || !latestClientMessage?.id) {
+      return;
+    }
+
+    try {
+      await apiClient.updateProMessageState(String(latestClientMessage.id), {
+        awaitingResponse: !latestClientMessage.awaitingResponse,
+        unread: false,
+      });
+      await loadCases(false);
+    } catch (error) {
+      console.error('Failed to update conversation completion:', error);
+    }
+  }, [latestClientMessage, loadCases, viewerRole]);
 
   const handleDocReply = useCallback((doc: LegalDocument) => {
     setReplyModalDoc(doc);
@@ -418,6 +498,31 @@ export default function Messages() {
       console.error('Failed to clear document action', error);
     }
   };
+
+  const handleDeleteMessage = useCallback(async (messageId: string | number) => {
+    if (!selectedCase) return;
+
+    if (!window.confirm('هل أنت متأكد من رغبتك في حذف هذه الرسالة؟')) return;
+
+    setCases((current) =>
+      current.map((c) =>
+        c.id === selectedCase.id
+          ? {
+            ...c,
+            messages: c.messages.filter((m) => m.id !== messageId),
+          }
+          : c
+      )
+    );
+  }, [selectedCase]);
+
+  useEffect(() => {
+    setReplyingToMessage(null);
+  }, [selectedCase?.id]);
+
+  useEffect(() => {
+    setActivePreviewDoc(null);
+  }, [selectedCase?.id]);
 
   return (
     <div className="app-view fade-in space-y-6 pb-6 text-right mx-auto max-w-[1400px]">
@@ -464,6 +569,19 @@ export default function Messages() {
               <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
             </div>
 
+            {viewerRole === 'lawyer' && (
+              <div className="mt-3 flex items-center justify-between px-1">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ملخص القضايا</p>
+                <button
+                  onClick={() => setShowCaseSummary(!showCaseSummary)}
+                  className={`h-5 w-9 rounded-full transition-colors relative flex items-center px-1 ${showCaseSummary ? 'bg-brand-gold' : 'bg-slate-200'}`}
+                  title={showCaseSummary ? "إخفاء ملخص القضايا" : "عرض ملخص القضايا"}
+                >
+                  <div className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${showCaseSummary ? '-translate-x-4' : 'translate-x-0'}`}></div>
+                </button>
+              </div>
+            )}
+
             <div className="mt-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar pr-1">
               {isLoadingConversations ? (
                 <ConversationSkeleton />
@@ -479,7 +597,10 @@ export default function Messages() {
                   <button
                     key={conversation.id}
                     type="button"
-                    onClick={() => setSelectedConversationId(conversation.id)}
+                    onClick={() => {
+                      setSelectedConversationId(conversation.id);
+                      setActiveCaseId(conversation.cases[0]?.id || '');
+                    }}
                     className={`w-full rounded-2xl p-3 text-right transition-all duration-200 border-2 ${selectedConversation?.id === conversation.id
                       ? 'border-brand-navy/10 bg-brand-navy/5 shadow-sm'
                       : 'border-transparent hover:bg-slate-50'}`}
@@ -508,6 +629,28 @@ export default function Messages() {
                         </p>
                       </div>
                     </div>
+
+                    {showCaseSummary && viewerRole === 'lawyer' && (
+                      <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                        {conversation.cases.map(c => (
+                          <div
+                            key={c.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedConversationId(conversation.id);
+                              setActiveCaseId(c.id);
+                            }}
+                            className={`rounded-xl p-2 text-[10px] flex items-center justify-between border cursor-pointer transition-all ${activeCaseId === c.id ? 'bg-brand-navy/10 border-brand-navy/20 shadow-inner' : 'bg-white/50 border-slate-100/50 hover:bg-white hover:shadow-sm'}`}
+                          >
+                            <div className="text-right">
+                              <p className="font-bold text-slate-700 truncate max-w-[120px]">{c.title}</p>
+                              <p className="text-slate-400 mt-0.5">{c.date}</p>
+                            </div>
+                            <span className="rounded-lg bg-brand-navy/5 px-2 py-1 font-black text-brand-navy">{c.statusText}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </button>
                 ))
               )}
@@ -523,18 +666,55 @@ export default function Messages() {
                       <img src={selectedConversation.lawyerImg} alt={selectedConversation.lawyerName} className="h-12 w-12 rounded-xl object-cover shadow-sm" />
                       <div className="text-right">
                         <div className="flex items-center gap-2">
-                          <h2 className="text-lg font-black text-brand-dark">{selectedConversation.lawyerName}</h2>
+                          <h2 className="text-lg font-black text-brand-dark">{viewerRole === 'lawyer' ? selectedCase.client : selectedConversation.lawyerName}</h2>
                           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="متصل الآن"></span>
                         </div>
                         <p className="mt-0.5 text-xs font-bold text-slate-500 flex items-center justify-end gap-1.5">
-                          <span>{selectedConversation.lawyerRole}</span>
+                          <span>{viewerRole === 'lawyer' ? 'عميل' : selectedConversation.lawyerRole}</span>
                           <span className="h-0.5 w-0.5 rounded-full bg-slate-300"></span>
                           <span className="text-slate-400 font-medium">آخر ظهور: {selectedConversation.lastSeen || 'الآن'}</span>
                         </p>
                         <div className="mt-1.5 flex flex-wrap justify-end gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tighter ${latestClientMessage?.awaitingResponse ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tighter ${isConversationClosed ? 'bg-slate-100 text-slate-700' : latestClientMessage?.awaitingResponse ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
                             {conversationHealthLabel}
                           </span>
+                          {viewerRole === 'lawyer' && latestClientMessage && (
+                            <button
+                              type="button"
+                              onClick={handleToggleConversationCompletion}
+                              className={`rounded-full border px-2.5 py-1 text-[9px] font-black transition ${isConversationClosed
+                                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                                : 'border-brand-gold/30 bg-brand-gold/10 text-brand-dark hover:bg-brand-gold/20'}`}
+                            >
+                              <i className={`fa-solid ${isConversationClosed ? 'fa-lock' : 'fa-circle-check'} ml-1`}></i>
+                              {isConversationClosed ? 'إعادة فتح المحادثة' : 'إكمال المحادثة'}
+                            </button>
+                          )}
+                          {selectedConversation.cases.length > 1 && viewerRole === 'lawyer' ? (
+                            <div className="relative group/case-pick">
+                              <button className="rounded-full bg-brand-navy text-white border border-brand-navy px-2 py-0.5 text-[9px] font-black flex items-center gap-1 shadow-sm">
+                                {selectedCase.title}
+                                <i className="fa-solid fa-chevron-down text-[7px] opacity-70"></i>
+                              </button>
+                              <div className="absolute top-full right-0 mt-1 w-48 bg-white border border-slate-100 shadow-2xl rounded-xl py-1 z-50 opacity-0 invisible group-hover/case-pick:opacity-100 group-hover/case-pick:visible transition-all">
+                                <p className="px-3 py-1.5 text-[8px] font-black text-slate-400 border-b border-slate-50 uppercase tracking-widest">تبديل ملف القضية</p>
+                                {selectedConversation.cases.map(c => (
+                                  <button
+                                    key={c.id}
+                                    onClick={() => setActiveCaseId(c.id)}
+                                    className={`w-full px-3 py-2 text-right text-[10px] font-black hover:bg-slate-50 transition-colors flex items-center justify-between ${activeCaseId === c.id ? 'text-brand-navy bg-brand-navy/5' : 'text-slate-600'}`}
+                                  >
+                                    <span className="truncate">{c.title}</span>
+                                    {activeCaseId === c.id && <i className="fa-solid fa-check text-[8px]"></i>}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="rounded-full bg-white border border-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-400">
+                              {selectedCase.title}
+                            </span>
+                          )}
                           <span className="rounded-full bg-white border border-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-400">
                             {selectedCase.statusText}
                           </span>
@@ -572,47 +752,87 @@ export default function Messages() {
                     <span className="rounded-full bg-slate-100 px-4 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">اليوم</span>
                   </div>
 
-                  {threadMessages.map((message) => (
-                    <div key={message.id} className="max-w-4xl mx-auto w-full">
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className={`flex ${message.sender === 'user' ? 'justify-start' : 'justify-end'}`}
-                      >
-                        <div className={`max-w-[85%] md:max-w-[70%] rounded-[1.5rem] px-5 py-3 text-right shadow-sm relative ${message.sender === 'user'
-                          ? 'bg-brand-navy text-white rounded-tl-none'
-                          : isRequestMessage(message.text)
-                            ? 'bg-white border-2 border-brand-gold/30 text-slate-700 rounded-tr-none ring-4 ring-brand-gold/5'
-                            : 'bg-white border border-slate-100 text-slate-700 rounded-tr-none'
-                          }`}
+                  {threadMessages.map((message) => {
+                    const isMe = message.sender === viewerRole;
+                    return (
+                      <div key={message.id} className="max-w-4xl mx-auto w-full">
+                        <motion.div
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className={`flex ${isMe ? 'justify-start' : 'justify-end'}`}
                         >
-                          <p className="text-[14px] md:text-[15px] font-medium leading-relaxed">{message.text}</p>
-                          {message.sender === 'user' && (
-                            <div className="mt-2 flex flex-wrap items-center gap-2">
-                              <p className={`text-[10px] font-black ${message.awaitingResponse ? 'text-blue-200/80' : 'text-emerald-200/80'}`}>
-                                {message.awaitingResponse ? 'بانتظار رد المحامي' : 'تم الرد'}
-                              </p>
-                              {message.deliveryState === 'sending' && (
-                                <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black text-white/60">
-                                  جارٍ الإرسال...
-                                </span>
-                              )}
-                              {message.deliveryState === 'failed' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleRetryMessage(message)}
-                                  className="rounded-full bg-red-500/20 px-2 py-0.5 text-[9px] font-black text-red-200 transition hover:bg-red-500/40"
-                                >
-                                  فشل - إعادة محاولة
-                                </button>
+                          <div className={`max-w-[85%] md:max-w-[70%] rounded-[1.5rem] px-5 py-3 text-right shadow-sm relative group ${isMe
+                            ? 'bg-brand-navy text-white rounded-tl-none'
+                            : isRequestMessage(message.text)
+                              ? 'bg-white border-2 border-brand-gold/30 text-slate-700 rounded-tr-none ring-4 ring-brand-gold/5'
+                              : 'bg-white border border-slate-100 text-slate-700 rounded-tr-none'
+                            }`}
+                          >
+                            <button
+                              onClick={() => navigator.clipboard.writeText(message.text)}
+                              className={`absolute top-2 opacity-0 group-hover:opacity-100 transition h-8 w-8 flex items-center justify-center rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-brand-navy shadow-sm z-10 ${isMe ? '-left-10' : '-right-10'}`}
+                              title="نسخ النص"
+                            >
+                              <i className="fa-regular fa-copy text-xs"></i>
+                            </button>
+                            {isMe && (
+                              <button
+                                onClick={() => handleDeleteMessage(message.id)}
+                                className={`absolute top-11 opacity-0 group-hover:opacity-100 transition h-8 w-8 flex items-center justify-center rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-red-500 shadow-sm z-10 ${isMe ? '-left-10' : '-right-10'}`}
+                                title="حذف الرسالة"
+                              >
+                                <i className="fa-solid fa-trash-can text-xs"></i>
+                              </button>
+                            )}
+                            {!isMe && (
+                              <button
+                                type="button"
+                                onClick={() => handleReplyToMessage(message)}
+                                className="absolute top-11 opacity-0 group-hover:opacity-100 transition h-8 w-8 flex items-center justify-center rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-brand-navy shadow-sm z-10 -right-10"
+                                title={viewerRole === 'lawyer' ? 'الرد على العميل' : 'الرد على المحامي'}
+                              >
+                                <i className="fa-solid fa-reply text-xs"></i>
+                              </button>
+                            )}
+                            <p className="text-[14px] md:text-[15px] font-medium leading-relaxed">{message.text}</p>
+                            {isMe && (
+                              <div className="mt-2 flex flex-wrap items-center gap-2">
+                                <p className={`text-[10px] font-black ${message.awaitingResponse ? (viewerRole === 'user' ? 'text-blue-200/80' : 'text-amber-200/80') : 'text-emerald-200/80'}`}>
+                                  {message.awaitingResponse ? (viewerRole === 'user' ? 'بانتظار رد المحامي' : 'بانتظار رد العميل') : 'تم الرد'}
+                                </p>
+                                {message.deliveryState === 'sending' && (
+                                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black text-white/60">
+                                    جارٍ الإرسال...
+                                  </span>
+                                )}
+                                {message.deliveryState === 'failed' && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRetryMessage(message)}
+                                    className="rounded-full bg-red-500/20 px-2 py-0.5 text-[9px] font-black text-red-200 transition hover:bg-red-500/40"
+                                  >
+                                    فشل - إعادة محاولة
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                            <div className={`mt-2 flex items-center justify-end gap-1.5 text-[9px] font-black uppercase ${isMe ? 'text-white/50' : 'text-slate-400'}`}>
+                              <span>{message.time}</span>
+                              {isMe && (
+                                <motion.i
+                                  initial={false}
+                                  animate={message.awaitingResponse ? { scale: 1, opacity: 0.4 } : { scale: [1, 1.4, 1], opacity: 1, color: '#93c5fd' }}
+                                  transition={{ duration: 0.4 }}
+                                  className="fa-solid fa-check-double"
+                                  title={message.awaitingResponse ? 'تم الإرسال' : 'تمت القراءة'}
+                                />
                               )}
                             </div>
-                          )}
-                          <p className={`mt-2 text-[9px] font-black uppercase ${message.sender === 'user' ? 'text-white/50' : 'text-slate-400'}`}>{message.time}</p>
-                        </div>
-                      </motion.div>
-                    </div>
-                  ))}
+                          </div>
+                        </motion.div>
+                      </div>
+                    );
+                  })}
 
                   {isLawyerTyping && (
                     <div className="max-w-4xl mx-auto w-full">
@@ -634,12 +854,37 @@ export default function Messages() {
                 <div className="border-t border-slate-100 p-4 bg-white">
                   <div className="max-w-4xl mx-auto w-full">
                     <div className="rounded-3xl border border-brand-navy/5 bg-slate-50/50 p-4 shadow-sm">
+                      {isConversationClosed && (
+                        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-right">
+                          {viewerRole === 'lawyer' ? (
+                            <button
+                              type="button"
+                              onClick={handleToggleConversationCompletion}
+                              className="shrink-0 rounded-xl bg-white px-3 py-2 text-[10px] font-black text-emerald-700 transition hover:bg-emerald-100"
+                            >
+                              إعادة فتح
+                            </button>
+                          ) : (
+                            <div className="shrink-0 rounded-xl bg-white px-3 py-2 text-[10px] font-black text-slate-500">
+                              بانتظار إعادة الفتح
+                            </div>
+                          )}
+                          <div>
+                            <p className="text-xs font-black text-emerald-800">تم إغلاق هذه المحادثة من جهة المحامي</p>
+                            <p className="mt-1 text-[10px] font-bold text-emerald-700">تم إيقاف الإرسال إلى أن يعيد المحامي فتحها.</p>
+                          </div>
+                        </div>
+                      )}
                       <div className="flex flex-wrap justify-end gap-2 mb-4">
-                        {QUICK_MESSAGE_PROMPTS.map((prompt) => (
+                        {quickMessagePrompts.map((prompt) => (
                           <button
                             key={prompt}
                             type="button"
-                            onClick={() => setDraft(prompt)}
+                            onClick={() => {
+                              setReplyingToMessage(null);
+                              setDraft(prompt);
+                            }}
+                            disabled={isConversationClosed}
                             className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-slate-500 transition hover:border-brand-navy/30 hover:text-brand-navy"
                           >
                             {prompt}
@@ -649,12 +894,35 @@ export default function Messages() {
                       <div className="flex flex-col md:flex-row gap-3 items-end">
                         <div className="flex-1 space-y-2 w-full">
                           <div className="relative group">
+                            {replyingToMessage && (
+                              <div className="mb-3 flex items-start justify-between gap-3 rounded-2xl border border-brand-navy/10 bg-white px-4 py-3 text-right">
+                                <div className="min-w-0">
+                                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">
+                                    {viewerRole === 'lawyer' ? 'الرد على رسالة العميل' : 'الرد على رسالة المحامي'}
+                                  </p>
+                                  <p className="mt-1 truncate text-xs font-bold text-slate-500">{replyingToMessage.text}</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setReplyingToMessage(null)}
+                                  className="shrink-0 rounded-xl bg-slate-50 px-2 py-1 text-[10px] font-black text-slate-400 transition hover:text-red-500"
+                                >
+                                  إلغاء
+                                </button>
+                              </div>
+                            )}
                             <textarea
                               ref={textareaRef}
                               value={draft}
                               onChange={(event) => setDraft(event.target.value)}
-                              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
-                              placeholder="اكتب رسالتك أو استفسارك هنا..."
+                              onKeyDown={(e) => {
+                                if (isConversationClosed) {
+                                  return;
+                                }
+                                if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
+                              }}
+                              placeholder={composerPlaceholder}
+                              disabled={isConversationClosed}
                               className="min-h-[80px] max-h-[200px] w-full rounded-[1.5rem] border border-slate-200 bg-white px-5 py-4 pb-14 text-[14px] font-medium text-slate-700 outline-none transition focus:border-brand-navy focus:ring-4 focus:ring-brand-navy/5 resize-none shadow-inner overflow-y-auto"
                             />
                             <div className="absolute right-4 bottom-3 flex gap-2">
@@ -663,7 +931,10 @@ export default function Messages() {
                             <div className="absolute left-3 bottom-3 flex gap-2">
                               {draft.length > 0 && (
                                 <button
-                                  onClick={() => setDraft('')}
+                                  onClick={() => {
+                                    setDraft('');
+                                    setReplyingToMessage(null);
+                                  }}
                                   className="h-9 w-9 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:text-red-500 transition"
                                   title="مسح المسودة"
                                 >
@@ -672,7 +943,7 @@ export default function Messages() {
                               )}
                               <button
                                 onClick={handleSend}
-                                disabled={!draft.trim() || isSending}
+                                disabled={!draft.trim() || isSending || isConversationClosed}
                                 className="h-9 w-9 bg-brand-navy text-white rounded-xl shadow-lg shadow-brand-navy/20 hover:bg-brand-dark transition disabled:opacity-30 flex items-center justify-center"
                               >
                                 <i className="fa-solid fa-paper-plane text-sm"></i>
@@ -711,7 +982,19 @@ export default function Messages() {
               <div className="flex-1 space-y-3 overflow-y-auto custom-scrollbar">
                 {selectedCase.documents.length > 0 ? (
                   selectedCase.documents.map((doc) => (
-                    <div key={doc.id} className="flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50">
+                    <div
+                      key={doc.id}
+                      onClick={() => setActivePreviewDoc(doc)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setActivePreviewDoc(doc);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      className="w-full flex items-center gap-3 p-3 rounded-xl border border-slate-100 bg-slate-50/50 transition text-right hover:border-brand-navy/20 hover:bg-white hover:shadow-sm cursor-pointer"
+                    >
                       <div className={`text-xl ${doc.type === 'pdf' ? 'text-red-500' : doc.type === 'image' ? 'text-blue-500' : 'text-gray-500'}`}>
                         <i className={`fa-solid ${getFileIconClass(doc.type)}`}></i>
                       </div>
@@ -719,9 +1002,16 @@ export default function Messages() {
                         <p className="text-sm font-black text-brand-dark truncate">{doc.name}</p>
                         <p className="text-[10px] font-bold text-slate-400">{doc.size} • {doc.date}</p>
                       </div>
+                      <span className="rounded-full bg-white px-2 py-0.5 text-[9px] font-black text-slate-400 border border-slate-100">
+                        معاينة
+                      </span>
                       {doc.actionRequired && (
                         <button
-                          onClick={() => handleDocReply(doc)}
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDocReply(doc);
+                          }}
                           className="rounded-full bg-amber-50 text-amber-600 hover:bg-amber-100 px-2 py-0.5 text-[9px] font-black transition flex items-center gap-1"
                         >
                           <i className="fa-solid fa-reply text-[8px]"></i>
@@ -757,6 +1047,102 @@ export default function Messages() {
           }
         />
       )}
+
+      <AnimatePresence>
+        {activePreviewDoc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[240] flex items-center justify-center bg-brand-dark/80 backdrop-blur-sm p-4"
+          >
+            <button
+              type="button"
+              onClick={() => setActivePreviewDoc(null)}
+              className="absolute inset-0"
+              aria-label="إغلاق المعاينة"
+            />
+
+            <motion.div
+              initial={{ scale: 0.96, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.96, opacity: 0 }}
+              className="relative z-[241] flex h-[min(85vh,760px)] w-full max-w-4xl flex-col overflow-hidden rounded-[2rem] bg-white shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-5">
+                <button
+                  type="button"
+                  onClick={() => setActivePreviewDoc(null)}
+                  className="h-10 w-10 rounded-xl bg-slate-50 text-slate-400 transition hover:text-red-500"
+                >
+                  <i className="fa-solid fa-times"></i>
+                </button>
+                <div className="min-w-0 flex-1 text-right">
+                  <p className="truncate text-lg font-black text-brand-dark">{activePreviewDoc.name}</p>
+                  <p className="mt-1 text-[11px] font-bold text-slate-400">{activePreviewDoc.size} • {activePreviewDoc.date}</p>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-hidden bg-slate-100">
+                {activePreviewDoc.previewUrl ? (
+                  activePreviewDoc.type === 'image' ? (
+                    <img
+                      src={activePreviewDoc.previewUrl}
+                      alt={activePreviewDoc.name}
+                      className="h-full w-full object-contain"
+                    />
+                  ) : activePreviewDoc.type === 'pdf' ? (
+                    <iframe
+                      src={activePreviewDoc.previewUrl}
+                      title={activePreviewDoc.name}
+                      className="h-full w-full border-0 bg-white"
+                    />
+                  ) : (
+                    <div className="flex h-full flex-col items-center justify-center gap-4 text-slate-400">
+                      <i className={`fa-solid ${getFileIconClass(activePreviewDoc.type)} text-7xl`}></i>
+                      <p className="font-black">المعاينة غير متاحة لهذا النوع من الملفات</p>
+                    </div>
+                  )
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-4 text-slate-400">
+                    <i className={`fa-solid ${getFileIconClass(activePreviewDoc.type)} text-7xl`}></i>
+                    <p className="font-black">لا توجد معاينة متاحة لهذه الوثيقة حالياً</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-white p-5">
+                <div className="flex gap-2">
+                  {activePreviewDoc.previewUrl && (
+                    <button
+                      type="button"
+                      onClick={() => window.open(activePreviewDoc.previewUrl, '_blank', 'noopener,noreferrer')}
+                      className="rounded-xl bg-slate-100 px-4 py-2 text-xs font-black text-brand-navy transition hover:bg-slate-200"
+                    >
+                      فتح في نافذة جديدة
+                    </button>
+                  )}
+                  {activePreviewDoc.actionRequired && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setActivePreviewDoc(null);
+                        handleDocReply(activePreviewDoc);
+                      }}
+                      className="rounded-xl bg-amber-50 px-4 py-2 text-xs font-black text-amber-700 transition hover:bg-amber-100"
+                    >
+                      الرد على الملاحظة
+                    </button>
+                  )}
+                </div>
+                <span className="rounded-full bg-brand-navy/5 px-3 py-1 text-[10px] font-black text-brand-navy">
+                  {activePreviewDoc.type === 'pdf' ? 'PDF' : activePreviewDoc.type === 'image' ? 'صورة' : 'ملف'}
+                </span>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {replyModalDoc && (
@@ -803,12 +1189,12 @@ export default function Messages() {
   );
 }
 
-function buildConversations(cases: WorkspaceCase[]): Conversation[] {
+function buildConversations(cases: WorkspaceCase[], viewerRole: string): Conversation[] {
   const grouped = new Map<string, Conversation>();
 
   cases.forEach((item) => {
-    const lawyerId = item.lawyer.id || item.id;
-    const existing = grouped.get(lawyerId);
+    const otherPartyId = viewerRole === 'lawyer' ? item.clientId : (item.lawyer.id || item.id);
+    const existing = grouped.get(otherPartyId);
     const sortedMessages = [...(item.messages || [])];
     const lastMessage = sortedMessages[sortedMessages.length - 1] || null;
 
@@ -821,12 +1207,12 @@ function buildConversations(cases: WorkspaceCase[]): Conversation[] {
       return;
     }
 
-    grouped.set(lawyerId, {
-      id: lawyerId,
-      lawyerId,
-      lawyerName: item.lawyer.name,
-      lawyerRole: item.lawyer.role,
-      lawyerImg: item.lawyer.img,
+    grouped.set(otherPartyId, {
+      id: otherPartyId,
+      lawyerId: item.lawyer.id || '',
+      lawyerName: viewerRole === 'lawyer' ? item.client : item.lawyer.name,
+      lawyerRole: viewerRole === 'lawyer' ? 'عميل' : item.lawyer.role,
+      lawyerImg: viewerRole === 'lawyer' ? `https://ui-avatars.com/api/?name=${encodeURIComponent(item.client)}&background=0d2a59&color=ffffff` : item.lawyer.img,
       cases: [item],
       lastMessage,
       unreadCount: item.unreadCount || 0,

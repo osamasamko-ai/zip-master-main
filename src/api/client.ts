@@ -206,6 +206,11 @@ class ApiClient {
         return response.data;
     }
 
+    async markCaseMessagesAsRead(caseId: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/workspace/cases/${caseId}/mark-read`);
+        return response.data;
+    }
+
     async getProWorkspace(): Promise<ApiResponse<any>> {
         const response = await this.client.get('/api/app/pro/workspace');
         return response.data;

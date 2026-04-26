@@ -75,6 +75,7 @@ import {
   deleteCaseWorkspace,
   deleteProCases,
   getClientWorkspace,
+  getLawyerWorkspace,
   getProWorkspace,
   moveCaseDocuments,
   removeCaseCollaborator,
@@ -581,7 +582,10 @@ async function startServer() {
   app.get('/api/app/workspace/cases', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
-      res.json({ data: await getClientWorkspace(currentUser.userId) });
+      const data = currentUser.role === 'pro' || currentUser.role === 'admin'
+        ? await getLawyerWorkspace(currentUser.userId)
+        : await getClientWorkspace(currentUser.userId);
+      res.json({ data });
     } catch (error) {
       console.error('Workspace cases error:', error);
       res.status(500).json({ error: 'Failed to fetch workspace cases' });
@@ -778,7 +782,7 @@ async function startServer() {
       res.json({ data: caseData });
     } catch (error) {
       console.error('Add message error:', error);
-      res.status(500).json({ error: 'Failed to send message' });
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to send message' });
     }
   });
 
