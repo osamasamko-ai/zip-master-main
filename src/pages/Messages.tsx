@@ -92,6 +92,7 @@ export default function Messages() {
   const [isSending, setIsSending] = useState(false);
   const [isLawyerTyping, setIsLawyerTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const mergeCasesWithPendingMessages = useCallback((serverCases: WorkspaceCase[], localCases: WorkspaceCase[]) => {
     return serverCases.map((serverCase) => {
@@ -256,6 +257,14 @@ export default function Messages() {
       });
     }
   }, [threadMessages, isLawyerTyping]);
+
+  // Auto-expand textarea height based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    }
+  }, [draft]);
 
   const ConversationSkeleton = () => (
     <div className="space-y-2">
@@ -458,6 +467,13 @@ export default function Messages() {
             <div className="mt-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar pr-1">
               {isLoadingConversations ? (
                 <ConversationSkeleton />
+              ) : filteredConversations.length === 0 ? (
+                <div className="py-12 text-center">
+                  <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3 text-slate-300">
+                    <i className="fa-solid fa-magnifying-glass text-xl"></i>
+                  </div>
+                  <p className="text-xs font-bold text-slate-400">لا توجد نتائج تطابق بحثك</p>
+                </div>
               ) : (
                 filteredConversations.map((conversation) => (
                   <button
@@ -471,6 +487,12 @@ export default function Messages() {
                     <div className="flex flex-row-reverse items-start gap-3">
                       <div className="relative shrink-0">
                         <img src={conversation.lawyerImg} alt={conversation.lawyerName} className="h-11 w-11 rounded-xl object-cover shadow-sm" />
+                        {conversation.cases.some(c => c.statusText?.includes('خطر') || c.statusText?.includes('عاجل')) && (
+                          <span
+                            className="absolute -bottom-1 -left-1 h-4 w-4 rounded-full bg-red-50 text-[8px] flex items-center justify-center text-red-500 border border-red-100 shadow-sm"
+                            title="قضية عاجلة"
+                          ><i className="fa-solid fa-triangle-exclamation"></i></span>
+                        )}
                         {conversation.unreadCount > 0 && (
                           <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-white ring-2 ring-red-500/10"></span>
                         )}
@@ -628,11 +650,12 @@ export default function Messages() {
                         <div className="flex-1 space-y-2 w-full">
                           <div className="relative group">
                             <textarea
+                              ref={textareaRef}
                               value={draft}
                               onChange={(event) => setDraft(event.target.value)}
                               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
                               placeholder="اكتب رسالتك أو استفسارك هنا..."
-                              className="min-h-[80px] w-full rounded-[1.5rem] border border-slate-200 bg-white px-5 py-4 text-[14px] font-medium text-slate-700 outline-none transition focus:border-brand-navy focus:ring-4 focus:ring-brand-navy/5 resize-none shadow-inner"
+                              className="min-h-[80px] max-h-[200px] w-full rounded-[1.5rem] border border-slate-200 bg-white px-5 py-4 pb-14 text-[14px] font-medium text-slate-700 outline-none transition focus:border-brand-navy focus:ring-4 focus:ring-brand-navy/5 resize-none shadow-inner overflow-y-auto"
                             />
                             <div className="absolute right-4 bottom-3 flex gap-2">
                               <button className="h-8 w-8 flex items-center justify-center rounded-lg bg-slate-50 text-slate-400 hover:text-brand-navy hover:bg-white border border-transparent hover:border-slate-100 shadow-sm transition"><i className="fa-solid fa-paperclip text-sm"></i></button>
