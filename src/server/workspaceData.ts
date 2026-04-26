@@ -21,6 +21,16 @@ function formatRelativeTime(date: Date) {
   return formatDateLabel(date);
 }
 
+function formatCurrencyAmount(amount: number) {
+  return `${amount.toLocaleString('en-US')} د.ع`;
+}
+
+function parseCurrencyAmount(value?: string | null) {
+  const normalized = String(value || '').replace(/[^\d.]/g, '');
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
 function parseJsonArray(value?: string | null): string[] {
   if (!value) return [];
   try {
@@ -378,6 +388,171 @@ export async function createClientCase(userId: string, payload: { title: string;
 
   await ensureCaseSession(created.id, userId);
   return getCaseWorkspace(created.id);
+}
+
+export async function startLawyerConsultation(
+  userId: string,
+  payload: {
+    lawyerId: string;
+    paymentMethod: string;
+    note?: string;
+  },
+) {
+  const lawyer = await prisma.user.findFirst({
+    where: {
+      id: payload.lawyerId,
+      role: { in: ['pro', 'admin'] },
+    },
+    select: {
+      id: true,
+      name: true,
+      lawyerProfile: {
+        select: {
+          consultationFee: true,
+          specialty: true,
+        },
+      },
+    },
+  });
+
+  if (!lawyer) {
+    throw new Error('المحامي المحدد غير متاح حالياً.');
+  }
+
+  const consultationAmount = parseCurrencyAmount(lawyer.lawyerProfile?.consultationFee);
+  if (consultationAmount <= 0) {
+    throw new Error('تعذر تحديد سعر الاستشارة لهذا المحامي.');
+  }
+
+  const consultationTitle = `استشارة مع ${lawyer.name}`;
+  const paymentLabel = `رسوم استشارة قانونية - ${lawyer.name}`;
+  const note = payload.note?.trim();
+
+  const createdCase = await prisma.$transaction(async (tx) => {
+    const created = await tx.case.create({
+      data: {
+        title: consultationTitle,
+        matter: 'استشارة قانونية خاصة',
+        clientId: userId,
+        lawyerId: lawyer.id,
+        status: 'pending',
+        totalAgreedFee: consultationAmount,
+        paidAmount: consultationAmount,
+        unreadCount: 1,
+        customFields: {
+          create: [
+            { label: 'نوع القضية', value: 'استشارة' },
+            { label: 'طريقة الدفع', value: payload.paymentMethod },
+            { label: 'حالة الاستشارة', value: 'مدفوعة وجاهزة للبدء' },
+          ],
+        },
+        timelineEntries: {
+          create: [
+            {
+              dateLabel: 'اليوم',
+              title: 'بدء الاستشارة',
+              detail: `تم دفع رسوم الاستشارة عبر ${payload.paymentMethod} وإنشاء قناة التواصل المباشر مع المحامي.`,
+              type: 'system',
+            },
+          ],
+        },
+        accessLogs: {
+          create: [
+            {
+              userName: 'أنت (المالك)',
+              action: 'إنشاء استشارة مدفوعة',
+              timeLabel: 'الآن',
+            },
+          ],
+        },
+      },
+      include: {
+        client: true,
+        lawyer: { include: { lawyerProfile: true } },
+        documents: true,
+        folders: true,
+        customFields: true,
+        timelineEntries: true,
+        collaborators: true,
+        accessLogs: true,
+        chatSessions: { include: { messages: true } },
+        invoices: true,
+      },
+    } as any);
+
+    const session = await tx.chatSession.create({
+      data: {
+        caseId: created.id,
+        userId,
+      },
+    });
+
+    await tx.message.create({
+      data: {
+        sessionId: session.id,
+        senderId: userId,
+        senderRole: 'user',
+        text: note || `مرحباً أستاذ ${lawyer.name}، أرغب ببدء الاستشارة القانونية الآن.`,
+        unread: true,
+        priority: 'High',
+        channel: 'استشارة',
+        awaitingResponse: true,
+      },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId,
+        amount: consultationAmount,
+        label: paymentLabel,
+        source: payload.paymentMethod,
+        type: 'debit',
+        status: 'completed',
+      },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId: lawyer.id,
+        amount: consultationAmount,
+        label: `دفعة استشارة جديدة - ${consultationTitle}`,
+        source: payload.paymentMethod,
+        type: 'credit',
+        status: 'completed',
+      },
+    });
+
+    await tx.invoice.create({
+      data: {
+        userId,
+        caseId: created.id,
+        label: paymentLabel,
+        amount: formatCurrencyAmount(consultationAmount),
+        dateLabel: 'اليوم',
+        status: 'paid',
+      },
+    });
+
+    await tx.user.update({
+      where: { id: lawyer.id },
+      data: {
+        accountBalance: { increment: consultationAmount },
+      },
+    });
+
+    return created;
+  });
+
+  const caseData = await getCaseWorkspace(createdCase.id);
+  if (!caseData) {
+    throw new Error('تم إنشاء الاستشارة لكن تعذر تحميل المحادثة.');
+  }
+
+  return {
+    caseData,
+    redirectTo: `/messages?lawyerId=${encodeURIComponent(lawyer.id)}&caseId=${encodeURIComponent(caseData.id)}`,
+    amount: consultationAmount,
+  };
 }
 
 export async function getCaseWorkspace(caseId: string) {

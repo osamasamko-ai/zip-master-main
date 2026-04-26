@@ -82,6 +82,7 @@ import {
   signCaseDocument,
   reviewCaseDocument,
   clearDocumentAction,
+  startLawyerConsultation,
   toggleCaseArchive,
   updateCaseProgress,
   markCaseMessagesAsRead,
@@ -576,6 +577,42 @@ async function startServer() {
     } catch (error) {
       console.error('Unfollow lawyer error:', error);
       res.status(500).json({ error: 'Failed to unfollow lawyer' });
+    }
+  });
+
+  app.post('/api/app/lawyers/:id/consultation', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      if (currentUser.role !== 'user') {
+        return res.status(403).json({ error: 'بدء الاستشارة متاح لحسابات العملاء فقط.' });
+      }
+
+      const { paymentMethod, note } = req.body;
+      if (!paymentMethod) {
+        return res.status(400).json({ error: 'يرجى اختيار طريقة الدفع أولاً.' });
+      }
+
+      const data = await startLawyerConsultation(currentUser.userId, {
+        lawyerId: req.params.id,
+        paymentMethod,
+        note,
+      });
+
+      const notification = await prisma.notification.create({
+        data: {
+          userId: data.caseData.lawyerId,
+          title: 'استشارة جديدة مدفوعة',
+          message: `قام عميل بحجز استشارة جديدة بعنوان: ${data.caseData.title}`,
+          type: 'success',
+          link: '/messages',
+        },
+      });
+
+      io.to(data.caseData.lawyerId).emit('notification', notification);
+      res.status(201).json({ data });
+    } catch (error) {
+      console.error('Start consultation error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to start consultation' });
     }
   });
 

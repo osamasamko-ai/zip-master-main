@@ -88,10 +88,16 @@ function useSelectedLawyerId() {
   return useMemo(() => new URLSearchParams(location.search).get('lawyerId') ?? '', [location.search]);
 }
 
+function useSelectedCaseId() {
+  const location = useLocation();
+  return useMemo(() => new URLSearchParams(location.search).get('caseId') ?? '', [location.search]);
+}
+
 export default function Messages() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const selectedLawyerIdFromQuery = useSelectedLawyerId();
+  const selectedCaseIdFromQuery = useSelectedCaseId();
   const [cases, setCases] = useState<WorkspaceCase[]>([]);
   const [query, setQuery] = useState('');
   const [selectedConversationId, setSelectedConversationId] = useState('');
@@ -238,7 +244,11 @@ export default function Messages() {
 
         const initialConv = grouped.find(c => c.id === preferred);
         if (initialConv) {
-          setActiveCaseId(initialConv.cases[0]?.id || '');
+          const preferredCaseId =
+            selectedCaseIdFromQuery && initialConv.cases.some((item) => item.id === selectedCaseIdFromQuery)
+              ? selectedCaseIdFromQuery
+              : initialConv.cases[0]?.id || '';
+          setActiveCaseId(preferredCaseId);
         }
       }
     } catch (error) {
@@ -246,7 +256,7 @@ export default function Messages() {
     } finally {
       if (isInitial) setIsLoadingConversations(false); // Set loading false after initial fetch
     }
-  }, [mergeCasesWithPendingMessages, selectedLawyerIdFromQuery, viewerRole]);
+  }, [mergeCasesWithPendingMessages, selectedCaseIdFromQuery, selectedLawyerIdFromQuery, viewerRole]);
 
   const markConversationMessagesAsRead = useCallback(async (caseId: string) => {
     try {

@@ -1,11 +1,23 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
 import FollowButton from '../components/FollowButton';
 import StatusBadge from '../components/ui/StatusBadge';
 import apiClient from '../api/client';
 import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
+
+const CONSULTATION_PAYMENT_METHODS = [
+  { id: 'zain-cash', label: 'زين كاش', subtitle: 'تأكيد فوري وآمن', recommended: true },
+  { id: 'card', label: 'بطاقة مصرفية', subtitle: 'Visa / Mastercard' },
+  { id: 'bank-transfer', label: 'تحويل بنكي', subtitle: 'إشعار دفع إلكتروني' },
+];
+
+function parseConsultationFee(value: string) {
+  const amount = Number(value.replace(/[^\d.]/g, ''));
+  return Number.isFinite(amount) ? amount : 0;
+}
 
 type LawyerItem = {
   id: string;
@@ -41,6 +53,12 @@ export default function Lawyers() {
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>('best');
   const [selectedLawyerId, setSelectedLawyerId] = useState('');
+  const [consultationLawyer, setConsultationLawyer] = useState<LawyerItem | null>(null);
+  const [consultationNote, setConsultationNote] = useState('');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(CONSULTATION_PAYMENT_METHODS[0].id);
+  const [isStartingConsultation, setIsStartingConsultation] = useState(false);
+  const [consultationError, setConsultationError] = useState('');
+  const [consultationSuccess, setConsultationSuccess] = useState('');
 
   useEffect(() => {
     const load = async () => {
@@ -122,9 +140,44 @@ export default function Lawyers() {
     navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: lawyer.id } });
   };
 
+  const handleOpenConsultation = (lawyer: LawyerItem) => {
+    setConsultationLawyer(lawyer);
+    setConsultationNote('');
+    setSelectedPaymentMethod(CONSULTATION_PAYMENT_METHODS[0].id);
+    setConsultationError('');
+  };
+
   const handleContact = (lawyer: LawyerItem) => {
     navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`);
   };
+
+  const handleStartConsultation = async () => {
+    if (!consultationLawyer) return;
+
+    setIsStartingConsultation(true);
+    setConsultationError('');
+
+    try {
+      const selectedMethod = CONSULTATION_PAYMENT_METHODS.find((item) => item.id === selectedPaymentMethod);
+      const response = await apiClient.startLawyerConsultation(consultationLawyer.id, {
+        paymentMethod: selectedMethod?.label || selectedPaymentMethod,
+        note: consultationNote.trim() || undefined,
+      });
+
+      const redirectTo = response.data?.redirectTo;
+      setConsultationSuccess(`تم تأكيد الدفع وفتح استشارة جديدة مع ${consultationLawyer.name}.`);
+
+      window.setTimeout(() => {
+        navigate(redirectTo || `/messages?lawyerId=${encodeURIComponent(consultationLawyer.id)}`);
+      }, 700);
+    } catch (error: any) {
+      setConsultationError(error?.response?.data?.error || 'تعذر بدء الاستشارة حالياً. حاول مرة أخرى.');
+    } finally {
+      setIsStartingConsultation(false);
+    }
+  };
+
+  const selectedConsultationAmount = consultationLawyer ? parseConsultationFee(consultationLawyer.consultationFee) : 0;
 
   return (
     <div className="app-view fade-in space-y-8 pb-12 text-right">
@@ -297,9 +350,9 @@ export default function Lawyers() {
                   </div>
 
                   <div className="mt-5 grid gap-3 md:grid-cols-4">
-                    <ActionButton onClick={() => handleContact(lawyer)} variant="primary" className="w-full">
-                      <i className="fa-regular fa-paper-plane"></i>
-                      تواصل الآن
+                    <ActionButton onClick={() => handleOpenConsultation(lawyer)} variant="primary" className="w-full">
+                      <i className="fa-solid fa-credit-card"></i>
+                      ابدأ استشارة
                     </ActionButton>
                     <ActionButton onClick={() => handleOpenCase(lawyer)} variant="secondary" className="w-full">
                       <i className="fa-solid fa-folder-plus"></i>
@@ -311,8 +364,8 @@ export default function Lawyers() {
                       onToggle={() => toggleFollow(lawyer.id)}
                       className="w-full"
                     />
-                    <ActionButton onClick={() => navigate(`/profile/${lawyer.id}`)} variant="ghost" className="w-full">
-                      عرض الملف
+                    <ActionButton onClick={() => handleContact(lawyer)} variant="ghost" className="w-full">
+                      رسالة مباشرة
                     </ActionButton>
                   </div>
 
@@ -390,11 +443,14 @@ export default function Lawyers() {
                 </div>
 
                 <div className="grid gap-3">
-                  <ActionButton onClick={() => handleContact(selectedLawyer)} variant="primary" className="w-full">
-                    تواصل الآن
+                  <ActionButton onClick={() => handleOpenConsultation(selectedLawyer)} variant="primary" className="w-full">
+                    ابدأ استشارة مدفوعة
                   </ActionButton>
                   <ActionButton onClick={() => handleOpenCase(selectedLawyer)} variant="secondary" className="w-full">
                     افتح قضية مع هذا المحامي
+                  </ActionButton>
+                  <ActionButton onClick={() => navigate(`/profile/${selectedLawyer.id}`)} variant="ghost" className="w-full">
+                    عرض الملف الكامل
                   </ActionButton>
                 </div>
               </div>
@@ -406,6 +462,168 @@ export default function Lawyers() {
           </section>
         </aside>
       </section>
+
+      <AnimatePresence>
+        {consultationLawyer && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[250] flex items-center justify-center bg-brand-dark/45 backdrop-blur-sm px-4"
+          >
+            <button
+              type="button"
+              onClick={() => !isStartingConsultation && setConsultationLawyer(null)}
+              className="absolute inset-0"
+              aria-label="إغلاق نافذة الاستشارة"
+            />
+
+            <motion.div
+              initial={{ y: 16, scale: 0.98, opacity: 0 }}
+              animate={{ y: 0, scale: 1, opacity: 1 }}
+              exit={{ y: 16, scale: 0.98, opacity: 0 }}
+              className="relative z-[251] w-full max-w-2xl rounded-[2.25rem] border border-white/70 bg-white p-7 shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => !isStartingConsultation && setConsultationLawyer(null)}
+                  className="h-10 w-10 rounded-2xl bg-slate-50 text-slate-400 transition hover:text-red-500"
+                >
+                  <i className="fa-solid fa-times"></i>
+                </button>
+                <div className="text-right">
+                  <p className="text-xs font-black uppercase tracking-[0.24em] text-brand-gold">Consultation Checkout</p>
+                  <h2 className="mt-2 text-2xl font-black text-brand-dark">ابدأ الاستشارة خلال أقل من دقيقة</h2>
+                  <p className="mt-2 text-sm font-bold leading-7 text-slate-500">
+                    سعر واضح، دفع فوري، ثم يتم إنشاء المحادثة تلقائياً وتحويلك مباشرة إلى شاشة الرسائل.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+                <div className="rounded-[1.75rem] bg-gradient-to-br from-brand-dark via-brand-navy to-slate-800 p-5 text-white">
+                  <div className="flex items-center gap-3">
+                    <img src={consultationLawyer.avatar} alt={consultationLawyer.name} className="h-16 w-16 rounded-[1.25rem] object-cover shadow-lg" />
+                    <div className="text-right">
+                      <p className="text-lg font-black">{consultationLawyer.name}</p>
+                      <p className="mt-1 text-xs font-bold text-white/75">{consultationLawyer.specialty}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-5 rounded-[1.5rem] bg-white/10 p-4">
+                    <p className="text-[11px] font-black uppercase tracking-widest text-white/70">سعر الاستشارة</p>
+                    <p className="mt-2 text-3xl font-black">{consultationLawyer.consultationFee}</p>
+                    <p className="mt-2 text-xs font-bold text-white/75">يشمل فتح المحادثة الخاصة والرد الأولي الفوري داخل المنصة.</p>
+                  </div>
+
+                  <div className="mt-4 space-y-2 text-right text-xs font-bold text-white/80">
+                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
+                      <span>التأكيد</span>
+                      <span>فوري</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
+                      <span>قناة التواصل</span>
+                      <span>محادثة خاصة</span>
+                    </div>
+                    <div className="flex items-center justify-between rounded-2xl bg-white/10 px-3 py-2">
+                      <span>اسم الملف</span>
+                      <span>استشارة</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-5">
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">دفع آمن</span>
+                      <p className="text-sm font-black text-brand-dark">اختر طريقة الدفع</p>
+                    </div>
+
+                    <div className="mt-4 grid gap-3">
+                      {CONSULTATION_PAYMENT_METHODS.map((method) => (
+                        <button
+                          key={method.id}
+                          type="button"
+                          onClick={() => setSelectedPaymentMethod(method.id)}
+                          className={`rounded-2xl border px-4 py-3 text-right transition ${selectedPaymentMethod === method.id
+                            ? 'border-brand-navy bg-white shadow-sm'
+                            : 'border-slate-200 bg-white/70 hover:border-brand-navy/30'}`}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            {method.recommended ? (
+                              <span className="rounded-full bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black text-brand-gold">موصى به</span>
+                            ) : (
+                              <span className="text-[10px] font-black text-slate-300">طريقة دفع</span>
+                            )}
+                            <div className="text-right">
+                              <p className="text-sm font-black text-brand-dark">{method.label}</p>
+                              <p className="mt-1 text-[11px] font-bold text-slate-500">{method.subtitle}</p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
+                    <p className="text-sm font-black text-brand-dark">رسالة البدء للمحامي</p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-500">اختياري، لكن يسرّع بدء الاستشارة ويمنح المحامي سياقاً مباشراً.</p>
+                    <textarea
+                      value={consultationNote}
+                      onChange={(event) => setConsultationNote(event.target.value)}
+                      placeholder="مثال: أحتاج استشارة عاجلة حول عقد إيجار تجاري وأرغب بمعرفة الخطوة القانونية الأولى."
+                      className="mt-3 h-28 w-full rounded-[1.25rem] border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white resize-none"
+                    />
+                  </div>
+
+                  {consultationError && (
+                    <div className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm font-black text-red-700">
+                      {consultationError}
+                    </div>
+                  )}
+
+                  {consultationSuccess && (
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-sm font-black text-emerald-700">
+                      {consultationSuccess}
+                    </div>
+                  )}
+
+                  <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
+                    <div className="flex items-center justify-between text-sm font-black text-brand-dark">
+                      <span>{consultationLawyer.consultationFee}</span>
+                      <span>إجمالي الدفع الآن</span>
+                    </div>
+                    <p className="mt-2 text-[11px] font-bold text-slate-500">
+                      بالضغط على زر التأكيد سيتم إنشاء ملف باسم الاستشارة، تسجيل عملية الدفع، وفتح المحادثة مباشرة.
+                    </p>
+
+                    <div className="mt-4 flex gap-3">
+                      <ActionButton
+                        onClick={() => setConsultationLawyer(null)}
+                        variant="ghost"
+                        className="flex-1"
+                        disabled={isStartingConsultation}
+                      >
+                        إلغاء
+                      </ActionButton>
+                      <ActionButton
+                        onClick={handleStartConsultation}
+                        variant="primary"
+                        className="flex-[2]"
+                        disabled={isStartingConsultation || selectedConsultationAmount <= 0}
+                      >
+                        <i className={`fa-solid ${isStartingConsultation ? 'fa-spinner fa-spin' : 'fa-lock'}`}></i>
+                        {isStartingConsultation ? 'جارٍ تأكيد الدفع...' : 'ادفع وابدأ المحادثة'}
+                      </ActionButton>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

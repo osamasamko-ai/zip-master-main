@@ -146,6 +146,11 @@ class ApiClient {
         return response.data;
     }
 
+    async startLawyerConsultation(id: string, data: { paymentMethod: string; note?: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/lawyers/${id}/consultation`, data);
+        return response.data;
+    }
+
     async getWorkspaceCases(): Promise<ApiResponse<any[]>> {
         const response = await this.client.get('/api/app/workspace/cases');
         return response.data;
