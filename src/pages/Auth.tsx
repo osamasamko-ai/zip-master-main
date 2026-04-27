@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth, Role } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 
 export default function Auth() {
   const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
@@ -24,6 +25,18 @@ export default function Auth() {
     setShowPassword(false);
     setShowConfirmPassword(false);
     setSelectedRole('user');
+  };
+
+  const getFieldError = (fieldName: string) => {
+    if (!error) return false;
+    const lowerError = error.toLowerCase();
+    const isLoginError = authMode === 'login' && (lowerError.includes('credentials') || lowerError.includes('failed') || error.includes('التحقق') || error.includes('خطأ'));
+
+    if (fieldName === 'name') return error.includes('الاسم');
+    if (fieldName === 'email') return error.includes('البريد') || isLoginError;
+    if (fieldName === 'password') return (error.includes('كلمة المرور') && !error.includes('تأكيد')) || isLoginError;
+    if (fieldName === 'confirmPassword') return error.includes('تأكيد');
+    return false;
   };
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
@@ -116,10 +129,13 @@ export default function Auth() {
                 setShowConfirmPassword(false);
                 setAuthMode('login');
               }}
-              className={`flex-1 pb-4 text-center text-sm font-black border-b-2 transition-all duration-300 ${authMode === 'login' ? 'text-brand-navy border-brand-navy' : 'text-slate-400 border-transparent hover:text-slate-600'
+              className={`relative flex-1 pb-4 text-center text-sm font-black transition-colors duration-300 ${authMode === 'login' ? 'text-brand-navy' : 'text-slate-400 hover:text-slate-600'
                 }`}
             >
               تسجيل الدخول
+              {authMode === 'login' && (
+                <motion.div layoutId="authTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-navy" />
+              )}
             </button>
             <button
               onClick={() => {
@@ -128,181 +144,231 @@ export default function Auth() {
                 setShowConfirmPassword(false);
                 setAuthMode('register');
               }}
-              className={`flex-1 pb-4 text-center text-sm font-black border-b-2 transition-all duration-300 ${authMode === 'register' ? 'text-brand-navy border-brand-navy' : 'text-slate-400 border-transparent hover:text-slate-600'
+              className={`relative flex-1 pb-4 text-center text-sm font-black transition-colors duration-300 ${authMode === 'register' ? 'text-brand-navy' : 'text-slate-400 hover:text-slate-600'
                 }`}
             >
               حساب جديد
+              {authMode === 'register' && (
+                <motion.div layoutId="authTab" className="absolute bottom-0 left-0 right-0 h-0.5 bg-brand-navy" />
+              )}
             </button>
           </div>
 
-          {error && (
-            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold leading-relaxed text-right animate-in fade-in slide-in-from-top-2">
-              {error}
-            </div>
-          )}
-
-          {/* Login Form */}
-          {authMode === 'login' && (
-            <form onSubmit={handleLogin} className="space-y-5 fade-in">
-              <div>
-                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">البريد الإلكتروني</label>
-                <input
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
-                  dir="ltr"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">كلمة المرور</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
-                  >
-                    <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
-                  </button>
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          <AnimatePresence mode="wait">
+            {error && (
+              <motion.div
+                key={error}
+                initial={{ x: 0, opacity: 0 }}
+                animate={{ x: [0, -10, 10, -10, 10, 0], opacity: 1 }}
+                transition={{ duration: 0.4 }}
+                exit={{ opacity: 0 }}
+                className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold leading-relaxed text-right"
               >
-                {loading ? 'جاري التحقق...' : 'دخول للمنصة'}
-              </button>
-            </form>
-          )}
+                {error}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Register Form */}
-          {authMode === 'register' && (
-            <form onSubmit={handleRegister} className="space-y-5 fade-in">
-              <div>
-                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">الاسم الكامل</label>
-                <input
-                  type="text"
-                  placeholder="اكتب اسمك الثلاثي"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  required
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">البريد الإلكتروني</label>
-                <input
-                  type="email"
-                  placeholder="name@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
-                  dir="ltr"
-                />
-              </div>
-              <div>
-                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">كلمة المرور</label>
-                <div className="relative">
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
-                  >
-                    <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
-                  </button>
-                </div>
-                <p className="mt-2 text-right text-[10px] font-bold text-slate-400">يجب أن تتكون من 8 أحرف أو رموز على الأقل.</p>
-              </div>
-              <div>
-                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">تأكيد كلمة المرور</label>
-                <div className="relative">
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
-                  >
-                    <i className={`fa-solid ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label className="mb-3 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">نوع الحساب</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRole('user')}
-                    className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 ${selectedRole === 'user' ? 'border-brand-navy bg-brand-navy/5 shadow-md ring-4 ring-brand-navy/5' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
-                  >
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedRole === 'user' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/30' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
-                      <i className="fa-solid fa-user"></i>
-                    </div>
-                    <div>
-                      <p className={`text-xs font-black ${selectedRole === 'user' ? 'text-brand-navy' : 'text-slate-700'}`}>عميل</p>
-                      <p className="text-[10px] font-bold text-slate-400">أبحث عن استشارة</p>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedRole('pro')}
-                    className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 ${selectedRole === 'pro' ? 'border-brand-navy bg-brand-navy/5 shadow-md ring-4 ring-brand-navy/5' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
-                  >
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedRole === 'pro' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/30' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
-                      <i className="fa-solid fa-user-tie"></i>
-                    </div>
-                    <div>
-                      <p className={`text-xs font-black ${selectedRole === 'pro' ? 'text-brand-navy' : 'text-slate-700'}`}>محامي</p>
-                      <p className="text-[10px] font-bold text-slate-400">تقديم خدمات قانونية</p>
-                    </div>
-                  </button>
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          <AnimatePresence mode="wait">
+            {/* Login Form */}
+            {authMode === 'login' && (
+              <motion.form
+                key="login"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                onSubmit={handleLogin}
+                className="space-y-5"
               >
-                {loading ? (
-                  <span className="flex items-center justify-center gap-2">
-                    <i className="fa-solid fa-spinner fa-spin"></i>
-                    جاري المعالجة...
-                  </span>
-                ) : 'فتح حساب جديد'}
-              </button>
-            </form>
-          )}
+                <div>
+                  <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('email') ? 'text-red-500' : 'text-slate-400'}`}>البريد الإلكتروني</label>
+                  <motion.div animate={getFieldError('email') ? { x: [0, -4, 4, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
+                    <input
+                      type="email"
+                      placeholder="name@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className={`w-full rounded-2xl border px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('email') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                        }`}
+                      dir="ltr"
+                    />
+                  </motion.div>
+                </div>
+                <div>
+                  <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('password') ? 'text-red-500' : 'text-slate-400'}`}>كلمة المرور</label>
+                  <motion.div animate={getFieldError('password') ? { x: [0, -4, 4, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className={`w-full rounded-2xl border pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('password') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                          }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
+                      >
+                        <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? 'جاري التحقق...' : 'دخول للمنصة'}
+                </button>
+              </motion.form>
+            )}
+
+            {/* Register Form */}
+            {authMode === 'register' && (
+              <motion.form
+                key="register"
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
+                onSubmit={handleRegister}
+                className="space-y-5"
+              >
+                <div>
+                  <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('name') ? 'text-red-500' : 'text-slate-400'}`}>الاسم الكامل</label>
+                  <motion.div animate={getFieldError('name') ? { x: [0, -4, 4, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
+                    <input
+                      type="text"
+                      placeholder="اكتب اسمك الثلاثي"
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      required
+                      className={`w-full rounded-2xl border px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('name') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                        }`}
+                    />
+                  </motion.div>
+                </div>
+                <div>
+                  <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('email') ? 'text-red-500' : 'text-slate-400'}`}>البريد الإلكتروني</label>
+                  <motion.div animate={getFieldError('email') ? { x: [0, -4, 4, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
+                    <input
+                      type="email"
+                      placeholder="name@example.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className={`w-full rounded-2xl border px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('email') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                        }`}
+                      dir="ltr"
+                    />
+                  </motion.div>
+                </div>
+                <div>
+                  <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('password') ? 'text-red-500' : 'text-slate-400'}`}>كلمة المرور</label>
+                  <motion.div animate={getFieldError('password') ? { x: [0, -4, 4, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        required
+                        className={`w-full rounded-2xl border pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('password') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                          }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
+                      >
+                        <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                      </button>
+                    </div>
+                  </motion.div>
+                  <p className="mt-2 text-right text-[10px] font-bold text-slate-400">يجب أن تتكون من 8 أحرف أو رموز على الأقل.</p>
+                </div>
+                <div>
+                  <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('confirmPassword') ? 'text-red-500' : 'text-slate-400'}`}>تأكيد كلمة المرور</label>
+                  <motion.div animate={getFieldError('confirmPassword') ? { x: [0, -4, 4, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        required
+                        className={`w-full rounded-2xl border pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('confirmPassword') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                          }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
+                      >
+                        <i className={`fa-solid ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                      </button>
+                    </div>
+                  </motion.div>
+                </div>
+                <div>
+                  <label className="mb-3 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">نوع الحساب</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setSelectedRole('user')}
+                      className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 ${selectedRole === 'user' ? 'border-brand-navy bg-brand-navy/5 shadow-md ring-4 ring-brand-navy/5' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedRole === 'user' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/30' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
+                        <i className="fa-solid fa-user"></i>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-black ${selectedRole === 'user' ? 'text-brand-navy' : 'text-slate-700'}`}>عميل</p>
+                        <p className="text-[10px] font-bold text-slate-400">أبحث عن استشارة</p>
+                      </div>
+                    </motion.button>
+                    <motion.button
+                      type="button"
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => setSelectedRole('pro')}
+                      className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 ${selectedRole === 'pro' ? 'border-brand-navy bg-brand-navy/5 shadow-md ring-4 ring-brand-navy/5' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+                    >
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedRole === 'pro' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/30' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
+                        <i className="fa-solid fa-user-tie"></i>
+                      </div>
+                      <div>
+                        <p className={`text-xs font-black ${selectedRole === 'pro' ? 'text-brand-navy' : 'text-slate-700'}`}>محامي</p>
+                        <p className="text-[10px] font-bold text-slate-400">تقديم خدمات قانونية</p>
+                      </div>
+                    </motion.button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <i className="fa-solid fa-circle-notch fa-spin"></i>
+                      جاري المعالجة...
+                    </span>
+                  ) : 'فتح حساب جديد'}
+                </button>
+              </motion.form>
+            )}
+          </AnimatePresence>
         </div>
       </div>
 
       {/* Left Side: Branding */}
-      <div className="hidden lg:flex w-1/2 grad-navy flex-col items-center justify-center text-white text-center px-12">
+      < div className="hidden lg:flex w-1/2 grad-navy flex-col items-center justify-center text-white text-center px-12" >
         <div className="max-w-lg">
           <h2 className="text-4xl font-black mb-8 leading-tight">العدالة لم تعد بعيدة.. حقك الآن أقرب إليك من أي وقت مضى</h2>
 
@@ -354,7 +420,7 @@ export default function Auth() {
             <h3 className="text-4xl font-black text-brand-gold tracking-tight">العدالة في متناول الجميع</h3>
           </div>
         </div>
-      </div>
-    </div>
+      </div >
+    </div >
   );
 }
