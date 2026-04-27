@@ -195,6 +195,15 @@ export default function Auth() {
                       dir="ltr"
                     />
                   </motion.div>
+                  {getFieldError('email') && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-1.5 text-right text-[10px] font-black text-red-500"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
                 </div>
                 <div>
                   <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('password') ? 'text-red-500' : 'text-slate-400'}`}>كلمة المرور</label>
@@ -218,13 +227,29 @@ export default function Auth() {
                       </button>
                     </div>
                   </motion.div>
+                  {getFieldError('password') && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-1.5 text-right text-[10px] font-black text-red-500"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
                 </div>
                 <button
                   type="submit"
                   disabled={loading}
                   className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  {loading ? 'جاري التحقق...' : 'دخول للمنصة'}
+                  {loading ? (
+                    <span className="flex items-center justify-center gap-2">
+                      <i className="fa-solid fa-circle-notch fa-spin"></i>
+                      جاري التحقق من البيانات...
+                    </span>
+                  ) : (
+                    'دخول للمنصة'
+                  )}
                 </button>
               </motion.form>
             )}
@@ -253,6 +278,15 @@ export default function Auth() {
                         }`}
                     />
                   </motion.div>
+                  {getFieldError('name') && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-1.5 text-right text-[10px] font-black text-red-500"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
                 </div>
                 <div>
                   <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('email') ? 'text-red-500' : 'text-slate-400'}`}>البريد الإلكتروني</label>
@@ -268,6 +302,15 @@ export default function Auth() {
                       dir="ltr"
                     />
                   </motion.div>
+                  {getFieldError('email') && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-1.5 text-right text-[10px] font-black text-red-500"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
                 </div>
                 <div>
                   <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('password') ? 'text-red-500' : 'text-slate-400'}`}>كلمة المرور</label>
@@ -291,7 +334,17 @@ export default function Auth() {
                       </button>
                     </div>
                   </motion.div>
-                  <p className="mt-2 text-right text-[10px] font-bold text-slate-400">يجب أن تتكون من 8 أحرف أو رموز على الأقل.</p>
+                  {getFieldError('password') ? (
+                    <motion.p
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-1.5 text-right text-[10px] font-black text-red-500"
+                    >
+                      {error}
+                    </motion.p>
+                  ) : (
+                    <p className="mt-2 text-right text-[10px] font-bold text-slate-400">يجب أن تتكون من 8 أحرف أو رموز على الأقل.</p>
+                  )}
                 </div>
                 <div>
                   <label className={`mb-2 block text-right text-[11px] font-black uppercase tracking-widest transition-colors ${getFieldError('confirmPassword') ? 'text-red-500' : 'text-slate-400'}`}>تأكيد كلمة المرور</label>
@@ -315,6 +368,15 @@ export default function Auth() {
                       </button>
                     </div>
                   </motion.div>
+                  {getFieldError('confirmPassword') && (
+                    <motion.p
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mt-1.5 text-right text-[10px] font-black text-red-500"
+                    >
+                      {error}
+                    </motion.p>
+                  )}
                 </div>
                 <div>
                   <label className="mb-3 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">نوع الحساب</label>
