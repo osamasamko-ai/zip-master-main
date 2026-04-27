@@ -121,6 +121,14 @@ export default function Messages() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeUploads = useRef<Map<string | number, XMLHttpRequest>>(new Map());
 
+  const getProgressColor = useCallback((p: number) => {
+    // Linear interpolation between Amber (245, 158, 11) and Green (34, 197, 94)
+    const r = Math.round(245 + (34 - 245) * (p / 100));
+    const g = Math.round(158 + (197 - 158) * (p / 100));
+    const b = Math.round(11 + (94 - 11) * (p / 100));
+    return `rgb(${r}, ${g}, ${b})`;
+  }, []);
+
   const viewerRole: 'user' | 'lawyer' = useMemo(() => (user?.role === 'pro' || user?.role === 'admin' ? 'lawyer' : 'user'), [user]);
 
   const mergeCasesWithPendingMessages = useCallback((serverCases: WorkspaceCase[], localCases: WorkspaceCase[]) => {
@@ -770,7 +778,15 @@ export default function Messages() {
                           <div className="relative h-4 w-4 shrink-0">
                             <svg className="h-full w-full" viewBox="0 0 36 36">
                               <circle className="text-slate-100" strokeWidth="4" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" />
-                              <circle className="text-brand-gold transition-all duration-1000" strokeWidth="4" strokeDasharray={`${conversation.cases[0]?.progress}, 100`} strokeLinecap="round" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" transform="rotate(-90 18 18)" />
+                              <circle
+                                style={{ stroke: getProgressColor(conversation.cases[0]?.progress || 0) }}
+                                className="transition-all duration-1000"
+                                strokeWidth="4"
+                                strokeDasharray={`${conversation.cases[0]?.progress}, 100`}
+                                strokeLinecap="round"
+                                fill="transparent"
+                                r="16" cx="18" cy="18"
+                                transform="rotate(-90 18 18)" />
                             </svg>
                             <span className="absolute inset-0 flex items-center justify-center text-[5px] font-black text-slate-500">{conversation.cases[0]?.progress}%</span>
                           </div>
@@ -798,7 +814,15 @@ export default function Messages() {
                               <div className="relative h-7 w-7 shrink-0">
                                 <svg className="h-full w-full" viewBox="0 0 36 36">
                                   <circle className="text-slate-100" strokeWidth="3" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" />
-                                  <circle className="text-brand-gold transition-all duration-1000" strokeWidth="3" strokeDasharray={`${c.progress}, 100`} strokeLinecap="round" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" transform="rotate(-90 18 18)" />
+                                  <circle
+                                    style={{ stroke: getProgressColor(c.progress || 0) }}
+                                    className="transition-all duration-1000"
+                                    strokeWidth="3"
+                                    strokeDasharray={`${c.progress}, 100`}
+                                    strokeLinecap="round"
+                                    fill="transparent"
+                                    r="16" cx="18" cy="18"
+                                    transform="rotate(-90 18 18)" />
                                 </svg>
                                 <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black text-slate-500">{c.progress}%</span>
                               </div>
