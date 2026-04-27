@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useAuth, Role } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -37,6 +37,22 @@ export default function Auth() {
     if (fieldName === 'password') return (error.includes('كلمة المرور') && !error.includes('تأكيد')) || isLoginError;
     if (fieldName === 'confirmPassword') return error.includes('تأكيد');
     return false;
+  };
+
+  const passwordStrength = useMemo(() => {
+    let score = 0;
+    if (!password) return 0;
+    if (password.length >= 8) score += 1;
+    if (/[A-Z]/.test(password)) score += 1;
+    if (/\d/.test(password)) score += 1;
+    if (/[^A-Za-z0-9]/.test(password)) score += 1;
+    return score;
+  }, [password]);
+
+  const getStrengthUI = () => {
+    const labels = ['ضعيفة جداً', 'ضعيفة', 'متوسطة', 'قوية', 'قوية جداً'];
+    const colors = ['bg-slate-200', 'bg-red-500', 'bg-amber-500', 'bg-emerald-500', 'bg-blue-500'];
+    return { label: labels[passwordStrength], color: colors[passwordStrength] };
   };
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
@@ -334,6 +350,21 @@ export default function Auth() {
                       </button>
                     </div>
                   </motion.div>
+                  {password && (
+                    <div className="mt-2 space-y-2 px-1">
+                      <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider">
+                        <span className={passwordStrength === 4 ? 'text-blue-600' : 'text-slate-400'}>
+                          {getStrengthUI().label}
+                        </span>
+                        <span className="text-slate-400">قوة كلمة المرور</span>
+                      </div>
+                      <div className="flex h-1 gap-1 overflow-hidden rounded-full bg-slate-100">
+                        {[1, 2, 3, 4].map((step) => (
+                          <div key={step} className={`h-full flex-1 transition-all duration-500 ${passwordStrength >= step ? getStrengthUI().color : 'bg-transparent'}`} />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {getFieldError('password') ? (
                     <motion.p
                       initial={{ opacity: 0, y: -10 }}
@@ -356,16 +387,33 @@ export default function Auth() {
                         value={confirmPassword}
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         required
-                        className={`w-full rounded-2xl border pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('confirmPassword') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                        className={`w-full rounded-2xl border pl-16 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('confirmPassword') || (confirmPassword !== '' && password !== confirmPassword)
+                            ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10'
+                            : (confirmPassword !== '' && password === confirmPassword)
+                              ? 'border-emerald-200 bg-emerald-50/30 focus:border-emerald-500 focus:ring-emerald-500/10'
+                              : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
                           }`}
                       />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
-                      >
-                        <i className={`fa-solid ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
-                      </button>
+                      <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
+                        <AnimatePresence mode="wait">
+                          {confirmPassword !== '' && (
+                            <motion.i
+                              key={password === confirmPassword ? 'match' : 'mismatch'}
+                              initial={{ scale: 0, opacity: 0 }}
+                              animate={{ scale: 1, opacity: 1 }}
+                              exit={{ scale: 0, opacity: 0 }}
+                              className={`fa-solid ${password === confirmPassword ? 'fa-circle-check text-emerald-500' : 'fa-circle-xmark text-red-500'} text-xs`}
+                            />
+                          )}
+                        </AnimatePresence>
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="text-slate-400 hover:text-brand-navy transition-colors p-1"
+                        >
+                          <i className={`fa-solid ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                        </button>
+                      </div>
                     </div>
                   </motion.div>
                   {getFieldError('confirmPassword') && (
