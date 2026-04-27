@@ -847,11 +847,16 @@ export default function Messages() {
               <>
                 <div className="border-b border-slate-100 p-4 bg-slate-50/30">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="flex items-center gap-3">
+                    <div
+                      className={`flex items-center gap-3 ${viewerRole === 'user' ? 'cursor-pointer group/lawyer' : ''}`}
+                      onClick={() => viewerRole === 'user' && navigate(`/profile/${selectedConversation.lawyerId}`)}
+                    >
                       <img src={selectedConversation.lawyerImg} alt={selectedConversation.lawyerName} className="h-12 w-12 rounded-xl object-cover shadow-sm" />
                       <div className="text-right">
                         <div className="flex items-center gap-2">
-                          <h2 className="text-lg font-black text-brand-dark">{viewerRole === 'lawyer' ? selectedCase.client : selectedConversation.lawyerName}</h2>
+                          <h2 className={`text-lg font-black text-brand-dark ${viewerRole === 'user' ? 'group-hover/lawyer:text-brand-navy transition-colors' : ''}`}>
+                            {viewerRole === 'lawyer' ? selectedCase.client : selectedConversation.lawyerName}
+                          </h2>
                           <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="متصل الآن"></span>
                         </div>
                         <p className="mt-0.5 text-xs font-bold text-slate-500 flex items-center justify-end gap-1.5">

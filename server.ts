@@ -234,6 +234,21 @@ async function startServer() {
     next();
   };
 
+  // Optional Authentication Middleware (doesn't block if no token)
+  const optionalAuthenticateToken = (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    const authHeader = req.headers.authorization;
+    const token = getTokenFromHeader(authHeader);
+
+    if (token) {
+      const decoded = verifyToken(token);
+      if (decoded) {
+        (req as any).user = decoded;
+      }
+    }
+
+    next();
+  };
+
   const adminOnly = (req: express.Request, res: express.Response, next: express.NextFunction) => {
     const user = (req as any).user;
     if (user.role !== 'admin') {
@@ -561,10 +576,10 @@ async function startServer() {
     }
   });
 
-  app.get('/api/app/lawyers/:id', authenticateToken, async (req, res) => {
+  app.get('/api/app/lawyers/:id', optionalAuthenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
-      const profile = await getLawyerProfile(req.params.id, currentUser.userId);
+      const profile = await getLawyerProfile(req.params.id, currentUser?.userId);
       if (!profile) return res.status(404).json({ error: 'Lawyer not found' });
       res.json({ data: profile });
     } catch (error) {

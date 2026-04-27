@@ -1494,10 +1494,13 @@ export default function MyCases() {
                   <button onClick={() => setIsShareAccessModalOpen(true)} className="px-4 py-2 bg-white border border-slate-200 rounded-xl text-[11px] font-black text-slate-600 hover:border-brand-navy hover:text-brand-navy transition shadow-sm flex items-center gap-2">
                     <i className="fa-solid fa-user-plus"></i> مشاركة الوصول
                   </button>
-                  <div className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm">
+                  <div
+                    className="flex items-center gap-4 bg-white p-3 rounded-2xl border border-slate-100 shadow-sm cursor-pointer group/lawyer"
+                    onClick={() => navigate(`/profile/${activeCase.lawyer.id}`)}
+                  >
                     <img src={activeCase.lawyer.img} className="w-11 h-11 rounded-xl border-2 border-white shadow-md" alt={activeCase.lawyer.name} />
                     <div>
-                      <p className="text-sm font-black text-brand-dark">{activeCase.lawyer.name}</p>
+                      <p className="text-sm font-black text-brand-dark group-hover/lawyer:text-brand-navy transition-colors">{activeCase.lawyer.name}</p>
                       <p className="text-[10px] text-brand-navy font-black opacity-60">{activeCase.lawyer.role}</p>
                     </div>
                     <button className="mr-2 h-9 w-9 rounded-xl bg-slate-50 text-brand-navy flex items-center justify-center hover:bg-brand-navy hover:text-white transition-all shadow-sm">
