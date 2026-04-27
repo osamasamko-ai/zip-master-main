@@ -7,6 +7,8 @@ export default function Auth() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [name, setName] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('user');
   const [loading, setLoading] = useState(false);
@@ -19,6 +21,8 @@ export default function Auth() {
     setEmail('');
     setPassword('');
     setConfirmPassword('');
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     setSelectedRole('user');
   };
 
@@ -90,27 +94,29 @@ export default function Auth() {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] flex min-h-screen bg-white fade-in">
+    <div className="relative z-[200] flex min-h-screen flex-col lg:flex-row bg-white fade-in">
       {/* Right Side: Form */}
-      <div className="flex w-full flex-col justify-center px-8 md:px-24 lg:w-1/2">
+      <div className="flex w-full flex-col justify-center px-6 py-12 md:px-24 lg:w-1/2 lg:py-0">
         <div className="max-w-md w-full mx-auto">
           <div className="flex flex-row items-center gap-3 mb-8">
             <div className="w-12 h-12 grad-navy rounded-xl flex items-center justify-center text-brand-gold shadow-gold-glow">
               <i className="fa-solid fa-scale-balanced text-2xl"></i>
             </div>
-            <div>
-              <h1 className="text-3xl font-bold leading-none text-brand-dark">القسطاس </h1>
-              <span className="text-sm font-semibold text-gray-500">منظومة العدالة الرقمية العراقية المدعومة بالذكاء الاصطناعي</span>
+            <div className="text-right">
+              <h1 className="text-3xl font-black leading-none text-brand-dark tracking-tight">القسطاس</h1>
+              <p className="text-xs font-bold text-slate-400 mt-1 tracking-tight">منظومة العدالة الرقمية العراقية المدعومة بالذكاء الاصطناعي</p>
             </div>
           </div>
 
-          <div className="mb-8 flex flex-row border-b border-gray-200">
+          <div className="mb-8 flex flex-row border-b border-slate-100">
             <button
               onClick={() => {
                 setError(null);
+                setShowPassword(false);
+                setShowConfirmPassword(false);
                 setAuthMode('login');
               }}
-              className={`flex-1 pb-3 text-center font-bold border-b-2 transition ${authMode === 'login' ? 'text-brand-gold border-brand-gold' : 'text-gray-400 border-transparent hover:text-gray-600'
+              className={`flex-1 pb-4 text-center text-sm font-black border-b-2 transition-all duration-300 ${authMode === 'login' ? 'text-brand-navy border-brand-navy' : 'text-slate-400 border-transparent hover:text-slate-600'
                 }`}
             >
               تسجيل الدخول
@@ -118,9 +124,11 @@ export default function Auth() {
             <button
               onClick={() => {
                 setError(null);
+                setShowPassword(false);
+                setShowConfirmPassword(false);
                 setAuthMode('register');
               }}
-              className={`flex-1 pb-3 text-center font-bold border-b-2 transition ${authMode === 'register' ? 'text-brand-gold border-brand-gold' : 'text-gray-400 border-transparent hover:text-gray-600'
+              className={`flex-1 pb-4 text-center text-sm font-black border-b-2 transition-all duration-300 ${authMode === 'register' ? 'text-brand-navy border-brand-navy' : 'text-slate-400 border-transparent hover:text-slate-600'
                 }`}
             >
               حساب جديد
@@ -128,7 +136,7 @@ export default function Auth() {
           </div>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold leading-relaxed text-right animate-in fade-in slide-in-from-top-2">
               {error}
             </div>
           )}
@@ -137,34 +145,43 @@ export default function Auth() {
           {authMode === 'login' && (
             <form onSubmit={handleLogin} className="space-y-5 fade-in">
               <div>
-                <label className="mb-2 block text-right text-sm font-bold text-gray-700">البريد الإلكتروني</label>
+                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">البريد الإلكتروني</label>
                 <input
                   type="email"
-                  placeholder="example@email.com"
+                  placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
                   dir="ltr"
                 />
               </div>
               <div>
-                <label className="mb-2 block text-right text-sm font-bold text-gray-700">كلمة المرور</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
-                />
+                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">كلمة المرور</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
+                  >
+                    <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                  </button>
+                </div>
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-xl grad-gold py-3 font-bold text-white shadow-gold-glow transition hover:shadow-gold-glow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'جاري التحميل...' : 'تسجيل الدخول'}
+                {loading ? 'جاري التحقق...' : 'دخول للمنصة'}
               </button>
             </form>
           )}
@@ -173,68 +190,111 @@ export default function Auth() {
           {authMode === 'register' && (
             <form onSubmit={handleRegister} className="space-y-5 fade-in">
               <div>
-                <label className="mb-2 block text-right text-sm font-bold text-gray-700">الاسم الكامل</label>
+                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">الاسم الكامل</label>
                 <input
                   type="text"
-                  placeholder="أدخل اسمك الكامل"
+                  placeholder="اكتب اسمك الثلاثي"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
                 />
               </div>
               <div>
-                <label className="mb-2 block text-right text-sm font-bold text-gray-700">البريد الإلكتروني</label>
+                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">البريد الإلكتروني</label>
                 <input
                   type="email"
-                  placeholder="example@email.com"
+                  placeholder="name@example.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
+                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
                   dir="ltr"
                 />
               </div>
               <div>
-                <label className="mb-2 block text-right text-sm font-bold text-gray-700">كلمة المرور</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
-                />
-                <p className="mt-2 text-right text-xs font-bold text-slate-400">8 أحرف على الأقل.</p>
+                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">كلمة المرور</label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
+                  >
+                    <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                  </button>
+                </div>
+                <p className="mt-2 text-right text-[10px] font-bold text-slate-400">يجب أن تتكون من 8 أحرف أو رموز على الأقل.</p>
               </div>
               <div>
-                <label className="mb-2 block text-right text-sm font-bold text-gray-700">تأكيد كلمة المرور</label>
-                <input
-                  type="password"
-                  placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  required
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
-                />
+                <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">تأكيد كلمة المرور</label>
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:border-brand-navy focus:bg-white outline-none focus:ring-4 focus:ring-brand-navy/5 shadow-inner"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
+                  >
+                    <i className={`fa-solid ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
+                  </button>
+                </div>
               </div>
               <div>
-                <label className="mb-2 block text-right text-sm font-bold text-gray-700">نوع الحساب</label>
-                <select
-                  value={selectedRole}
-                  onChange={(e) => setSelectedRole(e.target.value as Role)}
-                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-right transition focus:border-brand-gold focus:outline-none focus:ring-1 focus:ring-brand-gold"
-                >
-                  <option value="user">عميل (باحث عن استشارة)</option>
-                  <option value="pro">محامي</option>
-                </select>
+                <label className="mb-3 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">نوع الحساب</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('user')}
+                    className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 ${selectedRole === 'user' ? 'border-brand-navy bg-brand-navy/5 shadow-md ring-4 ring-brand-navy/5' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+                  >
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedRole === 'user' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/30' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
+                      <i className="fa-solid fa-user"></i>
+                    </div>
+                    <div>
+                      <p className={`text-xs font-black ${selectedRole === 'user' ? 'text-brand-navy' : 'text-slate-700'}`}>عميل</p>
+                      <p className="text-[10px] font-bold text-slate-400">أبحث عن استشارة</p>
+                    </div>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedRole('pro')}
+                    className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 ${selectedRole === 'pro' ? 'border-brand-navy bg-brand-navy/5 shadow-md ring-4 ring-brand-navy/5' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+                  >
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedRole === 'pro' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/30' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
+                      <i className="fa-solid fa-user-tie"></i>
+                    </div>
+                    <div>
+                      <p className={`text-xs font-black ${selectedRole === 'pro' ? 'text-brand-navy' : 'text-slate-700'}`}>محامي</p>
+                      <p className="text-[10px] font-bold text-slate-400">تقديم خدمات قانونية</p>
+                    </div>
+                  </button>
+                </div>
               </div>
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full rounded-xl grad-gold py-3 font-bold text-white shadow-gold-glow transition hover:shadow-gold-glow-lg disabled:opacity-50 disabled:cursor-not-allowed"
+                className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {loading ? 'جاري التحميل...' : 'إنشاء حساب'}
+                {loading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <i className="fa-solid fa-spinner fa-spin"></i>
+                    جاري المعالجة...
+                  </span>
+                ) : 'فتح حساب جديد'}
               </button>
             </form>
           )}
