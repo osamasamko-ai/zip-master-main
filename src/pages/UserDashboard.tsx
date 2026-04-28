@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import FollowButton from '../components/FollowButton';
 import NoticePanel from '../components/ui/NoticePanel';
+import ActionButton from '../components/ui/ActionButton';
 import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 import apiClient from '../api/client';
 
@@ -366,6 +367,8 @@ export default function UserDashboard() {
   const [lawyerQuery, setLawyerQuery] = useState('');
   const [lawyerSpecialty, setLawyerSpecialty] = useState<'الكل' | LawyerItem['specialty']>('الكل');
   const [selectedLawyerId, setSelectedLawyerId] = useState<string>('');
+  const [showAnonConfirm, setShowAnonConfirm] = useState(false);
+  const [isAnonymous, setIsAnonymous] = useState(false);
 
   // اقتراح: ترحيب مخصص حسب الوقت
   const greeting = useMemo(() => {
@@ -957,7 +960,7 @@ export default function UserDashboard() {
                     <button
                       type="button"
                       onClick={() => {
-                        navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`);
+                        navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}${isAnonymous ? '&anonymous=true' : ''}`);
                       }}
                       title={`تواصل مع ${lawyer.name}`}
                       className="rounded-2xl bg-brand-navy px-3 py-2 text-sm font-semibold text-white transition duration-200 hover:bg-[#102d5e] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
@@ -1035,7 +1038,7 @@ export default function UserDashboard() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(selectedLawyer.id)}`)}
+                        onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(selectedLawyer.id)}${isAnonymous ? '&anonymous=true' : ''}`)}
                         className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:border-brand-navy hover:bg-white hover:text-brand-navy active:scale-[0.99]"
                       >
                         تواصل مباشر
@@ -1181,240 +1184,239 @@ export default function UserDashboard() {
       )}
 
       {!isInitialLoading && !isFirstTimeUser && (
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_360px]">
-        <section className="space-y-4">
-          <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#0d1832_0%,#13284d_54%,#163d67_100%)] p-5 text-white shadow-[0_30px_80px_-42px_rgba(15,23,42,0.8)] sm:p-6">
-            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-              <div className="max-w-2xl text-right">
-                <p className="text-[11px] font-black uppercase tracking-[0.28em] text-brand-lightgold">Next Best Action</p>
-                <h3 className="mt-3 text-2xl font-black leading-tight sm:text-[2rem]">
-                  {topPriority ? topPriority.title : 'مسارك القانوني تحت السيطرة'}
-                </h3>
-                <p className="mt-3 text-sm font-bold leading-7 text-slate-200">
-                  {topPriority ? topPriority.note : 'لا توجد عناصر حرجة حالياً. يمكنك استخدام هذه المساحة لمراجعة القضايا والخدمات بهدوء.'}
-                </p>
-                <p className="mt-3 max-w-xl rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-xs font-bold leading-6 text-slate-200">
-                  {topPriority ? topPriority.reason : 'عند وصول تحديث جديد أو مستند مطلوب سيظهر هنا كأولوية تنفيذية مباشرة.'}
-                </p>
-              </div>
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_360px]">
+          <section className="space-y-4">
+            <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#0d1832_0%,#13284d_54%,#163d67_100%)] p-5 text-white shadow-[0_30px_80px_-42px_rgba(15,23,42,0.8)] sm:p-6">
+              <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                <div className="max-w-2xl text-right">
+                  <p className="text-[11px] font-black uppercase tracking-[0.28em] text-brand-lightgold">Next Best Action</p>
+                  <h3 className="mt-3 text-2xl font-black leading-tight sm:text-[2rem]">
+                    {topPriority ? topPriority.title : 'مسارك القانوني تحت السيطرة'}
+                  </h3>
+                  <p className="mt-3 text-sm font-bold leading-7 text-slate-200">
+                    {topPriority ? topPriority.note : 'لا توجد عناصر حرجة حالياً. يمكنك استخدام هذه المساحة لمراجعة القضايا والخدمات بهدوء.'}
+                  </p>
+                  <p className="mt-3 max-w-xl rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-xs font-bold leading-6 text-slate-200">
+                    {topPriority ? topPriority.reason : 'عند وصول تحديث جديد أو مستند مطلوب سيظهر هنا كأولوية تنفيذية مباشرة.'}
+                  </p>
+                </div>
 
-              <div className="grid min-w-[260px] gap-3 self-stretch">
-                <button
-                  type="button"
-                  onClick={topPriority?.primaryAction ?? (() => setActiveTab('cases'))}
-                  className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-brand-dark transition hover:bg-slate-100"
-                >
-                  {topPriority?.cta ?? 'فتح القضايا'}
-                </button>
-                {topPriority?.secondaryAction && topPriority.secondaryLabel && (
+                <div className="grid min-w-[260px] gap-3 self-stretch">
                   <button
                     type="button"
-                    onClick={topPriority.secondaryAction}
-                    className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/15"
+                    onClick={topPriority?.primaryAction ?? (() => setActiveTab('cases'))}
+                    className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-brand-dark transition hover:bg-slate-100"
                   >
-                    {topPriority.secondaryLabel}
+                    {topPriority?.cta ?? 'فتح القضايا'}
                   </button>
-                )}
-                <button
-                  type="button"
-                  onClick={() => navigate('/aichat')}
-                  className="rounded-2xl border border-white/15 bg-transparent px-4 py-3 text-sm font-bold text-brand-lightgold transition hover:bg-white/10"
-                >
-                  اطلب تلخيصاً من AI
-                </button>
+                  {topPriority?.secondaryAction && topPriority.secondaryLabel && (
+                    <button
+                      type="button"
+                      onClick={topPriority.secondaryAction}
+                      className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/15"
+                    >
+                      {topPriority.secondaryLabel}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => navigate('/aichat')}
+                    className="rounded-2xl border border-white/15 bg-transparent px-4 py-3 text-sm font-bold text-brand-lightgold transition hover:bg-white/10"
+                  >
+                    اطلب تلخيصاً من AI
+                  </button>
+                </div>
               </div>
+
+              {urgentItems.length > 0 && (
+                <div className="mt-5 grid gap-3 lg:grid-cols-3">
+                  {urgentItems.slice(0, 3).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={item.primaryAction}
+                      className="rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-4 text-right transition hover:bg-white/12"
+                    >
+                      <div className="flex flex-row-reverse items-start gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-brand-lightgold">
+                          <i className={item.icon} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-black text-white">{item.title}</p>
+                          <p className="mt-1 text-xs font-bold leading-5 text-slate-200">{item.note}</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
-            {urgentItems.length > 0 && (
-              <div className="mt-5 grid gap-3 lg:grid-cols-3">
-                {urgentItems.slice(0, 3).map((item) => (
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-right">
+                  <h3 className="text-lg font-bold text-brand-dark">المسارات السريعة</h3>
+                  <p className="text-sm text-slate-500">نفّذ أكثر الإجراءات استخداماً من دون التنقل بين الأقسام.</p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {QUICK_ACTIONS.map((action) => (
                   <button
-                    key={item.id}
+                    key={action.id}
                     type="button"
-                    onClick={item.primaryAction}
-                    className="rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-4 text-right transition hover:bg-white/12"
+                    onClick={() => handleQuickAction(action.id)}
+                    className="group rounded-3xl border border-slate-100 bg-slate-50/50 px-4 py-4 text-right transition-all hover:border-brand-navy/30 hover:bg-white hover:shadow-md"
                   >
-                    <div className="flex flex-row-reverse items-start gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-brand-lightgold">
-                        <i className={item.icon} />
+                    <div className="flex items-start gap-3">
+                      <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-brand-navy shadow-sm transition-colors group-hover:bg-brand-navy group-hover:text-white">
+                        <i className={action.icon}></i>
                       </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-black text-white">{item.title}</p>
-                        <p className="mt-1 text-xs font-bold leading-5 text-slate-200">{item.note}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold text-brand-dark group-hover:text-brand-navy">{action.label}</p>
+                        <p className="mt-1 text-xs leading-5 text-slate-500">{action.note}</p>
                       </div>
                     </div>
                   </button>
                 ))}
               </div>
-            )}
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">المسارات السريعة</h3>
-                <p className="text-sm text-slate-500">نفّذ أكثر الإجراءات استخداماً من دون التنقل بين الأقسام.</p>
-              </div>
             </div>
 
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              {QUICK_ACTIONS.map((action) => (
-                <button
-                  key={action.id}
-                  type="button"
-                  onClick={() => handleQuickAction(action.id)}
-                  className="group rounded-3xl border border-slate-100 bg-slate-50/50 px-4 py-4 text-right transition-all hover:border-brand-navy/30 hover:bg-white hover:shadow-md"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-white text-brand-navy shadow-sm transition-colors group-hover:bg-brand-navy group-hover:text-white">
-                      <i className={action.icon}></i>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-bold text-brand-dark group-hover:text-brand-navy">{action.label}</p>
-                      <p className="mt-1 text-xs leading-5 text-slate-500">{action.note}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">الخط الزمني القانوني</h3>
-                <p className="text-sm text-slate-500">مسار موحد يجمع أهم التحديثات والمهام والمواعيد في مكان واحد.</p>
-              </div>
-            </div>
-
-            <div className="mt-4 space-y-3">
-              {filteredTimeline.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={item.action}
-                  className="group rounded-[1.6rem] border border-slate-100 bg-slate-50/60 p-4 text-right transition-all hover:border-brand-navy/25 hover:bg-white"
-                >
-                  <div className="flex flex-row-reverse items-start gap-3">
-                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${item.tone}`}>
-                      <i className={item.icon} />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-[11px] font-bold text-slate-400">{item.meta}</span>
-                        <p className="text-sm font-black text-brand-dark group-hover:text-brand-navy">{item.title}</p>
-                      </div>
-                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.note}</p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-          </div>
-        </section>
-
-        <aside className="space-y-4">
-          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-right">
-              <h3 className="text-base font-bold text-brand-dark">لوحة الصحة القانونية</h3>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">قياس سريع لجاهزية الملف والحركة المطلوبة منك.</p>
-            </div>
-            <div className="mt-4 grid gap-3">
-              {stats.map((stat) => (
-                <div key={stat.label} className="rounded-2xl border border-slate-100 bg-slate-50/50 px-4 py-4 text-right transition-colors hover:bg-white">
-                  <div className="flex items-center justify-between mb-1">
-                    <i className={`${stat.icon} ${stat.tone} opacity-60 text-sm`}></i>
-                    <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{stat.label}</p>
-                  </div>
-                  <p className="mt-1 text-2xl font-black text-brand-dark">{stat.value}</p>
-                  <p className="text-xs text-slate-500">{stat.note}</p>
+            <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-right">
+                  <h3 className="text-lg font-bold text-brand-dark">الخط الزمني القانوني</h3>
+                  <p className="text-sm text-slate-500">مسار موحد يجمع أهم التحديثات والمهام والمواعيد في مكان واحد.</p>
                 </div>
-              ))}
+              </div>
+
+              <div className="mt-4 space-y-3">
+                {filteredTimeline.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={item.action}
+                    className="group rounded-[1.6rem] border border-slate-100 bg-slate-50/60 p-4 text-right transition-all hover:border-brand-navy/25 hover:bg-white"
+                  >
+                    <div className="flex flex-row-reverse items-start gap-3">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${item.tone}`}>
+                        <i className={item.icon} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[11px] font-bold text-slate-400">{item.meta}</span>
+                          <p className="text-sm font-black text-brand-dark group-hover:text-brand-navy">{item.title}</p>
+                        </div>
+                        <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.note}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
           </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-right">
-              <h3 className="text-base font-bold text-brand-dark">توصية تنفيذية</h3>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">إجراء واحد واضح يعطيك أفضل تقدم الآن.</p>
-            </div>
-            <div className="mt-4 rounded-[1.6rem] border border-slate-100 bg-slate-50 px-4 py-4 text-right">
-              {topPriority ? (
-                <>
-                  <div className="flex items-center justify-between gap-3">
-                    <span className={`rounded-full px-3 py-1 text-[10px] font-black ${
-                      topPriority.level === 'critical' ? 'bg-red-100 text-red-700' :
-                      topPriority.level === 'high' ? 'bg-amber-100 text-amber-700' :
-                      topPriority.level === 'medium' ? 'bg-sky-100 text-sky-700' : 'bg-slate-200 text-slate-600'
-                    }`}>
-                      {topPriority.level === 'critical' ? 'حرج' : topPriority.level === 'high' ? 'عالٍ' : topPriority.level === 'medium' ? 'متوسط' : 'منخفض'}
-                    </span>
-                    <p className="text-sm font-black text-brand-dark">{topPriority.title}</p>
+          <aside className="space-y-4">
+            <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-right">
+                <h3 className="text-base font-bold text-brand-dark">لوحة الصحة القانونية</h3>
+                <p className="mt-1 text-xs font-bold leading-5 text-slate-500">قياس سريع لجاهزية الملف والحركة المطلوبة منك.</p>
+              </div>
+              <div className="mt-4 grid gap-3">
+                {stats.map((stat) => (
+                  <div key={stat.label} className="rounded-2xl border border-slate-100 bg-slate-50/50 px-4 py-4 text-right transition-colors hover:bg-white">
+                    <div className="flex items-center justify-between mb-1">
+                      <i className={`${stat.icon} ${stat.tone} opacity-60 text-sm`}></i>
+                      <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{stat.label}</p>
+                    </div>
+                    <p className="mt-1 text-2xl font-black text-brand-dark">{stat.value}</p>
+                    <p className="text-xs text-slate-500">{stat.note}</p>
                   </div>
-                  <p className="mt-2 text-xs font-bold leading-6 text-slate-500">{topPriority.note}</p>
-                  <p className="mt-3 rounded-xl bg-white px-3 py-3 text-[11px] font-bold leading-5 text-slate-600">{topPriority.reason}</p>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      onClick={topPriority.primaryAction}
-                      className="flex-1 rounded-xl bg-brand-navy px-4 py-3 text-sm font-black text-white transition hover:bg-brand-dark"
-                    >
-                      {topPriority.cta}
-                    </button>
-                    {topPriority.secondaryAction && topPriority.secondaryLabel && (
+                ))}
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-right">
+                <h3 className="text-base font-bold text-brand-dark">توصية تنفيذية</h3>
+                <p className="mt-1 text-xs font-bold leading-5 text-slate-500">إجراء واحد واضح يعطيك أفضل تقدم الآن.</p>
+              </div>
+              <div className="mt-4 rounded-[1.6rem] border border-slate-100 bg-slate-50 px-4 py-4 text-right">
+                {topPriority ? (
+                  <>
+                    <div className="flex items-center justify-between gap-3">
+                      <span className={`rounded-full px-3 py-1 text-[10px] font-black ${topPriority.level === 'critical' ? 'bg-red-100 text-red-700' :
+                        topPriority.level === 'high' ? 'bg-amber-100 text-amber-700' :
+                          topPriority.level === 'medium' ? 'bg-sky-100 text-sky-700' : 'bg-slate-200 text-slate-600'
+                        }`}>
+                        {topPriority.level === 'critical' ? 'حرج' : topPriority.level === 'high' ? 'عالٍ' : topPriority.level === 'medium' ? 'متوسط' : 'منخفض'}
+                      </span>
+                      <p className="text-sm font-black text-brand-dark">{topPriority.title}</p>
+                    </div>
+                    <p className="mt-2 text-xs font-bold leading-6 text-slate-500">{topPriority.note}</p>
+                    <p className="mt-3 rounded-xl bg-white px-3 py-3 text-[11px] font-bold leading-5 text-slate-600">{topPriority.reason}</p>
+                    <div className="mt-3 flex gap-2">
                       <button
                         type="button"
-                        onClick={topPriority.secondaryAction}
-                        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-brand-navy hover:text-brand-navy"
+                        onClick={topPriority.primaryAction}
+                        className="flex-1 rounded-xl bg-brand-navy px-4 py-3 text-sm font-black text-white transition hover:bg-brand-dark"
                       >
-                        {topPriority.secondaryLabel}
+                        {topPriority.cta}
                       </button>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <p className="text-sm text-slate-400 font-bold">لا توجد إجراءات حالية</p>
-              )}
-            </div>
-          </section>
+                      {topPriority.secondaryAction && topPriority.secondaryLabel && (
+                        <button
+                          type="button"
+                          onClick={topPriority.secondaryAction}
+                          className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-brand-navy hover:text-brand-navy"
+                        >
+                          {topPriority.secondaryLabel}
+                        </button>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-slate-400 font-bold">لا توجد إجراءات حالية</p>
+                )}
+              </div>
+            </section>
 
-          <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div className="text-right">
-              <h3 className="text-base font-bold text-brand-dark">مطلوب منك الآن</h3>
-              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">عناصر مباشرة تؤثر على سير العمل في هذا الأسبوع.</p>
-            </div>
-            <div className="mt-4 space-y-3">
-              {requiredDocuments.length > 0 ? requiredDocuments.slice(0, 3).map((doc) => (
-                <button
-                  key={doc.id}
-                  type="button"
-                  onClick={() => setActiveTab('documents')}
-                  className="w-full rounded-2xl bg-red-50 px-4 py-3 text-right transition hover:bg-red-100/70"
-                >
-                  <p className="text-sm font-semibold text-red-700">{doc.name}</p>
-                  <p className="mt-1 text-xs text-red-600">{doc.caseName}</p>
-                </button>
-              )) : (
-                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-xs font-bold text-slate-400">
-                  لا توجد مستندات حرجة مطلوبة حالياً.
-                </div>
-              )}
-              {upcomingScheduleItem ? (
-                <button
-                  type="button"
-                  onClick={() => setActiveTab('schedule')}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right transition hover:border-brand-navy hover:bg-white"
-                >
-                  <p className="text-sm font-semibold text-brand-dark">{upcomingScheduleItem.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">{upcomingScheduleItem.time}</p>
-                </button>
-              ) : (
-                <p className="text-xs text-slate-400 text-center py-2">لا توجد مواعيد قريبة</p>
-              )}
-            </div>
-          </section>
-        </aside>
-      </div>
+            <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+              <div className="text-right">
+                <h3 className="text-base font-bold text-brand-dark">مطلوب منك الآن</h3>
+                <p className="mt-1 text-xs font-bold leading-5 text-slate-500">عناصر مباشرة تؤثر على سير العمل في هذا الأسبوع.</p>
+              </div>
+              <div className="mt-4 space-y-3">
+                {requiredDocuments.length > 0 ? requiredDocuments.slice(0, 3).map((doc) => (
+                  <button
+                    key={doc.id}
+                    type="button"
+                    onClick={() => setActiveTab('documents')}
+                    className="w-full rounded-2xl bg-red-50 px-4 py-3 text-right transition hover:bg-red-100/70"
+                  >
+                    <p className="text-sm font-semibold text-red-700">{doc.name}</p>
+                    <p className="mt-1 text-xs text-red-600">{doc.caseName}</p>
+                  </button>
+                )) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-xs font-bold text-slate-400">
+                    لا توجد مستندات حرجة مطلوبة حالياً.
+                  </div>
+                )}
+                {upcomingScheduleItem ? (
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('schedule')}
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right transition hover:border-brand-navy hover:bg-white"
+                  >
+                    <p className="text-sm font-semibold text-brand-dark">{upcomingScheduleItem.title}</p>
+                    <p className="mt-1 text-xs text-slate-500">{upcomingScheduleItem.time}</p>
+                  </button>
+                ) : (
+                  <p className="text-xs text-slate-400 text-center py-2">لا توجد مواعيد قريبة</p>
+                )}
+              </div>
+            </section>
+          </aside>
+        </div>
       )}
     </div>
   );
@@ -1969,8 +1971,8 @@ export default function UserDashboard() {
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
                   {activeTab === 'overview'
-                      ? 'أهلاً بك في مركز عملياتك القانوني. تابع مستجدات قضاياك، أنجز المهام المطلوبة، وتواصل مع خبرائك بضغطة زر واحدة.'
-                      : `أنت الآن داخل قسم ${activeTabMeta.label}. ${activeTabMeta.description} مع عرض مهيأ للاستخدام المكثف والوصول الأسرع إلى الإجراءات المهمة.`}
+                    ? 'أهلاً بك في مركز عملياتك القانوني. تابع مستجدات قضاياك، أنجز المهام المطلوبة، وتواصل مع خبرائك بضغطة زر واحدة.'
+                    : `أنت الآن داخل قسم ${activeTabMeta.label}. ${activeTabMeta.description} مع عرض مهيأ للاستخدام المكثف والوصول الأسرع إلى الإجراءات المهمة.`}
                 </p>
                 <div className="mt-4 rounded-[1.6rem] border border-brand-navy/10 bg-white/85 px-4 py-4 shadow-sm">
                   <p className="text-[11px] font-black uppercase tracking-[0.24em] text-brand-gold">Executive Summary</p>
@@ -2019,11 +2021,10 @@ export default function UserDashboard() {
                         key={mode.id}
                         type="button"
                         onClick={() => applyWorkspaceMode(mode.id)}
-                        className={`rounded-xl border px-3 py-3 text-right transition ${
-                          workspaceMode === mode.id
-                            ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/15'
-                            : 'border-slate-200 bg-white text-slate-600 hover:border-brand-navy/30 hover:text-brand-navy'
-                        }`}
+                        className={`rounded-xl border px-3 py-3 text-right transition ${workspaceMode === mode.id
+                          ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/15'
+                          : 'border-slate-200 bg-white text-slate-600 hover:border-brand-navy/30 hover:text-brand-navy'
+                          }`}
                       >
                         <p className="text-sm font-black">{mode.label}</p>
                         <p className={`mt-1 text-[11px] font-bold ${workspaceMode === mode.id ? 'text-white/75' : 'text-slate-400'}`}>{mode.note}</p>
@@ -2262,6 +2263,62 @@ export default function UserDashboard() {
           )
         }
       </AnimatePresence >
+
+      {/* Anonymous Identity Confirmation Modal */}
+      <AnimatePresence>
+        {showAnonConfirm && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[400] flex items-center justify-center bg-brand-dark/40 px-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 10 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 10 }}
+              className="w-full max-w-md rounded-[2.5rem] bg-white p-8 text-right shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center gap-3 mb-4 text-brand-navy">
+                <i className="fa-solid fa-user-secret text-2xl"></i>
+                <h3 className="text-xl font-black">تفعيل الهوية المجهولة</h3>
+              </div>
+
+              <div className="space-y-4">
+                <p className="text-sm font-bold text-slate-600 leading-relaxed">
+                  عند تفعيل هذه الخاصية، سيتم حجب اسمك الحقيقي وسيظهر للمحامي كـ <span className="text-brand-navy font-black">"مستخدم مجهول"</span> في المحادثات الأولية.
+                </p>
+
+                <div className="rounded-2xl bg-amber-50 border border-amber-100 p-4">
+                  <p className="text-xs font-black text-amber-800 mb-1">تنبيه هام:</p>
+                  <p className="text-[11px] font-bold text-amber-700 leading-relaxed">
+                    المحامي قد يطلب التحقق من هويتك لاحقاً لضمان الخصوصية المهنية أو عند البدء بإجراءات قانونية رسمية أو تمثيلك أمام الجهات المختصة.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-8 flex gap-3">
+                <button
+                  onClick={() => setShowAnonConfirm(false)}
+                  className="flex-1 rounded-2xl border border-slate-200 py-3.5 font-black text-slate-500 transition hover:bg-slate-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  onClick={() => {
+                    setIsAnonymous(true);
+                    setShowAnonConfirm(false);
+                  }}
+                  className="flex-[2] rounded-2xl bg-brand-navy py-3.5 font-black text-white shadow-lg shadow-brand-navy/20 transition hover:bg-brand-dark"
+                >
+                  تأكيد التفعيل
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* NotificationToast is now rendered globally by NotificationProvider, removed local toast */}
       {/* Compare Floating Bar */}
