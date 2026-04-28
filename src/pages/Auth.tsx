@@ -512,10 +512,10 @@ export default function Auth() {
           animate="visible"
           className="max-w-lg relative z-10"
         >
-          <motion.h2 variants={brandingItemVariants} className="text-4xl font-black mb-6 leading-tight text-center">حقك القانوني.. بوضوح واحترافية</motion.h2>
+          <motion.h2 variants={brandingItemVariants} className="text-4xl font-black mb-6 leading-tight text-center">حقك القانوني بوضوح واحترافية</motion.h2>
 
           <motion.p variants={brandingItemVariants} className="mb-12 text-gray-200 text-lg font-bold leading-relaxed text-center">
-            منصة القسطاس تدمج الخبرة القانونية بالذكاء الاصطناعي لضمان عدالة رقمية سريعة وموثوقة.
+            القسطاس: خبرة قانونية وذكاء اصطناعي لعدالة سريعة وموثوقة.
           </motion.p>
 
           <div className="mb-12">
@@ -523,19 +523,19 @@ export default function Auth() {
 
             <div className="space-y-6 flex flex-col items-end">
               <motion.div variants={brandingItemVariants} className="flex flex-row-reverse items-center gap-5 text-right w-full">
-                <p className="font-bold text-lg text-right">نخبة المحامين المعتمدين بين يديك</p>
+                <p className="font-bold text-lg text-right">نخبة المحامين المعتمدين</p>
                 <div className="w-10 h-10 rounded-2xl bg-brand-gold/20 flex items-center justify-center shrink-0 shadow-sm border border-brand-gold/10">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
               </motion.div>
               <motion.div variants={brandingItemVariants} className="flex flex-row-reverse items-center gap-5 text-right w-full">
-                <p className="font-bold text-lg text-right">شفافية مطلقة في تتبع مسار قضيتك</p>
+                <p className="font-bold text-lg text-right">شفافية تامة في تتبع قضيتك</p>
                 <div className="w-10 h-10 rounded-2xl bg-brand-gold/20 flex items-center justify-center shrink-0 shadow-sm border border-brand-gold/10">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
               </motion.div>
               <motion.div variants={brandingItemVariants} className="flex flex-row-reverse items-center gap-5 text-right w-full">
-                <p className="font-bold text-lg text-right">حلول ذكية مبنية على مراجع قانونية دقيقة</p>
+                <p className="font-bold text-lg text-right">حلول ذكية بمراجع قانونية دقيقة</p>
                 <div className="w-10 h-10 rounded-2xl bg-brand-gold/20 flex items-center justify-center shrink-0 shadow-sm border border-brand-gold/10">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
@@ -547,13 +547,13 @@ export default function Auth() {
             <p className="text-xl font-black text-brand-gold mb-6 border-b border-white/10 pb-6 ">نضمن حقك.. دائماً</p>
             <div className="space-y-3 text-sm md:text-base font-bold text-gray-100 ">
               <div className="flex flex-row-reverse items-center gap-4 ">
-                <p>استرداد كامل الأتعاب عند أي تقصير في المتابعة</p>
+                <p>استرداد الأتعاب عند أي تقصير</p>
                 <div className="w-8 h-8 rounded-full bg-brand-gold/15 flex items-center justify-center shrink-0 shadow-gold-glow">
                   <i className="fa-solid fa-shield-halved text-brand-gold text-sm"></i>
                 </div>
               </div>
               <div className="flex flex-row-reverse items-center gap-4 ">
-                <p>توفير بديل فوري لضمان استمرار دعواك دون انقطاع</p>
+                <p>بديل فوري لاستمرار دعواك</p>
                 <div className="w-8 h-8 rounded-full bg-brand-gold/15 flex items-center justify-center shrink-0 shadow-gold-glow">
                   <i className="fa-solid fa-user-tie text-brand-gold text-sm"></i>
                 </div>
