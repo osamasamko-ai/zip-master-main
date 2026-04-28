@@ -3,7 +3,6 @@ import { Chart } from 'chart.js/auto';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
-import { useNotifications, Notification as NotificationType } from '../context/NotificationContext';
 import ActionButton from '../components/ui/ActionButton';
 import NoticePanel from '../components/ui/NoticePanel';
 import StatusBadge from '../components/ui/StatusBadge';
@@ -87,6 +86,13 @@ interface CaseTimelineEntry {
   court: string;
   governorate: string;
 }
+
+type InlineToastNotification = {
+  id: string;
+  title: string;
+  message: string;
+  link?: string;
+};
 
 interface DeadlineReminder {
   id: string;
@@ -530,12 +536,11 @@ export default function ProDashboard() {
   const [aiPrompt, setAiPrompt] = useState('تلخيص حالة القضية الأخيرة');
   const [aiResponse, setAiResponse] = useState('هنا يظهر ملخص الذكاء الاصطناعي بعد التشغيل، مع أهم النقاط والإجراءات المقترحة.');
   const [isAiRunning, setIsAiRunning] = useState(false);
-  const { notifications, unreadCount, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications, NotificationBell } = useNotifications();
   const [caseNote, setCaseNote] = useState('');
   const [workbenchReply, setWorkbenchReply] = useState('');
   const [replyDraft, setReplyDraft] = useState('');
   const [activeSavedView, setActiveSavedView] = useState<SavedViewId>('urgent-today');
-  const [activeToast, setActiveToast] = useState<NotificationType | null>(null);
+  const [activeToast, setActiveToast] = useState<InlineToastNotification | null>(null);
 
   const selectedCase = useMemo(
     () => cases.find(caseItem => caseItem.id === selectedCaseId) ?? cases[0],
@@ -2586,46 +2591,10 @@ export default function ProDashboard() {
         <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
           <div className="min-w-0 text-right">
             <div className="flex items-center justify-end gap-3 mb-4">
-              <NotificationBell />
               <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-100 shadow-sm">
                 <i className="fa-solid fa-sack-dollar text-brand-gold text-xs"></i>
                 <span className="text-xs font-black text-brand-dark">{(user?.accountBalance ?? 0).toLocaleString('ar-IQ')} د.ع</span>
               </div>
-              <AnimatePresence>
-                {isNotificationsOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute top-full right-0 mt-3 w-80 bg-white border border-slate-200 rounded-[2rem] shadow-2xl z-50 overflow-hidden text-right origin-top-right"
-                  >
-                    <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
-                      <button onClick={clearAllNotifications} className="text-[10px] font-black text-slate-400 hover:text-red-500">مسح الكل</button>
-                      <h4 className="text-xs font-black text-brand-dark">التنبيهات</h4>
-                    </div>
-                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                      {notifications.length > 0 ? notifications.map((n: NotificationType) => (
-                        <div
-                          key={n.id}
-                          onClick={() => { markAsRead(n.id); if (n.link) navigate(n.link); setIsNotificationsOpen(false); }}
-                          className={`p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition cursor-pointer ${!n.read ? 'bg-brand-navy/[0.02]' : ''}`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[9px] font-bold text-slate-400">{new Date(n.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}</span>
-                            <p className={`text-xs font-black ${!n.read ? 'text-brand-navy' : 'text-slate-600'}`}>{n.title}</p>
-                          </div>
-                          <p className="text-[11px] font-bold text-slate-500 leading-relaxed">{n.message}</p>
-                        </div>
-                      )) : (
-                        <div className="p-10 text-center text-slate-300">
-                          <i className="fa-solid fa-bell-slash text-3xl mb-3 opacity-20"></i>
-                          <p className="text-xs font-bold">لا توجد تنبيهات جديدة</p>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
               <div className="inline-flex items-center rounded-full border border-brand-gold/20 bg-white/80 px-3 py-1 text-xs font-bold text-brand-navy">
                 <i className="fa-solid fa-briefcase ml-2"></i>
                 مساحة المحامي

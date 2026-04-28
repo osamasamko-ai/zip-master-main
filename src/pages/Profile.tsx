@@ -3,7 +3,6 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import FollowButton from '../components/FollowButton';
 import ActionButton from '../components/ui/ActionButton';
-import { useNotifications } from '../context/NotificationContext';
 import NoticePanel from '../components/ui/NoticePanel';
 import StatusBadge from '../components/ui/StatusBadge';
 import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
@@ -78,7 +77,6 @@ export default function Profile() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
-  const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications(); // Use global notifications
   const [activeTab, setActiveTab] = useState<PublicTab>('overview');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const { isFollowed, isPending, toggleFollow } = useFollowedLawyers();
@@ -318,47 +316,6 @@ export default function Profile() {
             ))}
           </div>
           <div className="flex flex-wrap justify-end gap-3">
-            <button
-              onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
-              className="relative h-12 w-12 flex items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-400 hover:text-brand-navy hover:shadow-md transition-all"
-            > {/* Removed local NotificationBell and dropdown, now handled by global context */}
-              <NotificationBell /> {/* Use the NotificationBell component from context */}
-              <AnimatePresence>
-                {isNotificationsOpen && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                    className="absolute top-full right-0 mt-3 w-80 bg-white border border-slate-200 rounded-[2rem] shadow-2xl z-50 overflow-hidden text-right origin-top-right"
-                  >
-                    <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
-                      <button onClick={clearAllNotifications} className="text-[10px] font-black text-slate-400 hover:text-red-500">مسح الكل</button>
-                      <h4 className="text-xs font-black text-brand-dark">التنبيهات</h4>
-                    </div>
-                    <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                      {notifications.length > 0 ? notifications.map(n => (
-                        <div
-                          key={n.id}
-                          onClick={() => { markAsRead(n.id); if (n.link) navigate(n.link); setIsNotificationsOpen(false); }}
-                          className={`p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition cursor-pointer ${!n.read ? 'bg-brand-navy/[0.02]' : ''}`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="text-[9px] font-bold text-slate-400">{new Date(n.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}</span>
-                            <p className={`text-xs font-black ${!n.read ? 'text-brand-navy' : 'text-slate-600'}`}>{n.title}</p>
-                          </div>
-                          <p className="text-[11px] font-bold text-slate-500 leading-relaxed">{n.message}</p>
-                        </div>
-                      )) : (
-                        <div className="p-10 text-center text-slate-300">
-                          <i className="fa-solid fa-bell-slash text-3xl mb-3 opacity-20"></i>
-                          <p className="text-xs font-bold">لا توجد تنبيهات جديدة</p>
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </button>
             <button
               onClick={() => setNotificationsEnabled((current) => !current)}
               className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition ${notificationsEnabled ? 'border-brand-gold bg-brand-gold/10 text-brand-dark' : 'border-slate-200 bg-slate-100 text-slate-400'}`}
