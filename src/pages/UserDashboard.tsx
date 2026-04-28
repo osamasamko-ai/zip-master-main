@@ -15,6 +15,9 @@ interface MainLayoutContext {
 type DashboardTab = 'overview' | 'cases' | 'services' | 'assist' | 'documents' | 'schedule' | 'payments';
 type HeaderRange = 'today' | 'week' | 'month';
 type HeaderFocus = 'all' | 'urgent' | 'pending';
+type WorkspaceMode = 'today' | 'urgent' | 'documents' | 'week';
+type PriorityKind = 'document' | 'case' | 'message' | 'schedule' | 'payment';
+type PriorityLevel = 'critical' | 'high' | 'medium' | 'low';
 
 interface CaseItem {
   id: string;
@@ -99,6 +102,33 @@ interface DashboardSummary {
   accountBalance: number;
 }
 
+interface PriorityAction {
+  id: string;
+  title: string;
+  note: string;
+  reason: string;
+  cta: string;
+  kind: PriorityKind;
+  level: PriorityLevel;
+  score: number;
+  icon: string;
+  tab: DashboardTab;
+  primaryAction: () => void;
+  secondaryAction?: () => void;
+  secondaryLabel?: string;
+}
+
+interface TimelineItem {
+  id: string;
+  title: string;
+  note: string;
+  meta: string;
+  icon: string;
+  kind: PriorityKind | 'service';
+  tone: string;
+  action: () => void;
+}
+
 const DASHBOARD_TABS: Array<{
   id: DashboardTab;
   label: string;
@@ -134,6 +164,73 @@ const HEADER_FOCUS_OPTIONS: Array<{ value: HeaderFocus; label: string }> = [
   { value: 'pending', label: 'بانتظارك' },
 ];
 
+const WORKSPACE_MODES: Array<{
+  id: WorkspaceMode;
+  label: string;
+  note: string;
+  range: HeaderRange;
+  focus: HeaderFocus;
+  tab: DashboardTab;
+}> = [
+    { id: 'today', label: 'اليوم', note: 'أهم ما يحتاج متابعة الآن', range: 'today', focus: 'pending', tab: 'overview' },
+    { id: 'urgent', label: 'العاجل', note: 'العناصر الأعلى خطورة', range: 'week', focus: 'urgent', tab: 'overview' },
+    { id: 'documents', label: 'المستندات', note: 'الملفات المطلوبة والناقصة', range: 'week', focus: 'pending', tab: 'documents' },
+    { id: 'week', label: 'هذا الأسبوع', note: 'المواعيد والتحركات القريبة', range: 'week', focus: 'all', tab: 'schedule' },
+  ];
+
+function DashboardEmptyState({
+  icon,
+  title,
+  description,
+  actionLabel,
+  onAction,
+}: {
+  icon: string;
+  title: string;
+  description: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="rounded-[1.8rem] border border-dashed border-slate-300 bg-[linear-gradient(180deg,#fafbfd_0%,#f4f7fb_100%)] px-5 py-8 text-center">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-brand-navy shadow-sm">
+        <i className={`${icon} text-xl`} />
+      </div>
+      <p className="mt-4 text-base font-black text-brand-dark">{title}</p>
+      <p className="mt-2 text-sm font-bold leading-6 text-slate-500">{description}</p>
+      {actionLabel && onAction && (
+        <button
+          type="button"
+          onClick={onAction}
+          className="mt-5 rounded-xl bg-brand-navy px-4 py-3 text-sm font-black text-white transition hover:bg-brand-dark"
+        >
+          {actionLabel}
+        </button>
+      )}
+    </div>
+  );
+}
+
+function DashboardCardSkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="animate-pulse space-y-4">
+        <div className="mr-auto h-3 w-24 rounded-full bg-slate-200" />
+        {Array.from({ length: rows }).map((_, index) => (
+          <div key={index} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+            <div className="flex items-center justify-between">
+              <div className="h-8 w-20 rounded-full bg-slate-200" />
+              <div className="h-4 w-36 rounded-full bg-slate-200" />
+            </div>
+            <div className="mt-3 h-3 w-full rounded-full bg-slate-200" />
+            <div className="mt-2 h-3 w-3/4 rounded-full bg-slate-100" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -163,6 +260,12 @@ export default function UserDashboard() {
   const services = dashboardData?.services ?? [];
   const summary = dashboardData?.summary;
   const availableBalance = summary?.accountBalance ?? user?.accountBalance ?? 0;
+  const isFirstTimeUser =
+    !isInitialLoading &&
+    cases.length === 0 &&
+    documents.length === 0 &&
+    schedule.length === 0 &&
+    payments.length === 0;
 
   const serviceCategories = useMemo(() => ['الكل', ...Array.from(new Set(services.map(s => s.category)))], [services]);
 
@@ -258,27 +361,13 @@ export default function UserDashboard() {
   );
   const [headerRange, setHeaderRange] = useState<HeaderRange>('week');
   const [headerFocus, setHeaderFocus] = useState<HeaderFocus>('all');
+  const [workspaceMode, setWorkspaceMode] = useState<WorkspaceMode>(() => {
+    if (typeof window === 'undefined') return 'today';
+    return (window.localStorage.getItem('lexigate-user-dashboard-mode') as WorkspaceMode | null) ?? 'today';
+  });
   const [lawyerQuery, setLawyerQuery] = useState('');
   const [lawyerSpecialty, setLawyerSpecialty] = useState<'الكل' | LawyerItem['specialty']>('الكل');
   const [selectedLawyerId, setSelectedLawyerId] = useState<string>('');
-
-  const commandResults = useMemo(() => {
-    const query = commandQuery.trim().toLowerCase();
-    if (!query) return [];
-
-    const items = [
-      ...cases.map((c) => ({ id: c.id, type: 'قضية', title: c.title, subtitle: c.status, icon: 'fa-folder-open', action: () => { setSelectedCaseId(c.id); setActiveTab('cases'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
-      ...services.map((s) => ({ id: s.id, type: 'خدمة', title: s.title, subtitle: s.price, icon: 'fa-hand-holding-heart', action: () => { setActiveTab('services'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
-      ...documents.map((d) => ({ id: d.id, type: 'مستند', title: d.name, subtitle: d.caseName, icon: 'fa-file-lines', action: () => { setActiveTab('documents'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
-    ];
-
-    return items.filter(
-      (item) =>
-        item.title.toLowerCase().includes(query) ||
-        item.subtitle.toLowerCase().includes(query) ||
-        item.type.toLowerCase().includes(query)
-    );
-  }, [cases, commandQuery, documents, services, setSelectedCaseId, setActiveTab, setIsCommandPaletteOpen, setCommandQuery]);
 
   // اقتراح: ترحيب مخصص حسب الوقت
   const greeting = useMemo(() => {
@@ -351,6 +440,20 @@ export default function UserDashboard() {
     window.localStorage.setItem('lexigate-user-dashboard-case', selectedCaseId);
   }, [selectedCaseId]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('lexigate-user-dashboard-mode', workspaceMode);
+  }, [workspaceMode]);
+
+  const applyWorkspaceMode = (mode: WorkspaceMode) => {
+    const preset = WORKSPACE_MODES.find((item) => item.id === mode);
+    if (!preset) return;
+    setWorkspaceMode(mode);
+    setHeaderRange(preset.range);
+    setHeaderFocus(preset.focus);
+    setActiveTab(preset.tab);
+  };
+
   const stats = useMemo(
     () => {
       const activeCases = summary?.activeCases ?? cases.length;
@@ -403,23 +506,244 @@ export default function UserDashboard() {
     [availableBalance, cases, documents, requiredDocuments.length, summary]
   );
 
-  const guidedPaths = useMemo(
-    () => [
-      { id: 'p1', title: 'تأسيس شركة محدودة', steps: '6 خطوات', icon: 'fa-solid fa-building-columns', color: 'bg-indigo-50 text-indigo-600' },
-      { id: 'p2', title: 'تسجيل علامة تجارية', steps: '4 خطوات', icon: 'fa-solid fa-copyright', color: 'bg-rose-50 text-red-600' },
-      { id: 'p3', title: 'توثيق عقد عقاري', steps: '5 خطوات', icon: 'fa-solid fa-house-chimney-user', color: 'bg-amber-50 text-amber-600' },
-    ],
-    []
+  const priorityQueue = useMemo<PriorityAction[]>(() => {
+    const items: PriorityAction[] = [];
+
+    requiredDocuments.forEach((doc, index) => {
+      items.push({
+        id: `document-${doc.id}`,
+        title: `رفع ${doc.name}`,
+        note: `${doc.caseName} يحتاج هذا المستند لإكمال المسار الحالي.`,
+        reason: index === 0 ? 'تأخير المستند ينعكس مباشرة على تقدم القضية.' : 'رفع المستند الآن يقلل التأخير التشغيلي.',
+        cta: 'رفع المستند',
+        kind: 'document',
+        level: index === 0 ? 'critical' : 'high',
+        score: 100 - index,
+        icon: 'fa-solid fa-file-arrow-up',
+        tab: 'documents',
+        primaryAction: () => setActiveTab('documents'),
+        secondaryAction: () => setActiveTab('cases'),
+        secondaryLabel: 'فتح القضية',
+      });
+    });
+
+    cases.forEach((item, index) => {
+      if (item.status === 'بانتظارك' || item.unread) {
+        items.push({
+          id: `case-${item.id}`,
+          title: item.unread ? `يوجد تحديث جديد في ${item.title}` : `إجراء مطلوب في ${item.title}`,
+          note: item.nextStep,
+          reason: item.unread ? 'هناك تحديث جديد قد يغير الخطوة التالية.' : 'هذه القضية متوقفة على تدخل منك.',
+          cta: 'فتح القضية',
+          kind: item.unread ? 'message' : 'case',
+          level: item.unread ? 'high' : 'medium',
+          score: item.unread ? 88 - index : 74 - index,
+          icon: item.unread ? 'fa-solid fa-envelope-open-text' : 'fa-solid fa-folder-open',
+          tab: 'cases',
+          primaryAction: () => {
+            setSelectedCaseId(item.id);
+            setActiveTab('cases');
+          },
+          secondaryAction: () => navigate('/messages'),
+          secondaryLabel: 'الرسائل',
+        });
+      }
+    });
+
+    schedule.slice(0, 2).forEach((item, index) => {
+      items.push({
+        id: `schedule-${item.id}`,
+        title: item.title,
+        note: `موعد قريب: ${item.time}`,
+        reason: 'المراجعة المبكرة للموعد تقلل مفاجآت اللحظة الأخيرة.',
+        cta: 'عرض الموعد',
+        kind: 'schedule',
+        level: index === 0 ? 'medium' : 'low',
+        score: 66 - index,
+        icon: 'fa-regular fa-calendar-check',
+        tab: 'schedule',
+        primaryAction: () => setActiveTab('schedule'),
+      });
+    });
+
+    payments
+      .filter((item) => item.status !== 'مدفوع')
+      .forEach((item, index) => {
+        items.push({
+          id: `payment-${item.id}`,
+          title: item.label,
+          note: `${item.amount} • ${item.date}`,
+          reason: 'معالجة الدفعة الآن تمنع أي تأخير إداري أو تشغيلي.',
+          cta: 'فتح المدفوعات',
+          kind: 'payment',
+          level: 'medium',
+          score: 58 - index,
+          icon: 'fa-solid fa-wallet',
+          tab: 'payments',
+          primaryAction: () => setActiveTab('payments'),
+          secondaryAction: () => navigate('/billing'),
+          secondaryLabel: 'إضافة رصيد',
+        });
+      });
+
+    return items.sort((left, right) => right.score - left.score);
+  }, [cases, navigate, payments, requiredDocuments, schedule]);
+
+  const priorityRangeLimit = headerRange === 'today' ? 3 : headerRange === 'week' ? 5 : 8;
+  const filteredPriorityQueue = useMemo(() => {
+    const focusFiltered = priorityQueue.filter((item) => {
+      if (headerFocus === 'all') return true;
+      if (headerFocus === 'urgent') return item.level === 'critical' || item.level === 'high';
+      return item.kind === 'document' || item.kind === 'case' || item.kind === 'message';
+    });
+    return focusFiltered.slice(0, priorityRangeLimit);
+  }, [headerFocus, priorityQueue, priorityRangeLimit]);
+  const topPriority = filteredPriorityQueue[0] ?? priorityQueue[0] ?? null;
+  const urgentItems = filteredPriorityQueue.slice(0, 4);
+
+  const legalTimeline = useMemo<TimelineItem[]>(() => {
+    const caseEvents = cases.slice(0, 3).map((item) => ({
+      id: `timeline-case-${item.id}`,
+      title: item.title,
+      note: item.nextStep,
+      meta: item.deadline,
+      icon: 'fa-solid fa-scale-balanced',
+      kind: 'case' as const,
+      tone: 'bg-brand-navy/8 text-brand-navy',
+      action: () => {
+        setSelectedCaseId(item.id);
+        setActiveTab('cases');
+      },
+    }));
+
+    const documentEvents = requiredDocuments.slice(0, 2).map((doc) => ({
+      id: `timeline-doc-${doc.id}`,
+      title: doc.name,
+      note: `مستند مطلوب في ${doc.caseName}`,
+      meta: doc.updatedAt,
+      icon: 'fa-solid fa-file-circle-exclamation',
+      kind: 'document' as const,
+      tone: 'bg-red-50 text-red-600',
+      action: () => setActiveTab('documents'),
+    }));
+
+    const scheduleEvents = schedule.slice(0, 2).map((item) => ({
+      id: `timeline-schedule-${item.id}`,
+      title: item.title,
+      note: item.caseName,
+      meta: item.time,
+      icon: 'fa-regular fa-calendar-check',
+      kind: 'schedule' as const,
+      tone: 'bg-amber-50 text-amber-600',
+      action: () => setActiveTab('schedule'),
+    }));
+
+    const paymentEvents = payments.slice(0, 1).map((item) => ({
+      id: `timeline-payment-${item.id}`,
+      title: item.label,
+      note: item.status,
+      meta: item.date,
+      icon: 'fa-solid fa-wallet',
+      kind: 'payment' as const,
+      tone: 'bg-emerald-50 text-emerald-600',
+      action: () => setActiveTab('payments'),
+    }));
+
+    return [...documentEvents, ...caseEvents, ...scheduleEvents, ...paymentEvents].slice(0, 8);
+  }, [cases, payments, requiredDocuments, schedule]);
+
+  const filteredTimeline = useMemo(() => {
+    const focusFiltered = legalTimeline.filter((item) => {
+      if (headerFocus === 'all') return true;
+      if (headerFocus === 'urgent') return item.kind === 'document' || item.kind === 'message' || item.kind === 'case';
+      return item.kind === 'document' || item.kind === 'case';
+    });
+    return focusFiltered.slice(0, priorityRangeLimit);
+  }, [headerFocus, legalTimeline, priorityRangeLimit]);
+
+  const executiveSummary = useMemo(() => {
+    const parts: string[] = [];
+    if (requiredDocuments.length > 0) {
+      parts.push(`لديك ${requiredDocuments.length.toLocaleString('ar-IQ')} مستند${requiredDocuments.length > 1 ? 'ات' : ''} مطلوبة`);
+    }
+    const unreadCases = cases.filter((item) => item.unread).length;
+    if (unreadCases > 0) {
+      parts.push(`${unreadCases.toLocaleString('ar-IQ')} تحديث${unreadCases > 1 ? 'ات' : ''} جديدة من المحامي`);
+    }
+    if (schedule.length > 0) {
+      parts.push(`أقرب موعد: ${schedule[0].time}`);
+    }
+    if (parts.length === 0) {
+      return 'وضعك القانوني مستقر حالياً. يمكنك استخدام هذا الوقت لاستكشاف الخدمات أو تجهيز ملفك بصورة أفضل.';
+    }
+    return `${parts.join('، ')}. ابدأ بالأولوية الأعلى للحفاظ على سير ملفك بسلاسة.`;
+  }, [cases, requiredDocuments.length, schedule]);
+
+  const currentModeMeta = useMemo(
+    () => WORKSPACE_MODES.find((item) => item.id === workspaceMode) ?? WORKSPACE_MODES[0],
+    [workspaceMode],
   );
 
-  const urgentItems = useMemo(
+  const commandQuickActions = useMemo(
     () => [
-      { id: 'u1', title: 'رفع كشف الحساب البنكي', note: 'ضروري لإكمال المطالبة المالية', cta: 'رفع الآن', priority: 'high', icon: 'fa-solid fa-cloud-arrow-up', action: () => setActiveTab('documents') },
-      { id: 'u2', title: 'الاطلاع على رد العلامة التجارية', note: 'تمت إضافة رد جديد من المحامي', cta: 'فتح القضية', priority: 'medium', icon: 'fa-solid fa-envelope-open-text', action: () => { setSelectedCaseId('case-2'); setActiveTab('cases'); } },
-      { id: 'u3', title: 'مكالمة متابعة اليوم', note: 'مع د. عمر النعيمي الساعة 07:00 م', cta: 'عرض الموعد', priority: 'low', icon: 'fa-solid fa-phone-volume', action: () => setActiveTab('schedule') },
+      {
+        id: 'action-new-case',
+        type: 'إجراء',
+        title: 'ابدأ قضية جديدة',
+        subtitle: 'فتح طلب جديد واختيار محامٍ مناسب',
+        icon: 'fa-gavel',
+        action: () => {
+          setIsCommandPaletteOpen(false);
+          setCommandQuery('');
+          navigate('/cases', { state: { openNewCase: true } });
+        },
+      },
+      {
+        id: 'action-upload-doc',
+        type: 'إجراء',
+        title: 'رفع مستند مطلوب',
+        subtitle: 'الانتقال مباشرة إلى المستندات',
+        icon: 'fa-file-arrow-up',
+        action: () => {
+          setIsCommandPaletteOpen(false);
+          setCommandQuery('');
+          setActiveTab('documents');
+        },
+      },
+      {
+        id: 'action-ai',
+        type: 'إجراء',
+        title: 'فتح AI Chat',
+        subtitle: 'تلخيص أو سؤال سريع عن القضية',
+        icon: 'fa-sparkles',
+        action: () => {
+          setIsCommandPaletteOpen(false);
+          setCommandQuery('');
+          navigate('/aichat');
+        },
+      },
     ],
-    []
+    [navigate],
   );
+
+  const commandResults = useMemo(() => {
+    const query = commandQuery.trim().toLowerCase();
+    const items = [
+      ...commandQuickActions,
+      ...cases.map((c) => ({ id: c.id, type: 'قضية', title: c.title, subtitle: c.status, icon: 'fa-folder-open', action: () => { setSelectedCaseId(c.id); setActiveTab('cases'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
+      ...services.map((s) => ({ id: s.id, type: 'خدمة', title: s.title, subtitle: s.price, icon: 'fa-hand-holding-heart', action: () => { setActiveTab('services'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
+      ...documents.map((d) => ({ id: d.id, type: 'مستند', title: d.name, subtitle: d.caseName, icon: 'fa-file-lines', action: () => { setActiveTab('documents'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
+    ];
+
+    if (!query) return items.slice(0, 8);
+
+    return items.filter(
+      (item) =>
+        item.title.toLowerCase().includes(query) ||
+        item.subtitle.toLowerCase().includes(query) ||
+        item.type.toLowerCase().includes(query)
+    );
+  }, [cases, commandQuery, commandQuickActions, documents, services, setSelectedCaseId, setActiveTab, setIsCommandPaletteOpen, setCommandQuery]);
 
   const handleQuickAction = (actionId: string) => {
     if (actionId === 'start') {
@@ -524,14 +848,18 @@ export default function UserDashboard() {
               </div>
             </div>
           )}
-          {filteredLawyers.length > 0 ? (
+          {isInitialLoading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <DashboardCardSkeleton key={index} rows={3} />
+            ))
+          ) : filteredLawyers.length > 0 ? (
             filteredLawyers.map((lawyer) => (
               <button
                 key={lawyer.id}
                 type="button"
                 onClick={() => setSelectedLawyerId(lawyer.id)}
                 title={`عرض بطاقة ${lawyer.name}`}
-                className={`group relative overflow-hidden rounded-2xl border bg-white text-right transition-all duration-300 ${selectedLawyer.id === lawyer.id
+                className={`group relative overflow-hidden rounded-2xl border bg-white text-right transition-all duration-300 ${selectedLawyer?.id === lawyer.id
                   ? 'border-brand-navy ring-2 ring-brand-navy/5 shadow-xl scale-[1.02] z-10' :
                   followedLawyers.includes(lawyer.id) ? 'border-brand-gold bg-brand-gold/5 shadow-premium'
                     : 'hover:-translate-y-1 hover:border-brand-navy/40 hover:shadow-[0_30px_90px_-44px_rgba(15,23,42,0.22)]'
@@ -643,9 +971,14 @@ export default function UserDashboard() {
               </button>
             ))
           ) : (
-            <div className="rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-4 py-6 text-right">
-              <p className="text-sm font-bold text-brand-dark">لا توجد نتائج مطابقة حالياً</p>
-              <p className="mt-1 text-xs text-slate-500">جرّب تغيير التخصص أو استخدام كلمة بحث مختلفة.</p>
+            <div className="sm:col-span-2">
+              <DashboardEmptyState
+                icon="fa-solid fa-user-tie"
+                title="لم نعثر على محامٍ مطابق حالياً"
+                description="جرّب تغيير التخصص أو توسيع البحث، أو افتح قائمة المحامين الكاملة لاستكشاف خيارات أكثر."
+                actionLabel="عرض كل المحامين"
+                onAction={() => navigate('/lawyers')}
+              />
             </div>
           )}
         </div>
@@ -740,7 +1073,11 @@ export default function UserDashboard() {
                 </button>
               </>
             ) : (
-              <p className="py-10 text-center text-xs text-slate-400 font-bold italic">اختر محامياً لعرض التفاصيل...</p>
+              <DashboardEmptyState
+                icon="fa-solid fa-scale-balanced"
+                title="اختر محامياً لعرض التفاصيل"
+                description="بعد اختيار محامٍ من القائمة ستظهر هنا خبرته، التوفر الحالي، ورسوم الاستشارة."
+              />
             )}
           </div>
         </section>
@@ -750,52 +1087,175 @@ export default function UserDashboard() {
 
   const renderOverview = () => (
     <div className="space-y-4">
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_360px]">
-        <section className="space-y-4">
-          <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">أولوياتك لليوم</h3>
-                <p className="text-sm text-slate-500">إليك أهم الإجراءات التي تتطلب تدخلك لضمان سير قضيتك بنجاح.</p>
+      {isInitialLoading && (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_360px]">
+          <section className="space-y-4">
+            <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="animate-pulse space-y-4">
+                <div className="h-3 w-28 rounded-full bg-slate-200" />
+                <div className="h-8 w-2/3 rounded-full bg-slate-200" />
+                <div className="h-4 w-full rounded-full bg-slate-100" />
+                <div className="h-4 w-4/5 rounded-full bg-slate-100" />
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="rounded-[1.5rem] border border-slate-100 bg-slate-50 p-4">
+                      <div className="h-10 w-10 rounded-2xl bg-slate-200" />
+                      <div className="mt-3 h-4 w-3/4 rounded-full bg-slate-200" />
+                      <div className="mt-2 h-3 w-full rounded-full bg-slate-100" />
+                    </div>
+                  ))}
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => navigate('/aichat')}
-                className="rounded-xl bg-brand-navy px-4 py-2 text-sm font-bold text-white transition hover:bg-brand-dark"
-              >
-                فتح AI Chat
-              </button>
+            </div>
+            <DashboardCardSkeleton rows={4} />
+            <DashboardCardSkeleton rows={4} />
+          </section>
+          <aside className="space-y-4">
+            <DashboardCardSkeleton rows={4} />
+            <DashboardCardSkeleton rows={2} />
+            <DashboardCardSkeleton rows={3} />
+          </aside>
+        </div>
+      )}
+
+      {!isInitialLoading && isFirstTimeUser && (
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_360px]">
+          <section className="space-y-4">
+            <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#0d1832_0%,#13284d_54%,#163d67_100%)] p-6 text-white shadow-[0_30px_80px_-42px_rgba(15,23,42,0.8)]">
+              <p className="text-[11px] font-black uppercase tracking-[0.28em] text-brand-lightgold">Welcome</p>
+              <h3 className="mt-3 text-2xl font-black">ابدأ من لوحة قانونية جاهزة لتنظيم أول خطوة</h3>
+              <p className="mt-3 max-w-2xl text-sm font-bold leading-7 text-slate-200">
+                لا توجد قضايا أو مستندات بعد. يمكنك فتح أول طلب، استكشاف الخدمات القانونية، أو اختيار محامٍ مناسب لتبدأ التجربة بثقة.
+              </p>
+              <div className="mt-5 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => navigate('/cases', { state: { openNewCase: true } })}
+                  className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-brand-dark transition hover:bg-slate-100"
+                >
+                  ابدأ طلبك الأول
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('services')}
+                  className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/15"
+                >
+                  استعراض الخدمات
+                </button>
+              </div>
             </div>
 
-            <div className="mt-4 grid gap-3">
-              {urgentItems.map((item) => (
-                <div key={item.id} className={`rounded-3xl border-r-4 border border-slate-100 bg-slate-50/50 px-4 py-4 transition-colors hover:bg-white ${item.priority === 'high' ? 'border-r-red-500' : item.priority === 'medium' ? 'border-r-amber-500' : 'border-r-blue-500'}`}>
-                  <div className="flex items-center justify-between gap-3">
-                    <button
-                      type="button"
-                      onClick={item.action}
-                      className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-brand-navy shadow-sm transition hover:border-brand-navy hover:bg-brand-navy hover:text-white"
-                    >
-                      {item.cta}
-                    </button>
-                    <div className="flex-1 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <p className="text-sm font-bold text-brand-dark">{item.title}</p>
-                        <i className={`${item.icon} text-xs text-slate-400`}></i>
-                      </div>
-                      <p className="mt-1 text-xs text-slate-500">{item.note}</p>
-                    </div>
-                  </div>
-                </div>
-              ))}
+            <div className="grid gap-4 lg:grid-cols-2">
+              <DashboardEmptyState
+                icon="fa-folder-plus"
+                title="لا توجد قضايا مفتوحة بعد"
+                description="عند فتح أول قضية ستظهر هنا الأولويات، التقدم، والخطوات التالية بشكل تلقائي."
+                actionLabel="فتح قضية جديدة"
+                onAction={() => navigate('/cases', { state: { openNewCase: true } })}
+              />
+              <DashboardEmptyState
+                icon="fa-file-arrow-up"
+                title="مجلد المستندات بانتظار أول ملف"
+                description="ابدأ برفع مستند أساسي أو اختر خدمة قانونية وسيتم إعداد قائمة المتطلبات المناسبة لك."
+                actionLabel="رفع أول مستند"
+                onAction={() => setActiveTab('documents')}
+              />
             </div>
+          </section>
+
+          <aside className="space-y-4">
+            <DashboardEmptyState
+              icon="fa-compass-drafting"
+              title="مسارك التنفيذي سيظهر هنا"
+              description="بمجرد بدء أول خدمة، سنعرض لك أفضل خطوة تالية والمهام الأكثر أولوية."
+              actionLabel="استكشاف الخدمات"
+              onAction={() => setActiveTab('services')}
+            />
+            <DashboardEmptyState
+              icon="fa-regular fa-calendar-check"
+              title="لا توجد مواعيد حتى الآن"
+              description="بعد الحجز أو بدء قضية، ستظهر الجلسات والتذكيرات ضمن خط زمني واحد واضح."
+              actionLabel="حجز موعد"
+              onAction={() => navigate('/lawyers')}
+            />
+          </aside>
+        </div>
+      )}
+
+      {!isInitialLoading && !isFirstTimeUser && (
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_360px]">
+        <section className="space-y-4">
+          <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-[linear-gradient(135deg,#0d1832_0%,#13284d_54%,#163d67_100%)] p-5 text-white shadow-[0_30px_80px_-42px_rgba(15,23,42,0.8)] sm:p-6">
+            <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl text-right">
+                <p className="text-[11px] font-black uppercase tracking-[0.28em] text-brand-lightgold">Next Best Action</p>
+                <h3 className="mt-3 text-2xl font-black leading-tight sm:text-[2rem]">
+                  {topPriority ? topPriority.title : 'مسارك القانوني تحت السيطرة'}
+                </h3>
+                <p className="mt-3 text-sm font-bold leading-7 text-slate-200">
+                  {topPriority ? topPriority.note : 'لا توجد عناصر حرجة حالياً. يمكنك استخدام هذه المساحة لمراجعة القضايا والخدمات بهدوء.'}
+                </p>
+                <p className="mt-3 max-w-xl rounded-2xl border border-white/10 bg-white/10 px-4 py-3 text-xs font-bold leading-6 text-slate-200">
+                  {topPriority ? topPriority.reason : 'عند وصول تحديث جديد أو مستند مطلوب سيظهر هنا كأولوية تنفيذية مباشرة.'}
+                </p>
+              </div>
+
+              <div className="grid min-w-[260px] gap-3 self-stretch">
+                <button
+                  type="button"
+                  onClick={topPriority?.primaryAction ?? (() => setActiveTab('cases'))}
+                  className="rounded-2xl bg-white px-4 py-3 text-sm font-black text-brand-dark transition hover:bg-slate-100"
+                >
+                  {topPriority?.cta ?? 'فتح القضايا'}
+                </button>
+                {topPriority?.secondaryAction && topPriority.secondaryLabel && (
+                  <button
+                    type="button"
+                    onClick={topPriority.secondaryAction}
+                    className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 text-sm font-bold text-white transition hover:bg-white/15"
+                  >
+                    {topPriority.secondaryLabel}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => navigate('/aichat')}
+                  className="rounded-2xl border border-white/15 bg-transparent px-4 py-3 text-sm font-bold text-brand-lightgold transition hover:bg-white/10"
+                >
+                  اطلب تلخيصاً من AI
+                </button>
+              </div>
+            </div>
+
+            {urgentItems.length > 0 && (
+              <div className="mt-5 grid gap-3 lg:grid-cols-3">
+                {urgentItems.slice(0, 3).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={item.primaryAction}
+                    className="rounded-[1.5rem] border border-white/10 bg-white/8 px-4 py-4 text-right transition hover:bg-white/12"
+                  >
+                    <div className="flex flex-row-reverse items-start gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-brand-lightgold">
+                        <i className={item.icon} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-white">{item.title}</p>
+                        <p className="mt-1 text-xs font-bold leading-5 text-slate-200">{item.note}</p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">بادر باتخاذ إجراء</h3>
-                <p className="text-sm text-slate-500">اختر المسار الأنسب لاحتياجك الحالي: اطلب خدمة، ارفع وثائقك، أو نسّق جلسة استشارية.</p>
+                <h3 className="text-lg font-bold text-brand-dark">المسارات السريعة</h3>
+                <p className="text-sm text-slate-500">نفّذ أكثر الإجراءات استخداماً من دون التنقل بين الأقسام.</p>
               </div>
             </div>
 
@@ -821,43 +1281,33 @@ export default function UserDashboard() {
             </div>
           </div>
 
-          {/* New Helpful Feature: Guided Paths */}
           <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <div className="text-right">
-                <h3 className="text-lg font-bold text-brand-dark">متابعة سير الأعمال</h3>
-                <p className="text-sm text-slate-500">نظرة فاحصة على تقدم ملفاتك المفتوحة وآخر التحديثات الواردة عليها.</p>
+                <h3 className="text-lg font-bold text-brand-dark">الخط الزمني القانوني</h3>
+                <p className="text-sm text-slate-500">مسار موحد يجمع أهم التحديثات والمهام والمواعيد في مكان واحد.</p>
               </div>
-              <button
-                type="button"
-                onClick={() => setActiveTab('cases')}
-                className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-brand-navy transition hover:border-brand-navy hover:bg-slate-50"
-              >
-                عرض كل القضايا
-              </button>
             </div>
 
-            <div className="mt-4 grid gap-3">
-              {cases.map((item) => (
+            <div className="mt-4 space-y-3">
+              {filteredTimeline.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => {
-                    setSelectedCaseId(item.id);
-                    setActiveTab('cases');
-                  }}
-                  className="rounded-3xl border border-slate-100 bg-slate-50/50 p-4 text-right transition-all hover:border-brand-navy/30 hover:bg-white"
+                  onClick={item.action}
+                  className="group rounded-[1.6rem] border border-slate-100 bg-slate-50/60 p-4 text-right transition-all hover:border-brand-navy/25 hover:bg-white"
                 >
-                  <div className="flex items-start justify-between gap-3">
-                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold ${item.tone}`}>{item.status}</span>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-brand-dark">{item.title}</p>
-                      <p className="mt-1 text-xs text-slate-500">{item.nextStep}</p>
+                  <div className="flex flex-row-reverse items-start gap-3">
+                    <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${item.tone}`}>
+                      <i className={item.icon} />
                     </div>
-                  </div>
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                    <span>{item.deadline}</span>
-                    <span>{item.progress}% مكتمل</span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-[11px] font-bold text-slate-400">{item.meta}</span>
+                        <p className="text-sm font-black text-brand-dark group-hover:text-brand-navy">{item.title}</p>
+                      </div>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-500">{item.note}</p>
+                    </div>
                   </div>
                 </button>
               ))}
@@ -867,7 +1317,10 @@ export default function UserDashboard() {
 
         <aside className="space-y-4">
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="text-base font-bold text-brand-dark">ملخص اليوم</h3>
+            <div className="text-right">
+              <h3 className="text-base font-bold text-brand-dark">لوحة الصحة القانونية</h3>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">قياس سريع لجاهزية الملف والحركة المطلوبة منك.</p>
+            </div>
             <div className="mt-4 grid gap-3">
               {stats.map((stat) => (
                 <div key={stat.label} className="rounded-2xl border border-slate-100 bg-slate-50/50 px-4 py-4 text-right transition-colors hover:bg-white">
@@ -883,15 +1336,42 @@ export default function UserDashboard() {
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="text-base font-bold text-brand-dark">الخطوة التالية</h3>
-            <div className="mt-4 rounded-2xl bg-slate-50 px-4 py-4 text-right">
-              {nextActionCase ? (
+            <div className="text-right">
+              <h3 className="text-base font-bold text-brand-dark">توصية تنفيذية</h3>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">إجراء واحد واضح يعطيك أفضل تقدم الآن.</p>
+            </div>
+            <div className="mt-4 rounded-[1.6rem] border border-slate-100 bg-slate-50 px-4 py-4 text-right">
+              {topPriority ? (
                 <>
-                  <p className="text-sm font-bold text-brand-dark">{nextActionCase.title}</p>
-                  <p className="mt-1 text-xs text-slate-500">{nextActionCase.nextStep}</p>
-                  <div className="mt-3 flex items-center justify-between text-xs text-slate-500">
-                    <span>{nextActionCase.deadline}</span>
-                    <span>{nextActionCase.lawyer}</span>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black ${
+                      topPriority.level === 'critical' ? 'bg-red-100 text-red-700' :
+                      topPriority.level === 'high' ? 'bg-amber-100 text-amber-700' :
+                      topPriority.level === 'medium' ? 'bg-sky-100 text-sky-700' : 'bg-slate-200 text-slate-600'
+                    }`}>
+                      {topPriority.level === 'critical' ? 'حرج' : topPriority.level === 'high' ? 'عالٍ' : topPriority.level === 'medium' ? 'متوسط' : 'منخفض'}
+                    </span>
+                    <p className="text-sm font-black text-brand-dark">{topPriority.title}</p>
+                  </div>
+                  <p className="mt-2 text-xs font-bold leading-6 text-slate-500">{topPriority.note}</p>
+                  <p className="mt-3 rounded-xl bg-white px-3 py-3 text-[11px] font-bold leading-5 text-slate-600">{topPriority.reason}</p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={topPriority.primaryAction}
+                      className="flex-1 rounded-xl bg-brand-navy px-4 py-3 text-sm font-black text-white transition hover:bg-brand-dark"
+                    >
+                      {topPriority.cta}
+                    </button>
+                    {topPriority.secondaryAction && topPriority.secondaryLabel && (
+                      <button
+                        type="button"
+                        onClick={topPriority.secondaryAction}
+                        className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 transition hover:border-brand-navy hover:text-brand-navy"
+                      >
+                        {topPriority.secondaryLabel}
+                      </button>
+                    )}
                   </div>
                 </>
               ) : (
@@ -901,9 +1381,12 @@ export default function UserDashboard() {
           </section>
 
           <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
-            <h3 className="text-base font-bold text-brand-dark">مطلوب منك الآن</h3>
+            <div className="text-right">
+              <h3 className="text-base font-bold text-brand-dark">مطلوب منك الآن</h3>
+              <p className="mt-1 text-xs font-bold leading-5 text-slate-500">عناصر مباشرة تؤثر على سير العمل في هذا الأسبوع.</p>
+            </div>
             <div className="mt-4 space-y-3">
-              {requiredDocuments.map((doc) => (
+              {requiredDocuments.length > 0 ? requiredDocuments.slice(0, 3).map((doc) => (
                 <button
                   key={doc.id}
                   type="button"
@@ -913,7 +1396,11 @@ export default function UserDashboard() {
                   <p className="text-sm font-semibold text-red-700">{doc.name}</p>
                   <p className="mt-1 text-xs text-red-600">{doc.caseName}</p>
                 </button>
-              ))}
+              )) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-xs font-bold text-slate-400">
+                  لا توجد مستندات حرجة مطلوبة حالياً.
+                </div>
+              )}
               {upcomingScheduleItem ? (
                 <button
                   type="button"
@@ -930,6 +1417,7 @@ export default function UserDashboard() {
           </section>
         </aside>
       </div>
+      )}
     </div>
   );
 
@@ -970,55 +1458,71 @@ export default function UserDashboard() {
           )}
 
           {/* Cases Table - Responsive */}
-          <div className="mt-8 overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
-            <table className="w-full text-right text-sm md:table">
-              <thead className="hidden bg-slate-50 text-[11px] uppercase font-black tracking-[0.2em] text-slate-400 md:table-header-group">
-                <tr className="md:table-row">
-                  <th className="px-4 py-3">القضية</th>
-                  <th className="px-4 py-3">التقدم</th>
-                  <th className="px-4 py-3">الأولوية</th>
-                  <th className="px-4 py-3">الموعد</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 md:table-row-group">
-                {cases.map((item) => (
-                  <tr
-                    key={item.id}
-                    onClick={() => setSelectedCaseId(item.id)}
-                    className={`flex flex-col p-4 border border-slate-200 rounded-xl bg-white shadow-sm mb-3 md:table-row md:p-0 md:border-0 md:bg-transparent md:shadow-none md:mb-0 cursor-pointer transition-all ${selectedCaseId === item.id ? 'md:bg-brand-navy/[0.04]' : 'md:hover:bg-slate-50'}`}
-                  >
-                    <td className="md:table-cell md:px-4 md:py-4">
-                      <div className="md:min-w-0">
-                        <div className="flex items-center justify-end gap-2">
-                          {item.unread && <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span>}
-                          <p className="truncate text-sm font-bold text-brand-dark">{item.title}</p>
-                        </div>
-                        <p className="mt-1 truncate text-xs text-slate-500">{item.nextStep}</p>
-                      </div>
-                    </td>
-                    <td className="md:table-cell md:px-4 md:py-4">
-                      <div className="flex flex-col md:block">
-                        <span className="md:hidden text-xs font-bold text-slate-400 mb-1">التقدم</span>
-                        <span className="text-sm text-slate-600">{item.progress}%</span>
-                      </div>
-                    </td>
-                    <td className="md:table-cell md:px-4 md:py-4">
-                      <div className="flex flex-col md:block">
-                        <span className="md:hidden text-xs font-bold text-slate-400 mb-1">الأولوية</span>
-                        <span className="text-sm text-slate-600">{item.urgency}</span>
-                      </div>
-                    </td>
-                    <td className="md:table-cell md:px-4 md:py-4">
-                      <div className="flex flex-col md:block">
-                        <span className="md:hidden text-xs font-bold text-slate-400 mb-1">الموعد</span>
-                        <span className="text-sm text-slate-600">{item.deadline}</span>
-                      </div>
-                    </td>
+          {isInitialLoading ? (
+            <div className="mt-8">
+              <DashboardCardSkeleton rows={4} />
+            </div>
+          ) : cases.length > 0 ? (
+            <div className="mt-8 overflow-x-auto rounded-3xl border border-slate-200 bg-white shadow-sm">
+              <table className="w-full text-right text-sm md:table">
+                <thead className="hidden bg-slate-50 text-[11px] uppercase font-black tracking-[0.2em] text-slate-400 md:table-header-group">
+                  <tr className="md:table-row">
+                    <th className="px-4 py-3">القضية</th>
+                    <th className="px-4 py-3">التقدم</th>
+                    <th className="px-4 py-3">الأولوية</th>
+                    <th className="px-4 py-3">الموعد</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-slate-100 md:table-row-group">
+                  {cases.map((item) => (
+                    <tr
+                      key={item.id}
+                      onClick={() => setSelectedCaseId(item.id)}
+                      className={`flex flex-col p-4 border border-slate-200 rounded-xl bg-white shadow-sm mb-3 md:table-row md:p-0 md:border-0 md:bg-transparent md:shadow-none md:mb-0 cursor-pointer transition-all ${selectedCaseId === item.id ? 'md:bg-brand-navy/[0.04]' : 'md:hover:bg-slate-50'}`}
+                    >
+                      <td className="md:table-cell md:px-4 md:py-4">
+                        <div className="md:min-w-0">
+                          <div className="flex items-center justify-end gap-2">
+                            {item.unread && <span className="h-2.5 w-2.5 rounded-full bg-red-500"></span>}
+                            <p className="truncate text-sm font-bold text-brand-dark">{item.title}</p>
+                          </div>
+                          <p className="mt-1 truncate text-xs text-slate-500">{item.nextStep}</p>
+                        </div>
+                      </td>
+                      <td className="md:table-cell md:px-4 md:py-4">
+                        <div className="flex flex-col md:block">
+                          <span className="md:hidden text-xs font-bold text-slate-400 mb-1">التقدم</span>
+                          <span className="text-sm text-slate-600">{item.progress}%</span>
+                        </div>
+                      </td>
+                      <td className="md:table-cell md:px-4 md:py-4">
+                        <div className="flex flex-col md:block">
+                          <span className="md:hidden text-xs font-bold text-slate-400 mb-1">الأولوية</span>
+                          <span className="text-sm text-slate-600">{item.urgency}</span>
+                        </div>
+                      </td>
+                      <td className="md:table-cell md:px-4 md:py-4">
+                        <div className="flex flex-col md:block">
+                          <span className="md:hidden text-xs font-bold text-slate-400 mb-1">الموعد</span>
+                          <span className="text-sm text-slate-600">{item.deadline}</span>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="mt-8">
+              <DashboardEmptyState
+                icon="fa-solid fa-folder-open"
+                title="لا توجد قضايا لعرضها بعد"
+                description="عند إنشاء أول قضية ستظهر هنا خريطة الطريق، نسبة التقدم، والمهام المرتبطة بها."
+                actionLabel="ابدأ قضية جديدة"
+                onAction={() => navigate('/cases', { state: { openNewCase: true } })}
+              />
+            </div>
+          )}
         </div>
       </section>
 
@@ -1049,7 +1553,13 @@ export default function UserDashboard() {
                 </div>
               </>
             ) : (
-              <p className="py-4 text-center text-xs text-slate-400 font-bold italic">لا يوجد ملف مختار...</p>
+              <DashboardEmptyState
+                icon="fa-solid fa-scale-balanced"
+                title="اختر قضية أو ابدأ أول ملف"
+                description="بعد إنشاء أول قضية ستظهر هنا تفاصيل المحامي، الموعد القادم، والخطوة التنفيذية التالية."
+                actionLabel="فتح قضية جديدة"
+                onAction={() => navigate('/cases', { state: { openNewCase: true } })}
+              />
             )}
           </div>
         </section>
@@ -1084,35 +1594,45 @@ export default function UserDashboard() {
         </div>
       </div>
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {filteredServices.map((service) => (
-          <button
-            key={service.id}
-            className="group flex flex-col rounded-[2.5rem] border border-slate-200 bg-white p-6 text-right transition-all hover:border-brand-gold hover:shadow-premium"
-          >
-            <div className={`mb-6 flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-50 text-brand-navy shadow-sm transition-all group-hover:bg-brand-navy group-hover:text-white group-hover:scale-110`}>
-              <i className={`${service.icon} text-2xl`}></i>
-            </div>
-            <h4 className="text-lg font-black text-brand-dark group-hover:text-brand-navy">{service.title}</h4>
-            <p className="mt-2 flex-1 text-xs font-bold leading-6 text-slate-500">{service.description}</p>
-            <div className="mt-6 flex flex-col gap-2 border-t border-slate-100 pt-4">
-              <div className="flex flex-row-reverse items-center justify-between text-[11px] font-black">
-                <span className="text-slate-400">التكلفة:</span>
-                <span className="text-brand-navy">{service.price}</span>
-              </div>
-              <div className="flex flex-row-reverse items-center justify-between text-[11px] font-black">
-                <span className="text-slate-400">المدة:</span>
-                <span className="text-slate-600">{service.time}</span>
-              </div>
-            </div>
-          </button>
-        ))}
-      </div>
-      {filteredServices.length === 0 && (
-        <div className="py-20 text-center text-slate-400">
-          <i className="fa-solid fa-magnifying-glass mb-4 block text-4xl opacity-20"></i>
-          <p className="text-lg font-black">لا توجد خدمات متاحة في هذا التصنيف حالياً.</p>
+      {isInitialLoading ? (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <DashboardCardSkeleton key={index} rows={2} />
+          ))}
         </div>
+      ) : filteredServices.length > 0 ? (
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          {filteredServices.map((service) => (
+            <button
+              key={service.id}
+              className="group flex flex-col rounded-[2.5rem] border border-slate-200 bg-white p-6 text-right transition-all hover:border-brand-gold hover:shadow-premium"
+            >
+              <div className={`mb-6 flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-50 text-brand-navy shadow-sm transition-all group-hover:bg-brand-navy group-hover:text-white group-hover:scale-110`}>
+                <i className={`${service.icon} text-2xl`}></i>
+              </div>
+              <h4 className="text-lg font-black text-brand-dark group-hover:text-brand-navy">{service.title}</h4>
+              <p className="mt-2 flex-1 text-xs font-bold leading-6 text-slate-500">{service.description}</p>
+              <div className="mt-6 flex flex-col gap-2 border-t border-slate-100 pt-4">
+                <div className="flex flex-row-reverse items-center justify-between text-[11px] font-black">
+                  <span className="text-slate-400">التكلفة:</span>
+                  <span className="text-brand-navy">{service.price}</span>
+                </div>
+                <div className="flex flex-row-reverse items-center justify-between text-[11px] font-black">
+                  <span className="text-slate-400">المدة:</span>
+                  <span className="text-slate-600">{service.time}</span>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      ) : (
+        <DashboardEmptyState
+          icon="fa-solid fa-hand-holding-heart"
+          title="لا توجد خدمات في هذا التصنيف حالياً"
+          description="يمكنك تجربة تصنيف آخر أو الانتقال إلى قائمة المحامين لاختيار مسار قانوني مناسب مباشرة."
+          actionLabel="عرض المحامين"
+          onAction={() => navigate('/lawyers')}
+        />
       )}
 
       {renderLawyerFinder()}
@@ -1230,23 +1750,35 @@ export default function UserDashboard() {
         </div>
 
         <div className="mt-4 grid gap-3">
-          {documents.map((doc) => (
-            <article key={doc.id} className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${doc.status === 'مطلوب' ? 'bg-red-50 text-red-700' : doc.status === 'مكتمل' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
-                  {doc.status}
-                </span>
-                <div className="min-w-0 text-right">
-                  <p className="truncate text-sm font-bold text-brand-dark">{doc.name}</p>
-                  <p className="mt-1 text-xs text-slate-500">{doc.caseName}</p>
+          {isInitialLoading ? (
+            Array.from({ length: 4 }).map((_, index) => <DashboardCardSkeleton key={index} rows={2} />)
+          ) : documents.length > 0 ? (
+            documents.map((doc) => (
+              <article key={doc.id} className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${doc.status === 'مطلوب' ? 'bg-red-50 text-red-700' : doc.status === 'مكتمل' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'}`}>
+                    {doc.status}
+                  </span>
+                  <div className="min-w-0 text-right">
+                    <p className="truncate text-sm font-bold text-brand-dark">{doc.name}</p>
+                    <p className="mt-1 text-xs text-slate-500">{doc.caseName}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
-                <span>{doc.updatedAt}</span>
-                <span>{doc.type}</span>
-              </div>
-            </article>
-          ))}
+                <div className="mt-3 flex items-center justify-between text-xs text-slate-400">
+                  <span>{doc.updatedAt}</span>
+                  <span>{doc.type}</span>
+                </div>
+              </article>
+            ))
+          ) : (
+            <DashboardEmptyState
+              icon="fa-solid fa-file-lines"
+              title="لا توجد مستندات في مساحتك بعد"
+              description="عندما ترفع أول ملف أو تبدأ خدمة قانونية، ستظهر هنا المستندات المطلوبة والمكتملة بترتيب واضح."
+              actionLabel="رفع أول مستند"
+              onAction={() => navigate('/cases', { state: { focusArea: 'docs' } })}
+            />
+          )}
         </div>
       </section>
 
@@ -1254,12 +1786,18 @@ export default function UserDashboard() {
         <section className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
           <h3 className="text-base font-bold text-brand-dark">مطلوب منك</h3>
           <div className="mt-4 space-y-3">
-            {documents.filter((doc) => doc.status === 'مطلوب').map((doc) => (
-              <div key={doc.id} className="rounded-2xl bg-red-50 px-4 py-3 text-right">
-                <p className="text-sm font-semibold text-red-700">{doc.name}</p>
-                <p className="mt-1 text-xs text-red-600">{doc.caseName}</p>
+            {documents.filter((doc) => doc.status === 'مطلوب').length > 0 ? (
+              documents.filter((doc) => doc.status === 'مطلوب').map((doc) => (
+                <div key={doc.id} className="rounded-2xl bg-red-50 px-4 py-3 text-right">
+                  <p className="text-sm font-semibold text-red-700">{doc.name}</p>
+                  <p className="mt-1 text-xs text-red-600">{doc.caseName}</p>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-center text-xs font-bold text-slate-400">
+                لا توجد عناصر مطلوبة منك في هذا القسم حالياً.
               </div>
-            ))}
+            )}
           </div>
         </section>
       </aside>
@@ -1274,21 +1812,33 @@ export default function UserDashboard() {
           <p className="text-sm text-slate-500">كل ما هو قادم خلال الأيام القادمة في عرض واحد.</p>
         </div>
         <div className="relative mt-8 space-y-6 before:absolute before:right-5 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
-          {schedule.map((item) => (
-            <article key={item.id} className="relative pr-12">
-              <div className="absolute right-3 top-1 z-10 h-4 w-4 rounded-full border-4 border-white bg-brand-gold shadow-sm"></div>
-              <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 transition hover:bg-white hover:shadow-md">
-                <div className="flex items-center justify-between gap-3 mb-2">
-                  <span className="rounded-full bg-white border border-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500 uppercase">{item.type}</span>
-                  <span className="text-xs font-bold text-brand-navy">{item.time}</span>
+          {isInitialLoading ? (
+            Array.from({ length: 3 }).map((_, index) => <DashboardCardSkeleton key={index} rows={2} />)
+          ) : schedule.length > 0 ? (
+            schedule.map((item) => (
+              <article key={item.id} className="relative pr-12">
+                <div className="absolute right-3 top-1 z-10 h-4 w-4 rounded-full border-4 border-white bg-brand-gold shadow-sm"></div>
+                <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4 transition hover:bg-white hover:shadow-md">
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <span className="rounded-full bg-white border border-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500 uppercase">{item.type}</span>
+                    <span className="text-xs font-bold text-brand-navy">{item.time}</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-brand-dark">{item.title}</p>
+                    <p className="mt-1 text-xs text-slate-500 leading-relaxed">مرتبط بـ: {item.caseName}</p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-brand-dark">{item.title}</p>
-                  <p className="mt-1 text-xs text-slate-500 leading-relaxed">مرتبط بـ: {item.caseName}</p>
-                </div>
-              </div>
-            </article>
-          ))}
+              </article>
+            ))
+          ) : (
+            <DashboardEmptyState
+              icon="fa-regular fa-calendar-check"
+              title="لا توجد مواعيد أو تذكيرات حالياً"
+              description="عند تنسيق جلسة أو اقتراب مهلة مهمة ستظهر هنا ضمن تسلسل زمني واضح."
+              actionLabel="استكشاف المحامين"
+              onAction={() => navigate('/lawyers')}
+            />
+          )}
         </div>
       </section>
 
@@ -1336,20 +1886,32 @@ export default function UserDashboard() {
         </div>
 
         <div className="mt-4 grid gap-3">
-          {payments.map((item) => (
-            <div key={item.id} className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
-              <div className="flex items-center justify-between gap-3">
-                <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${item.status === 'مدفوع' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
-                  {item.status}
-                </span>
-                <div className="text-right">
-                  <p className="text-sm font-bold text-brand-dark">{item.label}</p>
-                  <p className="mt-1 text-xs text-slate-500">{item.date}</p>
+          {isInitialLoading ? (
+            Array.from({ length: 3 }).map((_, index) => <DashboardCardSkeleton key={index} rows={2} />)
+          ) : payments.length > 0 ? (
+            payments.map((item) => (
+              <div key={item.id} className="rounded-3xl border border-slate-200 bg-slate-50 px-4 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <span className={`rounded-full px-2 py-1 text-[11px] font-semibold ${item.status === 'مدفوع' ? 'bg-green-50 text-green-700' : 'bg-amber-50 text-amber-700'}`}>
+                    {item.status}
+                  </span>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-brand-dark">{item.label}</p>
+                    <p className="mt-1 text-xs text-slate-500">{item.date}</p>
+                  </div>
                 </div>
+                <p className="mt-3 text-right text-sm font-semibold text-brand-dark">{item.amount}</p>
               </div>
-              <p className="mt-3 text-right text-sm font-semibold text-brand-dark">{item.amount}</p>
-            </div>
-          ))}
+            ))
+          ) : (
+            <DashboardEmptyState
+              icon="fa-solid fa-wallet"
+              title="لا توجد حركة مالية بعد"
+              description="بمجرد دفع استشارة أو شحن الرصيد، ستظهر هنا الفواتير وسجل المصروفات بشكل منظم."
+              actionLabel="إضافة رصيد"
+              onAction={() => navigate('/billing')}
+            />
+          )}
         </div>
       </section>
 
@@ -1420,7 +1982,9 @@ export default function UserDashboard() {
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
             <i className="fa-solid fa-sparkles text-brand-gold"></i>
           </div>
-          <p className="text-xs font-black md:text-sm">نصيحة AI: بناءً على المسودة المرفوعة، ينصح بمراجعة بند "الصيانة التشغيلية" مع المحامي قبل انتهاء المهلة غداً.</p>
+          <p className="text-xs font-black md:text-sm">
+            توصية ذكية: {topPriority ? topPriority.reason : executiveSummary}
+          </p>
         </div>
         <button className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition"><i className="fa-solid fa-xmark"></i></button>
       </div>
@@ -1445,9 +2009,13 @@ export default function UserDashboard() {
                 </h1>
                 <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-500">
                   {activeTab === 'overview'
-                    ? 'أهلاً بك في مركز عملياتك القانوني. تابع مستجدات قضاياك، أنجز المهام المطلوبة، وتواصل مع خبرائك بضغطة زر واحدة.'
-                    : `أنت الآن داخل قسم ${activeTabMeta.label}. ${activeTabMeta.description} مع عرض مهيأ للاستخدام المكثف والوصول الأسرع إلى الإجراءات المهمة.`}
+                      ? 'أهلاً بك في مركز عملياتك القانوني. تابع مستجدات قضاياك، أنجز المهام المطلوبة، وتواصل مع خبرائك بضغطة زر واحدة.'
+                      : `أنت الآن داخل قسم ${activeTabMeta.label}. ${activeTabMeta.description} مع عرض مهيأ للاستخدام المكثف والوصول الأسرع إلى الإجراءات المهمة.`}
                 </p>
+                <div className="mt-4 rounded-[1.6rem] border border-brand-navy/10 bg-white/85 px-4 py-4 shadow-sm">
+                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-brand-gold">Executive Summary</p>
+                  <p className="mt-2 text-sm font-bold leading-7 text-brand-dark">{executiveSummary}</p>
+                </div>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1481,6 +2049,27 @@ export default function UserDashboard() {
                   <p className="mt-1 text-xs leading-5 text-slate-500">
                     اختصر الوصول للأعمال اليومية عبر إجراءات مباشرة وفلاتر عرض خفيفة.
                   </p>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white/70 p-3">
+                  <p className="mb-3 text-right text-[11px] font-semibold uppercase tracking-wide text-slate-400">أوضاع العمل</p>
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    {WORKSPACE_MODES.map((mode) => (
+                      <button
+                        key={mode.id}
+                        type="button"
+                        onClick={() => applyWorkspaceMode(mode.id)}
+                        className={`rounded-xl border px-3 py-3 text-right transition ${
+                          workspaceMode === mode.id
+                            ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/15'
+                            : 'border-slate-200 bg-white text-slate-600 hover:border-brand-navy/30 hover:text-brand-navy'
+                        }`}
+                      >
+                        <p className="text-sm font-black">{mode.label}</p>
+                        <p className={`mt-1 text-[11px] font-bold ${workspaceMode === mode.id ? 'text-white/75' : 'text-slate-400'}`}>{mode.note}</p>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="flex justify-end mt-4 lg:mt-0">
@@ -1565,6 +2154,7 @@ export default function UserDashboard() {
                     {' • '}
                     {headerFocus === 'all' ? 'كل الأنشطة' : headerFocus === 'urgent' ? 'الأولوية العالية' : 'العناصر التي تنتظر إجراءك'}
                   </p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">الوضع النشط: {currentModeMeta.label}</p>
                 </div>
               </div>
             </div>
@@ -1678,7 +2268,9 @@ export default function UserDashboard() {
                 <div className="max-h-[60vh] overflow-y-auto p-4">
                   {commandResults.length > 0 ? (
                     <div className="space-y-2">
-                      <p className="mb-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">النتائج</p>
+                      <p className="mb-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                        {commandQuery ? 'النتائج' : 'اقتراحات سريعة'}
+                      </p>
                       {commandResults.map((res) => (
                         <button
                           key={res.id}
