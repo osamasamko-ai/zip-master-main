@@ -84,6 +84,27 @@ export default function Auth() {
     return null;
   };
 
+  // تحسينات الحركة للنقاط الأساسية
+  const brandingContainerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.15,
+        delayChildren: 0.2,
+      },
+    },
+  };
+
+  const brandingItemVariants = {
+    hidden: { opacity: 0, x: 40 },
+    visible: {
+      opacity: 1,
+      x: 0,
+      transition: { duration: 0.6, ease: "easeOut" }
+    },
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -128,7 +149,7 @@ export default function Auth() {
       <div className="flex w-full flex-col justify-center px-6 py-12 md:px-24 lg:w-1/2 lg:py-0">
         <div className="max-w-md w-full mx-auto">
           <div className="flex flex-row items-center gap-3 mb-8">
-            <div className="w-12 h-12 grad-navy rounded-xl flex items-center justify-center text-brand-gold shadow-gold-glow">
+            <div className="w-12 h-12 bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] rounded-xl flex items-center justify-center text-brand-gold shadow-gold-glow">
               <i className="fa-solid fa-scale-balanced text-2xl"></i>
             </div>
             <div className="text-right">
@@ -256,7 +277,7 @@ export default function Auth() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-2xl bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
@@ -388,10 +409,10 @@ export default function Auth() {
                         onChange={(e) => setConfirmPassword(e.target.value)}
                         required
                         className={`w-full rounded-2xl border pl-16 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('confirmPassword') || (confirmPassword !== '' && password !== confirmPassword)
-                            ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10'
-                            : (confirmPassword !== '' && password === confirmPassword)
-                              ? 'border-emerald-200 bg-emerald-50/30 focus:border-emerald-500 focus:ring-emerald-500/10'
-                              : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                          ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10'
+                          : (confirmPassword !== '' && password === confirmPassword)
+                            ? 'border-emerald-200 bg-emerald-50/30 focus:border-emerald-500 focus:ring-emerald-500/10'
+                            : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
                           }`}
                       />
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -462,7 +483,7 @@ export default function Auth() {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="w-full rounded-2xl grad-navy py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="w-full rounded-2xl bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {loading ? (
                     <span className="flex items-center justify-center gap-2">
@@ -478,58 +499,74 @@ export default function Auth() {
       </div>
 
       {/* Left Side: Branding */}
-      < div className="hidden lg:flex w-1/2 grad-navy flex-col items-center justify-center text-white text-center px-12" >
-        <div className="max-w-lg">
-          <h2 className="text-4xl font-black mb-8 leading-tight">العدالة لم تعد بعيدة.. حقك الآن أقرب إليك من أي وقت مضى</h2>
+      <div className="hidden lg:flex w-1/2 bg-[linear-gradient(165deg,#060b19_0%,#0d1428_40%,#1B365D_100%)] relative flex-col items-center justify-center text-white text-center px-12 overflow-hidden">
+        {/* Decorative Elements for Depth */}
+        <div className="absolute -top-32 -left-32 w-[500px] h-[500px] bg-brand-gold/5 blur-[120px] rounded-full"></div>
+        <div className="absolute top-1/2 right-0 w-[400px] h-[400px] bg-brand-navy/40 blur-[100px] rounded-full translate-x-1/2"></div>
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.03)_0%,transparent_50%)]"></div>
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-[0.03] mix-blend-overlay"></div>
 
-          <div className="space-y-3 mb-10 text-gray-200 text-lg font-bold">
-            <p>هل تبحث عن استشارة قانونية رصينة وموثوقة؟</p>
-            <p>هل تواجه صعوبة في تتبع مسار قضيتك أو تائه في الخطوات الأولى؟</p>
-          </div>
+        <motion.div
+          variants={brandingContainerVariants}
+          initial="hidden"
+          animate="visible"
+          className="max-w-lg relative z-10"
+        >
+          <motion.h2 variants={brandingItemVariants} className="text-4xl font-black mb-6 leading-tight text-center">حقك القانوني.. بوضوح واحترافية</motion.h2>
 
-          <div className="mb-10">
-            <p className="text-xl font-black mb-6 text-brand-gold ">منصتنا الرقمية المتكاملة تضع الحل بين يديك:</p>
-            <div className="space-y-5 inline-block text-right">
-              <div className="flex flex-row-reverse items-center gap-4 text-right">
-                <p className="font-bold text-lg text-right">تواصل فوري ومباشر مع نخبة من المحامين المعتمدين</p>
-                <div className="w-8 h-8 rounded-full bg-brand-gold/20 flex items-center justify-center shrink-0">
+          <motion.p variants={brandingItemVariants} className="mb-12 text-gray-200 text-lg font-bold leading-relaxed text-center">
+            منصة القسطاس تدمج الخبرة القانونية بالذكاء الاصطناعي لضمان عدالة رقمية سريعة وموثوقة.
+          </motion.p>
+
+          <div className="mb-12">
+            <motion.p variants={brandingItemVariants} className="text-xl font-black mb-8 text-brand-gold text-right">لماذا القسطاس؟</motion.p>
+
+            <div className="space-y-6 flex flex-col items-end">
+              <motion.div variants={brandingItemVariants} className="flex flex-row-reverse items-center gap-5 text-right w-full">
+                <p className="font-bold text-lg text-right">نخبة المحامين المعتمدين بين يديك</p>
+                <div className="w-10 h-10 rounded-2xl bg-brand-gold/20 flex items-center justify-center shrink-0 shadow-sm border border-brand-gold/10">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
-              </div>
-              <div className="flex flex-row-reverse items-center gap-4 text-right">
-                <p className="font-bold text-lg text-right">شفافية تامة في تتبع سير الدعوى لحظة بلحظة</p>
-                <div className="w-8 h-8 rounded-full bg-brand-gold/20 flex items-center justify-center shrink-0">
+              </motion.div>
+              <motion.div variants={brandingItemVariants} className="flex flex-row-reverse items-center gap-5 text-right w-full">
+                <p className="font-bold text-lg text-right">شفافية مطلقة في تتبع مسار قضيتك</p>
+                <div className="w-10 h-10 rounded-2xl bg-brand-gold/20 flex items-center justify-center shrink-0 shadow-sm border border-brand-gold/10">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
-              </div>
-              <div className="flex flex-row-reverse items-center gap-4 text-right">
-                <p className="font-bold text-lg text-right">حلول قانونية دقيقة مبنية على خبرات تخصصية</p>
-                <div className="w-8 h-8 rounded-full bg-brand-gold/20 flex items-center justify-center shrink-0">
+              </motion.div>
+              <motion.div variants={brandingItemVariants} className="flex flex-row-reverse items-center gap-5 text-right w-full">
+                <p className="font-bold text-lg text-right">حلول ذكية مبنية على مراجع قانونية دقيقة</p>
+                <div className="w-10 h-10 rounded-2xl bg-brand-gold/20 flex items-center justify-center shrink-0 shadow-sm border border-brand-gold/10">
                   <i className="fa-solid fa-check text-brand-gold"></i>
                 </div>
-              </div>
+              </motion.div>
             </div>
           </div>
 
-          <div className="rounded-[2.5rem] bg-white/5 border border-white/10 p-8 mb-12 backdrop-blur-md text-center shadow-2xl">
-            <p className="text-xl font-black text-brand-gold mb-4 border-b border-white/10 pb-4 ">نحن لا نقدم خدمة فقط، بل نضمن حقك</p>
-            <div className="space-y-3 text-sm md:text-base font-bold text-gray-200 ">
-              <div className="flex flex-row-reverse items-start gap-3 ">
-                <p>ضمان استرجاع كامل الأتعاب في حال تخلّف المحامي عن المتابعة</p>
-                <i className="fa-solid fa-shield-halved text-brand-gold mt-1"></i>
+          <motion.div variants={brandingItemVariants} className="rounded-[2.5rem] bg-white/5 border border-white/10 p-8 mb-12 backdrop-blur-md text-center shadow-2xl">
+            <p className="text-xl font-black text-brand-gold mb-6 border-b border-white/10 pb-6 ">نضمن حقك.. دائماً</p>
+            <div className="space-y-3 text-sm md:text-base font-bold text-gray-100 ">
+              <div className="flex flex-row-reverse items-center gap-4 ">
+                <p>استرداد كامل الأتعاب عند أي تقصير في المتابعة</p>
+                <div className="w-8 h-8 rounded-full bg-brand-gold/15 flex items-center justify-center shrink-0 shadow-gold-glow">
+                  <i className="fa-solid fa-shield-halved text-brand-gold text-sm"></i>
+                </div>
               </div>
-              <div className="flex flex-row-reverse items-start gap-3 ">
-                <p>توفير محامٍ بديل فوراً لضمان استمرارية دعواك دون انقطاع</p>
-                <i className="fa-solid fa-user-tie text-brand-gold mt-1"></i>
+              <div className="flex flex-row-reverse items-center gap-4 ">
+                <p>توفير بديل فوري لضمان استمرار دعواك دون انقطاع</p>
+                <div className="w-8 h-8 rounded-full bg-brand-gold/15 flex items-center justify-center shrink-0 shadow-gold-glow">
+                  <i className="fa-solid fa-user-tie text-brand-gold text-sm"></i>
+                </div>
               </div>
             </div>
-          </div>
+          </motion.div>
 
-          <div className="space-y-4 ">
-            <p className="text-lg font-bold text-gray-300">اتخذ الخطوة الأولى نحو استعادة حقوقك اليوم</p>
-            <h3 className="text-4xl font-black text-brand-gold tracking-tight">العدالة في متناول الجميع</h3>
-          </div>
-        </div>
+          <motion.div variants={brandingItemVariants} className="space-y-4 mt-8 p-10 rounded-[3rem] bg-white/[0.02] border border-white/5 backdrop-blur-sm shadow-inner relative overflow-hidden group transition-all duration-500 hover:bg-white/[0.04]">
+            <div className="absolute -right-20 -bottom-20 w-48 h-48 bg-brand-gold/10 blur-[90px] rounded-full group-hover:bg-brand-gold/20 transition-all duration-700"></div>
+            <p className="text-xl font-bold text-gray-100 relative z-10">استعد حقوقك الآن</p>
+            <h3 className="text-5xl font-black text-brand-gold tracking-tighter mt-2 relative z-10 drop-shadow-2xl">العدالة.. في متناول يدك</h3>
+          </motion.div>
+        </motion.div>
       </div >
     </div >
   );
