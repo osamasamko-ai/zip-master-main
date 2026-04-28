@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAuth, Role } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,8 +14,76 @@ export default function Auth() {
   const [selectedRole, setSelectedRole] = useState<Role>('user');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [rememberMe, setRememberMe] = useState(false);
+  const [touchedFields, setTouchedFields] = useState<Set<string>>(new Set());
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [forgotPasswordMessage, setForgotPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const { login, register } = useAuth();
   const navigate = useNavigate();
+
+  // Load saved email on component mount
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    if (savedEmail) {
+      setEmail(savedEmail);
+      setRememberMe(true);
+    }
+  }, []);
+
+  const handleFieldTouch = (fieldName: string) => {
+    setTouchedFields(prev => new Set([...prev, fieldName]));
+  };
+
+  // Handle remember me functionality
+  const handleRememberMeChange = (checked: boolean) => {
+    setRememberMe(checked);
+    if (checked && email) {
+      localStorage.setItem('rememberedEmail', email);
+    } else {
+      localStorage.removeItem('rememberedEmail');
+    }
+  };
+
+  // Handle email change and update localStorage if remember me is checked
+  const handleEmailChange = (value: string) => {
+    setEmail(value);
+    if (rememberMe) {
+      localStorage.setItem('rememberedEmail', value);
+    }
+  };
+
+  // Handle forgot password
+  const handleForgotPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotPasswordLoading(true);
+    setForgotPasswordMessage(null);
+
+    try {
+      // TODO: Replace with actual API call to your backend
+      // For now, we'll simulate the request
+      await new Promise(resolve => setTimeout(resolve, 1500));
+
+      setForgotPasswordMessage({
+        type: 'success',
+        text: `تم إرسال رابط إعادة تعيين كلمة المرور إلى ${forgotEmail}. يرجى التحقق من بريدك الإلكتروني.`
+      });
+
+      setTimeout(() => {
+        setShowForgotPassword(false);
+        setForgotEmail('');
+        setForgotPasswordMessage(null);
+      }, 3000);
+    } catch (err: any) {
+      setForgotPasswordMessage({
+        type: 'error',
+        text: 'فشل إرسال رابط إعادة التعيين. يرجى المحاولة مرة أخرى.'
+      });
+    } finally {
+      setForgotPasswordLoading(false);
+    }
+  };
 
   // تأثير المغناطيس للأزرار
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
@@ -63,6 +131,20 @@ export default function Auth() {
     const labels = ['ضعيفة جداً', 'ضعيفة', 'متوسطة', 'قوية', 'قوية جداً'];
     const colors = ['bg-slate-200', 'bg-red-500', 'bg-amber-500', 'bg-emerald-500', 'bg-blue-500'];
     return { label: labels[passwordStrength], color: colors[passwordStrength] };
+  };
+
+  const getPasswordRequirements = () => {
+    return {
+      minLength: password.length >= 8,
+      hasUpperCase: /[A-Z]/.test(password),
+      hasNumber: /\d/.test(password),
+      hasSpecial: /[^A-Za-z0-9]/.test(password),
+    };
+  };
+
+  const allRequirementsMet = () => {
+    const req = getPasswordRequirements();
+    return req.minLength && req.hasUpperCase && req.hasNumber && req.hasSpecial;
   };
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
@@ -252,12 +334,6 @@ export default function Auth() {
               </div>
             </div>
           </motion.div>
-
-          <motion.div variants={brandingItemVariants} className="mx-4 space-y-4 mt-8 p-8 lg:p-10 rounded-[2.5rem] lg:rounded-[3rem] bg-white/[0.02] border border-white/5 backdrop-blur-sm shadow-inner relative overflow-hidden group transition-all duration-500 hover:bg-white/[0.04]">
-            <div className="absolute -right-20 -bottom-20 w-48 h-48 bg-brand-gold/10 blur-[90px] rounded-full group-hover:bg-brand-gold/20 transition-all duration-700"></div>
-            <p className="text-lg lg:text-xl font-bold text-gray-100 relative z-10">استعد حقوقك الآن</p>
-            <h3 className="text-3xl lg:text-5xl font-black text-brand-gold tracking-tighter mt-2 relative z-10 drop-shadow-2xl">العدالة.. في متناول يدك</h3>
-          </motion.div>
         </motion.div>
       </div>
 
@@ -311,13 +387,24 @@ export default function Auth() {
             {error && (
               <motion.div
                 key={error}
-                initial={{ x: 0, opacity: 0 }}
-                animate={{ x: [0, -10, 10, -10, 10, 0], opacity: 1 }}
-                transition={{ duration: 0.4 }}
-                exit={{ opacity: 0 }}
-                className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-red-700 text-xs font-bold leading-relaxed text-right"
+                initial={{ x: 0, opacity: 0, y: -10 }}
+                animate={{ x: 0, opacity: 1, y: 0 }}
+                transition={{ duration: 0.3 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="mb-6 p-4 bg-red-50 border border-red-200 rounded-2xl text-right flex gap-3 items-start"
               >
-                {error}
+                <div className="flex-shrink-0 mt-0.5">
+                  <i className="fa-solid fa-circle-exclamation text-red-600 text-lg"></i>
+                </div>
+                <div>
+                  <p className="text-red-700 text-xs font-bold leading-relaxed">{error}</p>
+                </div>
+                <button
+                  onClick={() => setError(null)}
+                  className="flex-shrink-0 text-red-400 hover:text-red-600 transition-colors"
+                >
+                  <i className="fa-solid fa-xmark text-sm"></i>
+                </button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -361,11 +448,12 @@ export default function Auth() {
                   <motion.div animate={getFieldError('email') ? { x: [0, -4, 4, -4, 4, 0] } : {}} transition={{ duration: 0.4 }}>
                     <input
                       type="email"
-                      placeholder="name@example.com"
+                      placeholder="your@email.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(e) => handleEmailChange(e.target.value)}
+                      onBlur={() => handleFieldTouch('email')}
                       required
-                      className={`w-full rounded-2xl border px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('email') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                      className={`w-full rounded-2xl border px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition-all duration-200 focus:bg-white outline-none focus:ring-4 shadow-inner placeholder:text-slate-400 ${getFieldError('email') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5 hover:border-slate-300'
                         }`}
                       dir="ltr"
                     />
@@ -374,8 +462,9 @@ export default function Auth() {
                     <motion.p
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="mt-1.5 text-right text-[10px] font-black text-red-500"
+                      className="mt-1.5 text-right text-[10px] font-black text-red-500 flex items-center justify-end gap-1"
                     >
+                      <i className="fa-solid fa-times-circle"></i>
                       {error}
                     </motion.p>
                   )}
@@ -389,14 +478,15 @@ export default function Auth() {
                         placeholder="••••••••"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
+                        onBlur={() => handleFieldTouch('password')}
                         required
-                        className={`w-full rounded-2xl border pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition focus:bg-white outline-none focus:ring-4 shadow-inner ${getFieldError('password') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5'
+                        className={`w-full rounded-2xl border pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 transition-all duration-200 focus:bg-white outline-none focus:ring-4 shadow-inner placeholder:text-slate-400 ${getFieldError('password') ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-red-500/10' : 'border-slate-200 bg-slate-50 focus:border-brand-navy focus:ring-brand-navy/5 hover:border-slate-300'
                           }`}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
-                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1"
+                        className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-brand-navy transition-colors p-1 hover:bg-slate-100 rounded-lg"
                       >
                         <i className={`fa-solid ${showPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
                       </button>
@@ -406,21 +496,51 @@ export default function Auth() {
                     <motion.p
                       initial={{ opacity: 0, y: -10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="mt-1.5 text-right text-[10px] font-black text-red-500"
+                      className="mt-1.5 text-right text-[10px] font-black text-red-500 flex items-center justify-end gap-1"
                     >
+                      <i className="fa-solid fa-times-circle"></i>
                       {error}
                     </motion.p>
                   )}
                 </div>
+
+                <div className="flex items-center justify-between pt-2">
+                  <motion.label whileHover={{ scale: 1.02 }} className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => handleRememberMeChange(e.target.checked)}
+                      className="w-4 h-4 accent-brand-navy rounded cursor-pointer"
+                    />
+                    <span className="text-xs font-bold text-slate-600">تذكرني</span>
+                  </motion.label>
+                  <motion.button
+                    type="button"
+                    onClick={() => setShowForgotPassword(true)}
+                    whileHover={{ scale: 1.05, color: '#1B365D' }}
+                    whileTap={{ scale: 0.98 }}
+                    className="text-xs font-bold text-slate-400 hover:text-brand-navy transition-colors relative group"
+                  >
+                    هل نسيت كلمة المرور؟
+                    <span className="absolute bottom-0 left-0 w-0 h-0.5 bg-brand-navy transition-all duration-300 group-hover:w-full"></span>
+                  </motion.button>
+                </div>
                 <motion.button
                   type="submit"
+                  disabled={loading}
                   onMouseMove={handleMagnetMove}
                   onMouseLeave={resetMagnet}
                   animate={{ x: mousePos.x, y: mousePos.y }}
                   transition={{ type: 'spring', stiffness: 150, damping: 15 }}
-                  className="w-full rounded-2xl bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={{ scale: 1.01, boxShadow: "0 0 25px rgba(197, 160, 89, 0.4)" }}
+                  whileTap={{ scale: 0.99 }}
+                  className="w-full rounded-2xl bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all duration-300 hover:shadow-2xl hover:shadow-brand-navy/30 hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:shadow-lg disabled:hover:translate-y-0 relative overflow-hidden group"
                 >
-                  دخول للمنصة
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    <i className="fa-solid fa-sign-in-alt"></i>
+                    دخول للمنصة
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-0 group-hover:opacity-20 transform group-hover:translate-x-full transition-all duration-500" style={{ width: '100%' }}></div>
                 </motion.button>
               </motion.form>
             ) : (
@@ -503,16 +623,41 @@ export default function Auth() {
                     </div>
                   </motion.div>
                   {password && (
-                    <div className="mt-2 space-y-2 px-1">
+                    <div className="mt-3 space-y-3 px-1">
                       <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider">
                         <span className={passwordStrength === 4 ? 'text-blue-600' : 'text-slate-400'}>
                           {getStrengthUI().label}
                         </span>
                         <span className="text-slate-400">قوة كلمة المرور</span>
                       </div>
-                      <div className="flex h-1 gap-1 overflow-hidden rounded-full bg-slate-100">
+                      <div className="flex h-1.5 gap-1 overflow-hidden rounded-full bg-slate-100">
                         {[1, 2, 3, 4].map((step) => (
-                          <div key={step} className={`h-full flex-1 transition-all duration-500 ${passwordStrength >= step ? getStrengthUI().color : 'bg-transparent'}`} />
+                          <motion.div
+                            key={step}
+                            initial={{ scaleX: 0 }}
+                            animate={{ scaleX: 1 }}
+                            className={`h-full flex-1 transition-all duration-500 origin-right rounded-full ${passwordStrength >= step ? getStrengthUI().color : 'bg-slate-200'}`}
+                          />
+                        ))}
+                      </div>
+                      {/* Password Requirements Checklist */}
+                      <div className="mt-3 space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider mb-2">متطلبات كلمة المرور:</p>
+                        {[
+                          { met: getPasswordRequirements().minLength, text: '8 أحرف على الأقل' },
+                          { met: getPasswordRequirements().hasUpperCase, text: 'حرف كبير واحد على الأقل' },
+                          { met: getPasswordRequirements().hasNumber, text: 'رقم واحد على الأقل' },
+                          { met: getPasswordRequirements().hasSpecial, text: 'رمز خاص واحد على الأقل' },
+                        ].map((req, idx) => (
+                          <motion.div
+                            key={idx}
+                            initial={{ opacity: 0, x: -10 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            className={`flex items-center gap-2 text-right text-[9px] font-bold ${req.met ? 'text-emerald-600' : 'text-slate-400'}`}
+                          >
+                            <i className={`fa-solid ${req.met ? 'fa-check-circle' : 'fa-circle'} text-xs`}></i>
+                            {req.text}
+                          </motion.div>
                         ))}
                       </div>
                     </div>
@@ -549,19 +694,31 @@ export default function Auth() {
                       <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-2">
                         <AnimatePresence mode="wait">
                           {confirmPassword !== '' && (
-                            <motion.i
+                            <motion.div
                               key={password === confirmPassword ? 'match' : 'mismatch'}
                               initial={{ scale: 0, opacity: 0 }}
                               animate={{ scale: 1, opacity: 1 }}
                               exit={{ scale: 0, opacity: 0 }}
-                              className={`fa-solid ${password === confirmPassword ? 'fa-circle-check text-emerald-500' : 'fa-circle-xmark text-red-500'} text-xs`}
-                            />
+                              className="flex items-center"
+                            >
+                              {password === confirmPassword ? (
+                                <motion.div className="flex items-center gap-1">
+                                  <i className="fa-solid fa-circle-check text-emerald-500 text-sm"></i>
+                                  <span className="text-[8px] font-black text-emerald-600">متطابقة</span>
+                                </motion.div>
+                              ) : (
+                                <motion.div className="flex items-center gap-1">
+                                  <i className="fa-solid fa-circle-xmark text-red-500 text-sm"></i>
+                                  <span className="text-[8px] font-black text-red-600">غير متطابقة</span>
+                                </motion.div>
+                              )}
+                            </motion.div>
                           )}
                         </AnimatePresence>
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                          className="text-slate-400 hover:text-brand-navy transition-colors p-1"
+                          className="text-slate-400 hover:text-brand-navy transition-colors p-1 hover:bg-slate-100 rounded-lg"
                         >
                           <i className={`fa-solid ${showConfirmPassword ? 'fa-eye-slash' : 'fa-eye'} text-xs`}></i>
                         </button>
@@ -583,11 +740,12 @@ export default function Auth() {
                   <div className="grid grid-cols-2 gap-3">
                     <motion.button
                       type="button"
+                      whileHover={{ scale: 1.02, y: -2 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setSelectedRole('user')}
-                      className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 ${selectedRole === 'user' ? 'border-brand-navy bg-brand-navy/5 shadow-md ring-4 ring-brand-navy/5' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+                      className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 cursor-pointer ${selectedRole === 'user' ? 'border-brand-navy bg-brand-navy/5 shadow-lg ring-4 ring-brand-navy/10' : 'border-slate-100 bg-slate-50 hover:border-brand-navy/40 hover:bg-slate-100 shadow-sm'}`}
                     >
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedRole === 'user' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/30' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${selectedRole === 'user' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/40' : 'bg-white text-slate-400 border border-slate-100 shadow-sm group-hover:bg-brand-navy/5'}`}>
                         <i className="fa-solid fa-user"></i>
                       </div>
                       <div>
@@ -597,11 +755,12 @@ export default function Auth() {
                     </motion.button>
                     <motion.button
                       type="button"
+                      whileHover={{ scale: 1.02, y: -2 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={() => setSelectedRole('pro')}
-                      className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 ${selectedRole === 'pro' ? 'border-brand-navy bg-brand-navy/5 shadow-md ring-4 ring-brand-navy/5' : 'border-slate-100 bg-slate-50 hover:border-slate-200'}`}
+                      className={`p-4 rounded-3xl border-2 transition-all text-right flex flex-col gap-2 cursor-pointer ${selectedRole === 'pro' ? 'border-brand-navy bg-brand-navy/5 shadow-lg ring-4 ring-brand-navy/10' : 'border-slate-100 bg-slate-50 hover:border-brand-navy/40 hover:bg-slate-100 shadow-sm'}`}
                     >
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${selectedRole === 'pro' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/30' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${selectedRole === 'pro' ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/40' : 'bg-white text-slate-400 border border-slate-100 shadow-sm'}`}>
                         <i className="fa-solid fa-user-tie"></i>
                       </div>
                       <div>
@@ -613,15 +772,136 @@ export default function Auth() {
                 </div>
                 <motion.button
                   type="submit"
+                  disabled={loading}
                   onMouseMove={handleMagnetMove}
                   onMouseLeave={resetMagnet}
                   animate={{ x: mousePos.x, y: mousePos.y }}
                   transition={{ type: 'spring', stiffness: 150, damping: 15 }}
-                  className="w-full rounded-2xl bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                  whileHover={{ scale: 1.01, boxShadow: "0 0 25px rgba(197, 160, 89, 0.4)" }}
+                  whileTap={{ scale: 0.99 }}
+                  className="w-full rounded-2xl bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] py-4 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all duration-300 hover:shadow-2xl hover:shadow-brand-navy/30 hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:shadow-lg disabled:hover:translate-y-0 relative overflow-hidden group"
                 >
-                  فتح حساب جديد
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    <i className="fa-solid fa-user-plus"></i>
+                    فتح حساب جديد
+                  </span>
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white to-transparent opacity-0 group-hover:opacity-20 transform group-hover:translate-x-full transition-all duration-500" style={{ width: '100%' }}></div>
                 </motion.button>
               </motion.form>
+            )}
+          </AnimatePresence>
+
+          {/* Forgot Password Modal */}
+          <AnimatePresence>
+            {showForgotPassword && (
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1000]"
+                onClick={() => setShowForgotPassword(false)}
+              >
+                <motion.div
+                  initial={{ opacity: 0, y: 20, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 20, scale: 0.95 }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="bg-white rounded-3xl p-8 w-full max-w-md mx-4 shadow-2xl"
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-6">
+                    <button
+                      onClick={() => setShowForgotPassword(false)}
+                      className="text-slate-400 hover:text-slate-600 transition-colors p-1"
+                    >
+                      <i className="fa-solid fa-times text-lg"></i>
+                    </button>
+                    <h2 className="text-xl font-black text-brand-navy">إعادة تعيين كلمة المرور</h2>
+                    <div className="w-8" />
+                  </div>
+
+                  <p className="text-sm text-slate-600 text-right mb-6">
+                    أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور.
+                  </p>
+
+                  {/* Message Display */}
+                  <AnimatePresence>
+                    {forgotPasswordMessage && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className={`mb-6 p-4 rounded-2xl flex gap-3 items-start ${forgotPasswordMessage.type === 'success'
+                            ? 'bg-emerald-50 border border-emerald-200'
+                            : 'bg-red-50 border border-red-200'
+                          }`}
+                      >
+                        <div className={`flex-shrink-0 mt-0.5 ${forgotPasswordMessage.type === 'success' ? 'text-emerald-600' : 'text-red-600'}`}>
+                          <i className={`fa-solid ${forgotPasswordMessage.type === 'success' ? 'fa-check-circle' : 'fa-circle-exclamation'} text-lg`}></i>
+                        </div>
+                        <p className={`text-sm font-bold ${forgotPasswordMessage.type === 'success' ? 'text-emerald-700' : 'text-red-700'}`}>
+                          {forgotPasswordMessage.text}
+                        </p>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  {/* Form */}
+                  <form onSubmit={handleForgotPassword} className="space-y-6">
+                    <div>
+                      <label className="mb-2 block text-right text-[11px] font-black uppercase tracking-widest text-slate-400">
+                        البريد الإلكتروني
+                      </label>
+                      <motion.input
+                        type="email"
+                        placeholder="your@email.com"
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        required
+                        disabled={forgotPasswordLoading}
+                        className="w-full rounded-2xl border border-slate-200 px-4 py-3.5 text-right text-sm font-bold text-slate-700 transition-all duration-200 focus:bg-white outline-none focus:ring-4 focus:border-brand-navy focus:ring-brand-navy/5 shadow-inner placeholder:text-slate-400 disabled:bg-slate-50 disabled:opacity-60"
+                        dir="ltr"
+                      />
+                    </div>
+
+                    <div className="flex gap-3">
+                      <motion.button
+                        type="button"
+                        onClick={() => setShowForgotPassword(false)}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        disabled={forgotPasswordLoading}
+                        className="flex-1 rounded-2xl border-2 border-slate-200 py-3 font-bold text-sm text-slate-600 transition-all hover:border-slate-300 hover:bg-slate-50 disabled:opacity-60"
+                      >
+                        إلغاء
+                      </motion.button>
+                      <motion.button
+                        type="submit"
+                        disabled={forgotPasswordLoading || !forgotEmail}
+                        whileHover={{ scale: 1.02 }}
+                        whileTap={{ scale: 0.98 }}
+                        className="flex-1 rounded-2xl bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] py-3 font-black text-sm text-white shadow-lg shadow-brand-navy/20 transition-all hover:shadow-2xl hover:shadow-brand-navy/30 disabled:opacity-60 disabled:cursor-not-allowed relative overflow-hidden"
+                      >
+                        {forgotPasswordLoading ? (
+                          <span className="flex items-center justify-center gap-2">
+                            <motion.i
+                              animate={{ rotate: 360 }}
+                              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                              className="fa-solid fa-spinner text-sm"
+                            />
+                            إرسال
+                          </span>
+                        ) : (
+                          <span className="flex items-center justify-center gap-2">
+                            <i className="fa-solid fa-envelope text-sm"></i>
+                            إرسال رابط التعيين
+                          </span>
+                        )}
+                      </motion.button>
+                    </div>
+                  </form>
+                </motion.div>
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
