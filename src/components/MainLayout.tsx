@@ -2,11 +2,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useNotifications } from '../context/NotificationContext';
 
 export default function MainLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications();
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
     announcement: string;
@@ -206,15 +208,48 @@ export default function MainLayout() {
             </button>
 
             <div className="relative">
-              <button
-                className={`flex items-center justify-center rounded-xl bg-slate-50 text-slate-500 transition-all hover:bg-white hover:text-brand-navy hover:shadow-sm group ${isScrolled ? 'h-9 w-9' : 'h-10 w-10'}`}
-              >
-                <i className="fa-regular fa-bell"></i>
-                <span className={`absolute flex h-2 w-2 ${isScrolled ? 'right-2 top-2' : 'right-2.5 top-2.5'}`}>
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75"></span>
-                  <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500"></span>
-                </span>
-              </button>
+              <NotificationBell />
+              <AnimatePresence>
+                {isNotificationsOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    className="absolute left-0 top-full mt-3 w-80 overflow-hidden rounded-[2rem] border border-slate-200 bg-white text-right shadow-2xl z-50 origin-top-left"
+                  >
+                    <div className="flex items-center justify-between border-b border-slate-50 bg-slate-50/50 p-4">
+                      <button onClick={clearAllNotifications} className="text-[10px] font-black text-slate-400 hover:text-red-500">مسح الكل</button>
+                      <h4 className="text-xs font-black text-brand-dark">التنبيهات</h4>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                      {notifications.length > 0 ? notifications.map((n) => (
+                        <div
+                          key={n.id}
+                          onClick={() => {
+                            markAsRead(n.id);
+                            if (n.link) navigate(n.link);
+                            setIsNotificationsOpen(false);
+                          }}
+                          className={`cursor-pointer border-b border-slate-50 p-4 transition hover:bg-slate-50 last:border-0 ${!n.read ? 'bg-brand-navy/[0.02]' : ''}`}
+                        >
+                          <div className="mb-1 flex items-center justify-between">
+                            <span className="text-[9px] font-bold text-slate-400">
+                              {new Date(n.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <p className={`text-xs font-black ${!n.read ? 'text-brand-navy' : 'text-slate-600'}`}>{n.title}</p>
+                          </div>
+                          <p className="text-[11px] font-bold leading-relaxed text-slate-500">{n.message}</p>
+                        </div>
+                      )) : (
+                        <div className="p-10 text-center text-slate-300">
+                          <i className="fa-solid fa-bell-slash mb-3 block text-3xl opacity-20"></i>
+                          <p className="text-xs font-bold">لا توجد تنبيهات جديدة</p>
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div className="h-6 w-px bg-slate-200 mx-1"></div>

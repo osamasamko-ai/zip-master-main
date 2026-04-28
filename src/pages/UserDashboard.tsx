@@ -3,7 +3,6 @@ import { useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { AnimatePresence, motion } from 'framer-motion';
 import FollowButton from '../components/FollowButton';
-import { useNotifications } from '../context/NotificationContext';
 import NoticePanel from '../components/ui/NoticePanel';
 import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 import apiClient from '../api/client';
@@ -235,7 +234,6 @@ export default function UserDashboard() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications(); // Use global notifications
   const { setSosOpen } = useOutletContext<MainLayoutContext>();
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [dashboardData, setDashboardData] = useState<{
@@ -1935,50 +1933,12 @@ export default function UserDashboard() {
 
   return (
     <div className="app-view fade-in w-full max-w-full overflow-x-hidden">
-      {/* Proactive Notification Banner */}
-      <div className="mb-5 flex items-center justify-between rounded-2xl bg-brand-navy/95 backdrop-blur-md p-4 text-white shadow-lg shadow-brand-navy/20 animate-in slide-in-from-top duration-500 border border-white/10">
-        <div className="flex items-center gap-3 min-w-0 relative"> {/* Added relative for dropdown positioning */}
-          <NotificationBell /> {/* Use the NotificationBell component from context */}
-          <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 border border-white/10">
+      <div className="mb-5 flex items-center justify-between rounded-2xl border border-white/10 bg-brand-navy/95 p-4 text-white shadow-lg shadow-brand-navy/20 backdrop-blur-md animate-in slide-in-from-top duration-500">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="hidden sm:flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3 py-1.5">
             <i className="fa-solid fa-wallet text-brand-gold text-xs"></i>
             <span className="text-xs font-black">{availableBalance.toLocaleString('ar-IQ')} د.ع</span>
           </div>
-          <AnimatePresence>
-            {isNotificationsOpen && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                className="absolute top-full right-0 mt-3 w-80 bg-white border border-slate-200 rounded-[2rem] shadow-2xl z-50 overflow-hidden text-right origin-top-right"
-              >
-                <div className="p-4 border-b border-slate-50 bg-slate-50/50 flex items-center justify-between">
-                  <button onClick={clearAllNotifications} className="text-[10px] font-black text-slate-400 hover:text-red-500">مسح الكل</button>
-                  <h4 className="text-xs font-black text-brand-dark">التنبيهات</h4>
-                </div>
-                <div className="max-h-96 overflow-y-auto custom-scrollbar">
-                  {notifications.length > 0 ? notifications.map(n => (
-                    <div
-                      key={n.id}
-                      onClick={() => { markAsRead(n.id); if (n.link) navigate(n.link); setIsNotificationsOpen(false); }}
-                      className={`p-4 border-b border-slate-50 last:border-0 hover:bg-slate-50 transition cursor-pointer ${!n.read ? 'bg-brand-navy/[0.02]' : ''}`}
-                    >
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-[9px] font-bold text-slate-400">{new Date(n.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}</span>
-                        <p className={`text-xs font-black ${!n.read ? 'text-brand-navy' : 'text-slate-600'}`}>{n.title}</p>
-                      </div>
-                      <p className="text-[11px] font-bold text-slate-500 leading-relaxed">{n.message}</p>
-                    </div>
-                  )) : (
-                    <div className="p-10 text-center text-slate-300">
-                      <i className="fa-solid fa-bell-slash text-3xl mb-3 opacity-20"></i>
-                      <p className="text-xs font-bold">لا توجد تنبيهات جديدة</p>
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
             <i className="fa-solid fa-sparkles text-brand-gold"></i>
           </div>
@@ -1986,7 +1946,7 @@ export default function UserDashboard() {
             توصية ذكية: {topPriority ? topPriority.reason : executiveSummary}
           </p>
         </div>
-        <button className="h-8 w-8 flex items-center justify-center rounded-lg hover:bg-white/10 text-white/50 hover:text-white transition"><i className="fa-solid fa-xmark"></i></button>
+        <button className="flex h-8 w-8 items-center justify-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white"><i className="fa-solid fa-xmark"></i></button>
       </div>
 
       <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_70px_-40px_rgba(15,23,42,0.45)] overflow-hidden">
