@@ -30,7 +30,7 @@ export const useDocumentUpload = () => {
             const data = await response.json();
             return data.fileUrl;
         } catch (err) {
-            const errorMessage = err instanceof Error ? err.message : 'خطأ في التحميل';
+            const errorMessage = err instanceof Error ? err.message : 'خطأ في رفع الملف';
             setError(errorMessage);
             throw err;
         } finally {
@@ -39,11 +39,11 @@ export const useDocumentUpload = () => {
     };
 
     const uploadNationalId = async (file: File): Promise<string> => {
-        return uploadDocument(file, '/api/profile/documents/national-id', 'فشل في تحميل البطاقة الوطنية');
+        return uploadDocument(file, '/api/profile/documents/national-id', 'فشل رفع البطاقة الوطنية');
     };
 
     const uploadLawyerLicense = async (file: File): Promise<string> => {
-        return uploadDocument(file, '/api/profile/documents/lawyer-license', 'فشل في تحميل بطاقة المحاماة');
+        return uploadDocument(file, '/api/profile/documents/lawyer-license', 'فشل رفع بطاقة المحاماة');
     };
 
     return {

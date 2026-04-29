@@ -2036,7 +2036,7 @@ export default function MyCases() {
                           <div className="flex-1 overflow-hidden">
                             <p className="text-[13px] font-black text-brand-dark truncate">{doc.name}</p>
                             <p className="text-[10px] font-black text-slate-400 mt-1 uppercase">
-                              {doc.isUploading ? `جارِ الرفع... ${doc.progress || 0}%` : `${doc.size} • ${doc.date}`}
+                              {doc.isUploading ? `جارٍ رفع الوثيقة... ${doc.progress || 0}%` : `${doc.size} • ${doc.date}`}
                             </p>
 
                             {/* Status Badges on Document */}

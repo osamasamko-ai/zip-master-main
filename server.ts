@@ -804,7 +804,7 @@ async function startServer() {
       });
 
       // Automatically send a message about the new document
-      const updatedCase = await addCaseMessage(caseId, currentUser.userId, `قام ${senderRole === 'lawyer' ? 'المحامي' : 'العميل'} برفع مستند جديد: ${req.file.originalname}`, senderRole);
+      const updatedCase = await addCaseMessage(caseId, currentUser.userId, `رفع ${senderRole === 'lawyer' ? 'المحامي' : 'العميل'} وثيقة جديدة: ${req.file.originalname}`, senderRole);
 
       res.json({ data: updatedCase, document });
     } catch (error) {
@@ -1413,13 +1413,13 @@ async function startServer() {
 
       res.json({
         success: true,
-        message: 'تم تحميل البطاقة الوطنية بنجاح',
+        message: 'تم رفع البطاقة الوطنية بنجاح',
         fileUrl,
         lawyerProfile,
       });
     } catch (error) {
       console.error('National ID upload failed:', error);
-      res.status(500).json({ error: 'فشل في تحميل البطاقة الوطنية' });
+      res.status(500).json({ error: 'فشل رفع البطاقة الوطنية' });
     }
   });
 
@@ -1444,13 +1444,13 @@ async function startServer() {
 
       res.json({
         success: true,
-        message: 'تم تحميل بطاقة المحاماة بنجاح',
+        message: 'تم رفع بطاقة المحاماة بنجاح',
         fileUrl,
         lawyerProfile,
       });
     } catch (error) {
       console.error('Lawyer license upload failed:', error);
-      res.status(500).json({ error: 'فشل في تحميل بطاقة المحاماة' });
+      res.status(500).json({ error: 'فشل رفع بطاقة المحاماة' });
     }
   });
 

@@ -235,7 +235,7 @@ export function mapWorkspaceCase(item: any) {
     status: mapCaseStatus(item.status),
     statusText: mapCaseStatusText(item.status),
     progress: item.progress,
-    date: formatDateLabel(item.createdAt),
+    createdAt: item.createdAt, // Changed to return Date object
     unreadCount: item.unreadCount,
     customFields: item.customFields.map((field: any) => ({
       id: field.id,
@@ -272,7 +272,7 @@ export function mapWorkspaceCase(item: any) {
       sender: message.senderRole === 'lawyer' ? 'lawyer' : 'user',
       text: message.text,
       awaitingResponse: message.awaitingResponse,
-      time: formatShortDateLabel(message.createdAt),
+      createdAt: message.createdAt, // Changed to return Date object
     })),
     timeline: item.timelineEntries.map((entry: any) => ({
       id: entry.id,
