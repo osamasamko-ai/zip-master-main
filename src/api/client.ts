@@ -96,6 +96,11 @@ class ApiClient {
         return response.data;
     }
 
+    async addCreditBalance(data: { amount: number; paymentMethod: string; note?: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/app/billing/top-up', data);
+        return response.data;
+    }
+
     async getSettings(): Promise<ApiResponse<any>> {
         const response = await this.client.get('/api/app/settings');
         return response.data;

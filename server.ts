@@ -58,6 +58,7 @@ import {
   getLawyers,
   getUserDashboard,
   getUserSettingsBundle,
+  addCreditBalance,
   revokeSession,
   unfollowLawyer,
   updateCurrentUserPreferences,
@@ -490,6 +491,21 @@ async function startServer() {
     } catch (error) {
       console.error('Dashboard error:', error);
       res.status(500).json({ error: 'Failed to load dashboard' });
+    }
+  });
+
+  app.post('/api/app/billing/top-up', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const data = await addCreditBalance(currentUser.userId, {
+        amount: Number(req.body.amount),
+        paymentMethod: req.body.paymentMethod,
+        note: req.body.note,
+      });
+      res.status(201).json({ data, message: 'تمت إضافة الرصيد بنجاح.' });
+    } catch (error) {
+      console.error('Billing top-up error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'فشل إضافة الرصيد.' });
     }
   });
 

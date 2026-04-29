@@ -660,6 +660,8 @@ export async function getUserDashboard(userId: string) {
     amount: `${item.amount.toLocaleString('en-US')} د.ع`,
     status: item.status === 'completed' ? 'مدفوع' : 'معلق',
     date: formatRelativeDate(item.createdAt),
+    source: item.source,
+    type: item.type,
   }))].slice(0, 8);
 
   const followedLawyerIds = new Set(follows.map((item) => item.lawyerId));
@@ -688,5 +690,78 @@ export async function getUserDashboard(userId: string) {
     payments: paymentItems,
     lawyers: lawyerItems,
     services: USER_DASHBOARD_SERVICES,
+  };
+}
+
+export async function addCreditBalance(
+  userId: string,
+  payload: { amount: number; paymentMethod: string; note?: string },
+) {
+  const amount = Number(payload.amount);
+  const paymentMethod = String(payload.paymentMethod || '').trim();
+  const note = String(payload.note || '').trim();
+
+  if (!Number.isFinite(amount) || amount < 5000) {
+    throw new Error('أقل مبلغ يمكن إضافته هو 5,000 د.ع.');
+  }
+
+  if (amount > 1000000) {
+    throw new Error('أكبر مبلغ يمكن إضافته حالياً هو 1,000,000 د.ع.');
+  }
+
+  if (!paymentMethod) {
+    throw new Error('يرجى اختيار طريقة الدفع.');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const updatedUser = await tx.user.update({
+      where: { id: userId },
+      data: {
+        accountBalance: {
+          increment: amount,
+        },
+      },
+      select: {
+        accountBalance: true,
+      },
+    });
+
+    const transaction = await tx.transaction.create({
+      data: {
+        userId,
+        amount,
+        label: 'إضافة رصيد إلى المحفظة',
+        source: paymentMethod,
+        type: 'credit',
+        status: 'completed',
+      },
+    });
+
+    await tx.activityLog.create({
+      data: {
+        userId,
+        title: 'تمت إضافة رصيد',
+        description: note
+          ? `تمت إضافة ${amount.toLocaleString('en-US')} د.ع عبر ${paymentMethod}. ملاحظة: ${note}`
+          : `تمت إضافة ${amount.toLocaleString('en-US')} د.ع عبر ${paymentMethod}.`,
+        timeLabel: formatRelativeDate(new Date()),
+        type: 'billing',
+      },
+    });
+
+    return { updatedUser, transaction };
+  });
+
+  return {
+    balance: result.updatedUser.accountBalance,
+    transaction: {
+      id: result.transaction.id,
+      label: result.transaction.label,
+      amount: `${result.transaction.amount.toLocaleString('en-US')} د.ع`,
+      status: 'مدفوع',
+      date: formatRelativeDate(result.transaction.createdAt),
+      source: result.transaction.source,
+      type: result.transaction.type,
+    },
   };
 }
