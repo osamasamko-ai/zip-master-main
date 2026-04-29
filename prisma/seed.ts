@@ -7,12 +7,15 @@ async function main() {
   console.log('Seeding database...');
 
   // Hash password for all accounts
-  const passwordHash = await bcrypt.hash('password123', 10);
+  const defaultPassword = process.env.INITIAL_ADMIN_PASSWORD || 'password123';
+  const passwordHash = await bcrypt.hash(defaultPassword, 10);
 
   // Create Admin
   const admin = await prisma.user.upsert({
     where: { email: 'admin@example.com' },
-    update: {},
+    update: {
+      passwordHash,
+    },
     create: {
       email: 'admin@example.com',
       passwordHash,
@@ -84,7 +87,7 @@ async function main() {
   console.log('Created user:', user.email);
 
   console.log('\n✅ Seeding complete!');
-  console.log('\nLogin credentials (password: password123):');
+  console.log(`\nLogin credentials (password: ${defaultPassword}):`);
   console.log('  Admin:  admin@example.com');
   console.log('  Lawyer: lawyer@example.com');
   console.log('  User:   user@example.com');
