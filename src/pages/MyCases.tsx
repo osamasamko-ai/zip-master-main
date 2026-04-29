@@ -822,25 +822,43 @@ export default function MyCases() {
   };
 
   const handleInviteCollaborator = async () => {
-    if (!inviteEmail.trim() || !activeCase) return;
-    const response = await apiClient.addCaseCollaborator(activeCaseId, {
-      email: inviteEmail,
-      role: inviteRole,
-      permissions: invitePermissions,
-    });
-    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+    if (!inviteEmail.trim()) {
+      alert('يرجى إدخال بريد إلكتروني صحيح.');
+      return;
+    }
+    if (!activeCase) return;
 
-    alert(`تم منح صلاحية الوصول لـ ${inviteEmail} كـ ${inviteRole === 'lawyer' ? 'محامي' : 'مستخدم'}`);
-    setInviteEmail('');
-    setInviteRole('user');
-    setInvitePermissions('view');
-    setIsShareAccessModalOpen(false);
+    try {
+      const response = await apiClient.addCaseCollaborator(activeCaseId, {
+        email: inviteEmail,
+        role: inviteRole,
+        permissions: invitePermissions,
+      });
+      if (response.data) {
+        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+        alert(`تم منح صلاحية الوصول لـ ${inviteEmail} كـ ${inviteRole === 'lawyer' ? 'محامي' : 'مستخدم'}`);
+        setInviteEmail('');
+        setInviteRole('user');
+        setInvitePermissions('view');
+        setIsShareAccessModalOpen(false);
+      }
+    } catch (error: any) {
+      console.error('Failed to invite collaborator', error);
+      alert(error.response?.data?.error || 'فشل إضافة المتعاون. يرجى المحاولة مرة أخرى.');
+    }
   };
 
   const handleRevokeAccess = async (collabId: string) => {
     if (!activeCase) return;
-    const response = await apiClient.removeCaseCollaborator(activeCaseId, collabId);
-    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+    try {
+      const response = await apiClient.removeCaseCollaborator(activeCaseId, collabId);
+      if (response.data) {
+        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+      }
+    } catch (error: any) {
+      console.error('Failed to revoke access', error);
+      alert(error.response?.data?.error || 'فشل حذف صلاحية الوصول.');
+    }
   };
 
   const handleCreateCase = async () => {
@@ -918,19 +936,26 @@ export default function MyCases() {
   }, []);
 
   const handleExportAll = async () => {
-    if (!activeCase || activeCase.documents.length === 0) return;
+    if (!activeCase || activeCase.documents.length === 0) {
+      alert('لا توجد وثائق للتصدير.');
+      return;
+    }
 
     setIsExporting(true);
+    try {
+      // Real implementation would require: 
+      // import JSZip from 'jszip';
+      // import { saveAs } from 'file-saver';
 
-    // Real implementation would require: 
-    // import JSZip from 'jszip';
-    // import { saveAs } from 'file-saver';
-
-    // Simulating the packaging process for UI feedback
-    setTimeout(() => {
-      setIsExporting(false);
+      // Simulating the packaging process for UI feedback
+      await new Promise(resolve => setTimeout(resolve, 2000));
       alert(`تم البدء في ضغط وتنزيل ${activeCase.documents.length} وثيقة للملف: ${activeCase.title}`);
-    }, 2000);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert('فشل تصدير الوثائق. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1051,27 +1076,48 @@ export default function MyCases() {
     try {
       await apiClient.deleteWorkspaceCase(idToDelete);
       await refreshCases();
-    } catch (error) {
+      alert('تم حذف الملف بنجاح.');
+    } catch (error: any) {
       console.error('Failed to delete case', error);
-      alert('تعذر حذف الملف. يرجى المحاولة مرة أخرى.');
+      alert(error.response?.data?.error || 'تعذر حذف الملف. يرجى المحاولة مرة أخرى.');
     }
   };
 
   const createFolder = async () => {
-    if (!newFolderName.trim() || !activeCase) return;
-    const response = await apiClient.addCaseFolder(activeCaseId, newFolderName);
-    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-    setNewFolderName('');
-    setIsNewFolderModalOpen(false);
+    if (!newFolderName.trim() || !activeCase) {
+      alert('يرجى إدخال اسم المجلد.');
+      return;
+    }
+    try {
+      const response = await apiClient.addCaseFolder(activeCaseId, newFolderName);
+      if (response.data) {
+        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+        setNewFolderName('');
+        setIsNewFolderModalOpen(false);
+      }
+    } catch (error: any) {
+      console.error('Failed to create folder', error);
+      alert(error.response?.data?.error || 'فشل إنشاء المجلد.');
+    }
   };
 
   const addCustomField = async () => {
-    if (!newFieldLabel.trim() || !newFieldValue.trim() || !activeCase) return;
-    const response = await apiClient.addCaseCustomField(activeCaseId, newFieldLabel, newFieldValue);
-    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-    setNewFieldLabel('');
-    setNewFieldValue('');
-    setIsNewFieldModalOpen(false);
+    if (!newFieldLabel.trim() || !newFieldValue.trim() || !activeCase) {
+      alert('يرجى ملء جميع الحقول.');
+      return;
+    }
+    try {
+      const response = await apiClient.addCaseCustomField(activeCaseId, newFieldLabel, newFieldValue);
+      if (response.data) {
+        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+        setNewFieldLabel('');
+        setNewFieldValue('');
+        setIsNewFieldModalOpen(false);
+      }
+    } catch (error: any) {
+      console.error('Failed to add custom field', error);
+      alert(error.response?.data?.error || 'فشل إضافة الحقل.');
+    }
   };
 
   const toggleDocSelection = (id: string) => {
@@ -1085,29 +1131,65 @@ export default function MyCases() {
 
   const moveDocuments = async (folderId: string | null, ids: string[]) => {
     if (!activeCase || ids.length === 0) return;
-    const response = await apiClient.moveCaseDocuments(activeCaseId, ids, folderId);
-    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-    setMovingDocId(null);
-    setSelectedDocs(new Set());
-    setDocMoveConfirmTo(undefined);
+    try {
+      const response = await apiClient.moveCaseDocuments(activeCaseId, ids, folderId);
+      if (response.data) {
+        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+        setMovingDocId(null);
+        setSelectedDocs(new Set());
+        setDocMoveConfirmTo(undefined);
+      }
+    } catch (error: any) {
+      console.error('Failed to move documents', error);
+      alert(error.response?.data?.error || 'فشل نقل الوثائق.');
+      setMovingDocId(null);
+    }
   };
 
   const executeSignDocument = async () => {
     if (!docToSign || !activeCase) return;
     setIsRequestingSignature(true);
-    const response = await apiClient.signCaseDocument(activeCaseId, docToSign);
-    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-    setIsRequestingSignature(false);
-    setDocToSign(null);
+    try {
+      const response = await apiClient.signCaseDocument(activeCaseId, docToSign);
+      if (response.data) {
+        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+        alert('تم توقيع الوثيقة بنجاح!');
+      }
+      setDocToSign(null);
+    } catch (error: any) {
+      console.error('Failed to sign document', error);
+      alert(error.response?.data?.error || 'فشل توقيع الوثيقة.');
+    } finally {
+      setIsRequestingSignature(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []) as File[];
-    if (!files.length || !activeCase) return;
+    if (!files.length || !activeCase) {
+      alert('يرجى اختيار ملف واحد على الأقل.');
+      return;
+    }
+
+    // Validate file sizes and types
+    const maxFileSize = 50 * 1024 * 1024; // 50MB
+    const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'];
 
     files.forEach((file) => {
-      const tempId = `temp-${Date.now()}-${file.name}`;
+      // Check file size
+      if (file.size > maxFileSize) {
+        alert(`الملف "${file.name}" كبير جداً (الحد الأقصى: 50MB).`);
+        return;
+      }
+
+      // Check file type
       const extension = file.name.split('.').pop()?.toLowerCase();
+      if (!allowedExtensions.includes(extension || '')) {
+        alert(`نوع الملف "${file.name}" غير مدعوم.`);
+        return;
+      }
+
+      const tempId = `temp-${Date.now()}-${file.name}`;
       const fileType: DocumentType = extension === 'pdf' ? 'pdf' : ['jpg', 'jpeg', 'png'].includes(extension || '') ? 'image' : 'other';
       const newDoc: LegalDocument = {
         id: tempId,
@@ -1127,13 +1209,22 @@ export default function MyCases() {
       setCases((prev) => prev.map((c) => (c.id === activeCaseId ? { ...c, documents: [...c.documents, newDoc] } : c)));
 
       window.setTimeout(async () => {
-        const response = await apiClient.addCaseDocument(activeCaseId, {
-          name: file.name,
-          size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
-          type: fileType,
-          folderId: activeFolderId,
-        });
-        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+        try {
+          const response = await apiClient.addCaseDocument(activeCaseId, {
+            name: file.name,
+            size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
+            type: fileType,
+            folderId: activeFolderId,
+          });
+          if (response.data) {
+            setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+          }
+        } catch (error: any) {
+          console.error('Failed to upload document', error);
+          // Remove the failed upload
+          setCases(prev => prev.map(c => c.id === activeCaseId ? { ...c, documents: c.documents.filter(d => d.id !== tempId) } : c));
+          alert(`فشل رفع الملف "${file.name}".`);
+        }
       }, 400);
     });
 
@@ -1180,6 +1271,42 @@ export default function MyCases() {
       ),
     );
   }, []);
+
+  const handleDocReply = useCallback((doc: LegalDocument) => {
+    setReplyModalDoc(doc);
+    setReplyText('');
+  }, []);
+
+  const handleSendDocReply = useCallback(async () => {
+    if (!replyText.trim() || !replyModalDoc || !activeCase) return;
+
+    try {
+      // Send the reply as a message to the lawyer
+      const response = await apiClient.addCaseMessage(
+        activeCase.id,
+        `[رد على وثيقة: ${replyModalDoc.name}]\n\n${replyText}`,
+        'user'
+      );
+
+      if (response.data) {
+        replaceCaseInState(response.data);
+      } else {
+        await refreshCases(activeCase.id);
+      }
+
+      setReplyModalDoc(null);
+      setReplyText('');
+
+      // Mock lawyer typing
+      setIsLawyerTyping(true);
+      setTimeout(() => {
+        setIsLawyerTyping(false);
+      }, 3000);
+    } catch (error) {
+      console.error('Failed to send reply', error);
+      alert('فشل إرسال الرد. يرجى المحاولة مرة أخرى.');
+    }
+  }, [replyText, replyModalDoc, activeCase, replaceCaseInState, refreshCases]);
 
   const sendMessage = useCallback(async (text: string = newMessage, optimisticId?: string) => {
     if (!text.trim() || !activeCase) return;
