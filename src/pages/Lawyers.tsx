@@ -83,9 +83,9 @@ export default function Lawyers() {
         current.map((lawyer) =>
           lawyer.id === lawyerId
             ? {
-                ...lawyer,
-                followers: typeof followerCount === 'number' ? followerCount : Math.max(0, lawyer.followers + delta),
-              }
+              ...lawyer,
+              followers: typeof followerCount === 'number' ? followerCount : Math.max(0, lawyer.followers + delta),
+            }
             : lawyer,
         ),
       );
@@ -180,7 +180,7 @@ export default function Lawyers() {
   const selectedConsultationAmount = consultationLawyer ? parseConsultationFee(consultationLawyer.consultationFee) : 0;
 
   return (
-    <div className="app-view fade-in space-y-8 pb-12 text-right">
+    <div className="app-view fade-in mx-auto max-w-[1440px] space-y-8 pb-12 text-right">
       <section className="rounded-[2.5rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.03] p-8 shadow-premium">
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
           <div>
