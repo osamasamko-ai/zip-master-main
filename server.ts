@@ -45,6 +45,7 @@ import {
   addModerationRule,
   deleteModerationRule,
   getLegalDocs,
+  createUser, // Import the new createUser function
   addLegalDoc,
   updateLegalDoc,
   deleteLegalDoc,
@@ -1046,6 +1047,71 @@ async function startServer() {
       return res.status(404).json({ error: 'user not found' });
     }
     return res.json(updated);
+  });
+
+  app.post('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
+    try {
+      const { email, password, name, role = 'user' } = req.body;
+      const requestedRole = role as 'user' | 'pro' | 'admin';
+      const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+      const normalizedName = typeof name === 'string' ? name.trim() : '';
+
+      if (!normalizedEmail || !password || !normalizedName) {
+        return res.status(400).json({ error: 'البريد الإلكتروني والاسم وكلمة المرور مطلوبة.' });
+      }
+
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+        return res.status(400).json({ error: 'صيغة البريد الإلكتروني غير صحيحة.' });
+      }
+
+      if (password.length < 8) {
+        return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل.' });
+      }
+
+      if (!['user', 'pro', 'admin'].includes(requestedRole)) {
+        return res.status(400).json({ error: 'نوع الحساب غير صالح.' });
+      }
+
+      // Check if user exists
+      const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
+      if (existingUser) {
+        return res.status(409).json({ error: 'هذا البريد الإلكتروني مستخدم بالفعل.' });
+      }
+
+      const hashedPassword = await hashPassword(password);
+      const newUser = await createUser({
+        email: normalizedEmail,
+        passwordHash: hashedPassword,
+        name: normalizedName,
+        role: requestedRole,
+      });
+
+      if (!newUser) {
+        return res.status(500).json({ error: 'تعذر إنشاء الحساب.' });
+      }
+
+      // Create an audit log entry for the action
+      await prisma.auditLog.create({
+        data: {
+          type: 'system',
+          category: 'إدارة المستخدمين',
+          actor: (req as any).user.email,
+          message: `قام المسؤول بإنشاء حساب جديد: ${newUser.name} (${newUser.email}) برتبة ${newUser.role}`,
+          time: new Date().toLocaleTimeString('ar-IQ'),
+        }
+      });
+
+      res.status(201).json({
+        data: newUser,
+        message: 'تم إنشاء الحساب بنجاح.',
+      });
+    } catch (error: any) {
+      console.error('Admin user creation error:', error);
+      if (error?.code === 'P2002') {
+        return res.status(409).json({ error: 'هذا البريد الإلكتروني مستخدم بالفعل.' });
+      }
+      res.status(500).json({ error: 'تعذر إنشاء الحساب. حاول مرة أخرى.' });
+    }
   });
 
   app.get('/api/admin/feature-flags', async (req, res) => {

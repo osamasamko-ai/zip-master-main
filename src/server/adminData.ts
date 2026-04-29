@@ -1,7 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { prisma } from './prisma';
-
 function parseAttachments(value: string | string[] | null | undefined): string[] {
     if (Array.isArray(value)) return value;
     if (!value) return [];
@@ -521,4 +520,44 @@ export async function deleteLegalDoc(id: string) {
     await prisma.legalDoc.delete({ where: { id } });
     invalidateCache('legal-docs');
     return true;
+}
+
+export async function createUser(userData: { email: string; passwordHash: string; name: string; role: 'user' | 'pro' | 'admin'; }) {
+    const newUser = await prisma.user.create({
+        data: {
+            email: userData.email,
+            passwordHash: userData.passwordHash,
+            name: userData.name,
+            role: userData.role,
+            verified: false, // New users are not verified by default
+            blocked: false,
+            // Provide default values for other non-nullable fields if not explicitly set
+            accountBalance: 0,
+            notificationsEnabled: true,
+            twoFactorEnabled: false,
+            emailAlerts: true,
+            pushNotifications: true,
+            billingReminders: true,
+            securityAlerts: true,
+            marketingEmails: false,
+            language: 'ar', // Default language
+            subscriptionTier: 'basic', // Default subscription tier
+        },
+        include: { lawyerProfile: true }
+    });
+
+    // If the new user is a 'pro', create a default lawyerProfile
+    if (newUser.role === 'pro') {
+        await prisma.lawyerProfile.create({
+            data: {
+                userId: newUser.id,
+                licenseStatus: 'pending',
+                submittedAt: new Date().toISOString(), // Use current date
+                profileScore: 15,
+            },
+        });
+    }
+
+    // Return a subset of user data, similar to getUserById for consistency
+    return getUserById(newUser.id);
 }
