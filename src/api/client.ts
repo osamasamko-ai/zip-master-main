@@ -260,6 +260,16 @@ class ApiClient {
         const response = await this.client.post('/api/legal/generate-contract', data);
         return response.data;
     }
+
+    async emailCarContract(data: any): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/legal/email-contract', data);
+        return response.data;
+    }
+
+    async saveContractToWallet(data: any): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/legal/save-contract', data);
+        return response.data;
+    }
 }
 
 export default new ApiClient();

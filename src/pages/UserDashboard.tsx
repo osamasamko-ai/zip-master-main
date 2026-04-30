@@ -150,6 +150,7 @@ const QUICK_ACTIONS = [
   { id: 'upload', label: 'رفع مستند مطلوب', note: 'أرسل الملفات الناقصة لإكمال قضيتك الحالية', icon: 'fa-solid fa-upload' },
   { id: 'book', label: 'حجز موعد', note: 'نسّق جلسة مع محامٍ متخصص للحالة الحالية', icon: 'fa-regular fa-calendar-check' },
   { id: 'ai', label: 'اسأل المساعد الذكي', note: 'احصل على شرح سريع أو تلخيص للخطوة التالية', icon: 'fa-solid fa-comments' },
+  { id: 'contact-support', label: 'تواصل مع الدعم', note: 'للاستفسارات العامة أو المساعدة الفنية', icon: 'fa-solid fa-headset' },
 ];
 
 const HEADER_RANGE_OPTIONS: Array<{ value: HeaderRange; label: string }> = [
@@ -761,6 +762,10 @@ export default function UserDashboard() {
     }
     if (actionId === 'upload') {
       navigate('/cases', { state: { focusArea: 'docs' } });
+      return;
+    }
+    if (actionId === 'contact-support') {
+      navigate('/support'); // سيتم توجيه المستخدم إلى صفحة الدعم
       return;
     }
     navigate('/lawyers');

@@ -17,15 +17,23 @@ export default function ContractWizard() {
     const [generatedContractText, setGeneratedContractText] = useState('');
     const [isLoadingContract, setIsLoadingContract] = useState(false);
     const [isSendingEmail, setIsSendingEmail] = useState(false);
+    const [isSavingToWallet, setIsSavingToWallet] = useState(false);
     const [contractError, setContractError] = useState('');
     const [sellerSignature, setSellerSignature] = useState('');
     const [buyerSignature, setBuyerSignature] = useState('');
     const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [emailErrors, setEmailErrors] = useState({ seller: '', buyer: '' });
+    const [isPaying, setIsPaying] = useState(false);
+    const [isPaid, setIsPaid] = useState(false);
 
-    const totalSteps = 5; // Updated total steps
+    const totalSteps = 6; // Increased for payment step
 
     const nextStep = () => setStep(prev => prev + 1);
     const prevStep = () => setStep(prev => prev - 1);
+
+    const validateEmail = (email: string) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
 
     const handleGenerateContract = async () => {
         setIsLoadingContract(true);
@@ -49,23 +57,46 @@ export default function ContractWizard() {
         }
     };
 
+    const handleZainCashPayment = async () => {
+        setIsPaying(true);
+        try {
+            // Simulate Zain Cash payment process
+            await apiClient.processZainCashPayment(25000, 'srv-5');
+            setIsPaid(true);
+            nextStep();
+        } catch (error: any) {
+            setContractError('فشل الدفع عبر زين كاش. يرجى التأكد من رصيدك والمحاولة مرة أخرى.');
+        } finally {
+            setIsPaying(false);
+        }
+    };
+
     const handleFinalizeAndEmail = async () => {
         setIsSendingEmail(true);
+        setIsSavingToWallet(true);
         setContractError('');
         try {
-            await apiClient.emailCarContract({
+            const payload = {
                 ...formData,
                 contractText: generatedContractText,
                 sellerSignature,
                 buyerSignature,
-            });
+            };
+
+            // تنفيذ الإرسال والأرشفة في وقت واحد
+            await Promise.all([
+                apiClient.emailCarContract(payload),
+                apiClient.saveContractToWallet(payload)
+            ]);
+
             nextStep();
         } catch (error: any) {
-            console.error('Error sending email:', error);
-            setContractError('تم توقيع العقد، لكن فشل إرسال البريد الإلكتروني. يمكنك تحميله يدوياً.');
+            console.error('Error in finalization:', error);
+            setContractError('تم توقيع العقد، لكن حدث خطأ في الأرشفة أو الإرسال. يمكنك تحميله يدوياً.');
             nextStep(); // ننتقل للخطوة الأخيرة حتى لو فشل الإيميل ليتمكن من التحميل
         } finally {
             setIsSendingEmail(false);
+            setIsSavingToWallet(false);
         }
     };
 
@@ -109,20 +140,6 @@ export default function ContractWizard() {
 
                 {step === 1 && (
                     <div className="space-y-4">
-                        <h3 className="font-bold text-slate-700">بيانات الأطراف</h3>
-                        <input
-                            placeholder="اسم البائع الكامل"
-                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
-                            onChange={e => setFormData({ ...formData, sellerName: e.target.value })}
-                            value={formData.sellerName}
-                        />
-                        <input
-                            placeholder="اسم المشتري الكامل"
-                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
-                            onChange={e => setFormData({ ...formData, buyerName: e.target.value })}
-                            value={formData.buyerName}
-                        />
-                        <ActionButton onClick={nextStep} variant="primary" className="w-full">التالي</ActionButton>
                         <h3 className="font-bold text-slate-700 border-b pb-2">بيانات البائع والمشتري</h3>
                         <div className="grid gap-4">
                             <div className="space-y-2">
@@ -138,8 +155,16 @@ export default function ContractWizard() {
                                     placeholder="البريد الإلكتروني للبائع"
                                     className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
                                     onChange={e => setFormData({ ...formData, sellerEmail: e.target.value })}
+                                    onBlur={() => {
+                                        const isValid = validateEmail(formData.sellerEmail);
+                                        setEmailErrors(prev => ({
+                                            ...prev,
+                                            seller: isValid || !formData.sellerEmail ? '' : 'صيغة البريد الإلكتروني غير صحيحة'
+                                        }));
+                                    }}
                                     value={formData.sellerEmail}
                                 />
+                                {emailErrors.seller && <p className="text-rose-500 text-[10px] font-bold mr-2">{emailErrors.seller}</p>}
                             </div>
                             <div className="space-y-2">
                                 <p className="text-xs font-bold text-slate-500 mr-2">معلومات المشتري</p>
@@ -154,11 +179,19 @@ export default function ContractWizard() {
                                     placeholder="البريد الإلكتروني للمشتري"
                                     className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
                                     onChange={e => setFormData({ ...formData, buyerEmail: e.target.value })}
+                                    onBlur={() => {
+                                        const isValid = validateEmail(formData.buyerEmail);
+                                        setEmailErrors(prev => ({
+                                            ...prev,
+                                            buyer: isValid || !formData.buyerEmail ? '' : 'صيغة البريد الإلكتروني غير صحيحة'
+                                        }));
+                                    }}
                                     value={formData.buyerEmail}
                                 />
+                                {emailErrors.buyer && <p className="text-rose-500 text-[10px] font-bold mr-2">{emailErrors.buyer}</p>}
                             </div>
                         </div>
-                        <ActionButton onClick={nextStep} variant="primary" className="w-full" disabled={!formData.sellerEmail || !formData.buyerEmail}>التالي</ActionButton>
+                        <ActionButton onClick={nextStep} variant="primary" className="w-full" disabled={!formData.sellerEmail || !formData.buyerEmail || !!emailErrors.seller || !!emailErrors.buyer}>التالي</ActionButton>
                     </div>
                 )}
 
@@ -214,7 +247,7 @@ export default function ContractWizard() {
                     </div>
                 )}
 
-                {step === 4 && (
+                {step === 5 && (
                     <div className="space-y-4">
                         <h3 className="font-bold text-slate-700">التوقيع الإلكتروني</h3>
                         <div className="space-y-6 p-4 rounded-2xl border border-slate-200 bg-slate-50">
@@ -250,22 +283,25 @@ export default function ContractWizard() {
                         </div>
                         <div className="flex gap-3">
                             <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
-                            <ActionButton onClick={nextStep} variant="primary" className="flex-[2]" disabled={!sellerSignature || !buyerSignature || !agreedToTerms}>تأكيد وإنهاء</ActionButton>
-                            <ActionButton onClick={handleFinalizeAndEmail} variant="primary" className="flex-[2]" disabled={!sellerSignature || !buyerSignature || !agreedToTerms || isSendingEmail}>
-                                {isSendingEmail ? 'جاري الإرسال والأرشفة...' : 'تأكيد وإرسال عبر البريد'}
+                            <ActionButton onClick={handleFinalizeAndEmail} variant="primary" className="flex-[2]" disabled={!sellerSignature || !buyerSignature || !agreedToTerms || isSendingEmail || isSavingToWallet}>
+                                {isSendingEmail || isSavingToWallet ? 'جاري الأرشفة والإرسال...' : 'تأكيد، حفظ وأرشفة'}
                             </ActionButton>
                         </div>
                         {contractError && <p className="text-amber-600 text-xs mt-2 text-center font-bold">{contractError}</p>}
                     </div>
                 )}
 
-                {step === 5 && (
+                {step === 6 && (
                     <div className="text-center space-y-4">
                         <div className="p-10 bg-emerald-50 rounded-3xl text-emerald-600">
                             <i className="fa-solid fa-file-circle-check text-5xl mb-4"></i>
-                            <p className="font-black">تم توليد العقد وتوقيعه بنجاح!</p>
+                            <p className="font-black">تم توقيع العقد وأرشفته بنجاح!</p>
                         </div>
-                        <p className="text-sm text-slate-500">العقد جاهز الآن للتحميل كـ PDF.</p>
+                        <div className="bg-slate-50 p-4 rounded-2xl flex items-center gap-3 justify-center mb-4">
+                            <i className="fa-solid fa-wallet text-brand-gold"></i>
+                            <p className="text-xs font-bold text-slate-600">تمت إضافة نسخة رسمية إلى "محفظة المستندات" الخاصة بك.</p>
+                        </div>
+                        <p className="text-sm text-slate-500">العقد متاح الآن في ملفك الشخصي أو للتحميل المباشر كـ PDF.</p>
                         <div className="flex gap-3 justify-center">
                             <ActionButton onClick={handleDownloadPdf} variant="primary">تحميل العقد (PDF)</ActionButton>
                             <ActionButton onClick={() => setStep(1)} variant="secondary">إنشاء عقد جديد</ActionButton>
