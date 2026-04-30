@@ -42,6 +42,16 @@ const USER_DASHBOARD_SERVICES = [
     color: 'blue',
     category: 'استشارات',
   },
+  {
+    id: 'srv-5',
+    title: 'عقد بيع وشراء مركبة',
+    description: 'توليد عقد بيع قانوني متكامل يتضمن كافة تفاصيل المركبة، الثمن، وشروط الضمان وفق القانون العراقي.',
+    icon: 'fa-solid fa-car-side',
+    price: '25,000 د.ع',
+    time: 'فوري (AI)',
+    color: 'emerald',
+    category: 'عقود',
+  },
 ];
 
 function parseJsonArray(value?: string | null): string[] {
@@ -322,12 +332,12 @@ export async function getLawyers(currentUserId?: string, search?: string) {
         lawyerProfile: { isNot: null },
         ...(search
           ? {
-              OR: [
-                { name: { contains: search } },
-                { location: { contains: search } },
-                { lawyerProfile: { specialty: { contains: search } } },
-              ],
-            }
+            OR: [
+              { name: { contains: search } },
+              { location: { contains: search } },
+              { lawyerProfile: { specialty: { contains: search } } },
+            ],
+          }
           : {}),
       },
       select: {

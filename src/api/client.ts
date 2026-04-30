@@ -255,6 +255,11 @@ class ApiClient {
         const response = await this.client.post('/api/app/pro/workspace/cases/delete', { caseIds });
         return response.data;
     }
+
+    async generateCarContract(data: any): Promise<ApiResponse<{ contractText: string }>> {
+        const response = await this.client.post('/api/legal/generate-contract', data);
+        return response.data;
+    }
 }
 
 export default new ApiClient();
