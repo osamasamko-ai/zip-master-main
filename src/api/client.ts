@@ -270,6 +270,11 @@ class ApiClient {
         const response = await this.client.post('/api/legal/save-contract', data);
         return response.data;
     }
+
+    async sendSupportRequest(data: { name: string; email: string; subject: string; message: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/support/request', data);
+        return response.data;
+    }
 }
 
 export default new ApiClient();
