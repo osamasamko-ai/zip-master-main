@@ -21,6 +21,8 @@ import Following from './pages/Following';
 import Lawyers from './pages/Lawyers';
 import Messages from './pages/Messages';
 import Billing from './pages/Billing';
+import Support from './pages/Support';
+import ContractWizard from './pages/ContractWizard';
 
 function getDefaultRoute(role: 'user' | 'pro' | 'admin' | null) {
   if (role === 'admin') return '/admin';
@@ -80,6 +82,9 @@ export default function App() {
               <Route path="lawyers" element={<Lawyers />} />
               <Route path="messages" element={<Messages />} />
               <Route path="billing" element={<Billing />} />
+              <Route path="contract" element={<ContractWizard />} />
+              <Route path="contracts" element={<ContractWizard />} />
+              <Route path="support" element={<Support />} />
               <Route path="aichat" element={<AiChat />} />
               <Route path="legal" element={<LegalDocs />} />
               <Route path="following" element={<Following />} />

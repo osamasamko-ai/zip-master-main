@@ -271,7 +271,7 @@ class ApiClient {
         return response.data;
     }
 
-    async sendSupportRequest(data: { name: string; email: string; subject: string; message: string }): Promise<ApiResponse<any>> {
+    async sendSupportRequest(data: { name: string; phone: string; subject: string; message: string }): Promise<ApiResponse<any>> {
         const response = await this.client.post('/api/support/request', data);
         return response.data;
     }

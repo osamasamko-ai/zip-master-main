@@ -10,7 +10,7 @@ export default function Support() {
     const { user } = useAuth();
     const [formData, setFormData] = useState({
         name: user?.name || '',
-        email: user?.email || '',
+        phone: '',
         subject: '',
         message: '',
     });
@@ -19,7 +19,10 @@ export default function Support() {
     const [errorMessage, setErrorMessage] = useState('');
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
-        setFormData({ ...formData, [e.target.name]: e.target.value });
+        const value = e.target.name === 'phone'
+            ? e.target.value.replace(/\D/g, '').slice(0, 10)
+            : e.target.value;
+        setFormData({ ...formData, [e.target.name]: value });
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -29,8 +32,15 @@ export default function Support() {
         setErrorMessage('');
 
         // Basic validation
-        if (!formData.name || !formData.email || !formData.subject || !formData.message) {
+        if (!formData.name || !formData.phone || !formData.subject || !formData.message) {
             setErrorMessage('يرجى ملء جميع الحقول المطلوبة.');
+            setIsSubmitting(false);
+            setSubmitStatus('error');
+            return;
+        }
+
+        if (!/^[0-9]{10}$/.test(formData.phone)) {
+            setErrorMessage('يرجى إدخال رقم جوال عراقي صحيح بدون رمز الدولة.');
             setIsSubmitting(false);
             setSubmitStatus('error');
             return;
@@ -103,17 +113,21 @@ export default function Support() {
                         />
                     </div>
                     <div>
-                        <label htmlFor="email" className="block text-sm font-bold text-slate-700 mb-2">البريد الإلكتروني</label>
-                        <input
-                            type="email"
-                            id="email"
-                            name="email"
-                            value={formData.email}
-                            onChange={handleChange}
-                            placeholder="بريدك الإلكتروني"
-                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
-                            disabled={isSubmitting}
-                        />
+                        <label htmlFor="phone" className="block text-sm font-bold text-slate-700 mb-2">رقم الجوال</label>
+                        <div className="flex items-center gap-3">
+                            <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-500">+964</span>
+                            <input
+                                type="tel"
+                                id="phone"
+                                name="phone"
+                                value={formData.phone}
+                                onChange={handleChange}
+                                placeholder="7701234567"
+                                maxLength={10}
+                                className="min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
+                                disabled={isSubmitting}
+                            />
+                        </div>
                     </div>
                     <div>
                         <label htmlFor="subject" className="block text-sm font-bold text-slate-700 mb-2">الموضوع</label>

@@ -85,11 +85,12 @@ export default function MainLayout() {
       { id: 'n1', type: 'ملاحة', title: 'الرئيسية', subtitle: 'أسرع طريق لما يحتاج انتباهك الآن', icon: 'fa-table-columns', path: '/user' },
       { id: 'n2', type: 'ملاحة', title: 'القضايا', subtitle: 'متابعة سير العمل والمهام المطلوبة', icon: 'fa-folder-open', path: '/cases' },
       { id: 'n3', type: 'ملاحة', title: 'المحامون', subtitle: 'ابحث وتواصل وافتح قضية بسرعة', icon: 'fa-scale-balanced', path: '/lawyers' },
-      { id: 'n4', type: 'ملاحة', title: 'الرسائل', subtitle: 'جميع المحادثات القانونية في مكان واحد', icon: 'fa-comments', path: '/messages' },
-      { id: 'n5', type: 'ملاحة', title: 'المكتبة', subtitle: 'مراجع ووثائق قانونية جاهزة للبحث', icon: 'fa-book-open', path: '/legal' },
-      { id: 'n6', type: 'ملاحة', title: 'مستشارك الذكي', subtitle: 'اسأل واحصل على تلخيص وتحليل قانوني سريع', icon: 'fa-robot', path: '/aichat' },
-      { id: 'n7', type: 'ملاحة', title: 'المدفوعات', subtitle: 'الرصيد والفواتير والمعاملات', icon: 'fa-wallet', path: '/billing' },
-      { id: 'n8', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
+      { id: 'n4', type: 'ملاحة', title: 'العقود', subtitle: 'إنشاء ومراجعة عقود البيع والشراء', icon: 'fa-file-contract', path: '/contracts' },
+      { id: 'n5', type: 'ملاحة', title: 'الرسائل', subtitle: 'جميع المحادثات القانونية في مكان واحد', icon: 'fa-comments', path: '/messages' },
+      { id: 'n6', type: 'ملاحة', title: 'المكتبة', subtitle: 'مراجع ووثائق قانونية جاهزة للبحث', icon: 'fa-book-open', path: '/legal' },
+      { id: 'n7', type: 'ملاحة', title: 'مستشارك الذكي', subtitle: 'اسأل واحصل على تلخيص وتحليل قانوني سريع', icon: 'fa-robot', path: '/aichat' },
+      { id: 'n8', type: 'ملاحة', title: 'المدفوعات', subtitle: 'الرصيد والفواتير والمعاملات', icon: 'fa-wallet', path: '/billing' },
+      { id: 'n9', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
     ];
 
     if (user?.role === 'admin') {
@@ -148,6 +149,7 @@ export default function MainLayout() {
         { name: 'الرئيسية', icon: 'fa-table-columns', path: '/user' },
         { name: 'القضايا', icon: 'fa-folder-open', path: '/cases' },
         { name: 'المحامون', icon: 'fa-scale-balanced', path: '/lawyers' },
+        { name: 'العقود', icon: 'fa-file-contract', path: '/contracts' },
         { name: 'الرسائل', icon: 'fa-comments', path: '/messages' },
         { name: 'المكتبة', icon: 'fa-book-open', path: '/legal' },
         { name: 'المساعد', icon: 'fa-robot', path: '/aichat' },

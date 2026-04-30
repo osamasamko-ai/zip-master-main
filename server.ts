@@ -561,6 +561,36 @@ async function startServer() {
     }
   });
 
+  app.post('/api/support/request', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const { name, phone, subject, message } = req.body;
+
+      if (!name || !phone || !subject || !message) {
+        return res.status(400).json({ error: 'يرجى ملء جميع الحقول المطلوبة.' });
+      }
+
+      const normalizedPhone = phone.toString().replace(/\D/g, '');
+      if (!/^[0-9]{10}$/.test(normalizedPhone)) {
+        return res.status(400).json({ error: 'يرجى إدخال رقم جوال عراقي صحيح بدون رمز الدولة.' });
+      }
+
+      const ticket = await prisma.supportTicket.create({
+        data: {
+          userId: currentUser.userId,
+          subject: `${subject} • +964${normalizedPhone}`,
+          priority: 'medium',
+        },
+      });
+
+      console.log(`New support request from ${name} (+964${normalizedPhone}): ${subject}`);
+      res.status(201).json({ data: ticket, message: 'تم إرسال طلب الدعم بنجاح.' });
+    } catch (error) {
+      console.error('Support request error:', error);
+      res.status(500).json({ error: 'حدث خطأ أثناء إرسال طلب الدعم. حاول مرة أخرى.' });
+    }
+  });
+
   app.delete('/api/app/settings/sessions/:id', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
