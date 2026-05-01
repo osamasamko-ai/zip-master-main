@@ -97,7 +97,6 @@ import {
 } from './src/server/workspaceData';
 
 // Constants for Legal Fees
-import sharp from 'sharp'; // Import sharp for image processing
 const CONTRACT_CREATION_FEE = 25000;
 const LAWYER_REVIEW_FEE = 15000;
 const PROMO_CODE_DISCOUNT = 10000; // خصم ثابت لكود الخصم
@@ -1345,12 +1344,10 @@ async function startServer() {
   app.post('/api/legal/draft', authenticateToken, async (req, res) => {
     const { docType, caseContext, specificRequirements } = req.body;
 
-    if (!geminiClient) {
-      return res.status(503).json({ error: 'خدمة الذكاء الاصطناعي غير متوفرة' });
-    }
-
     try {
-      const model = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+      if (!geminiClient) throw new Error('AI service disabled');
+
+      const model = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' }); // Ensures stable model ID
       const prompt = `أنت مساعد قانوني عراقي محترف. قم بصياغة مسودة لـ ${docType}. 
       سياق القضية: ${caseContext}. 
       متطلبات إضافية: ${specificRequirements}.
@@ -1391,33 +1388,6 @@ async function startServer() {
       res.sendFile(filePath);
     } else {
       res.status(404).json({ error: 'المستند غير موجود.' });
-    }
-  });
-
-  // New endpoint for image compression
-  app.post('/api/utils/compress-image', authenticateToken, async (req, res) => {
-    const { imageDataUrl } = req.body; // Expecting a data:image/png;base64,... string
-
-    if (!imageDataUrl || !imageDataUrl.startsWith('data:image/')) {
-      return res.status(400).json({ error: 'Invalid image data URL provided.' });
-    }
-
-    try {
-      // Extract base64 part and mime type
-      const [mime, base64Data] = imageDataUrl.split(';base64,');
-      const buffer = Buffer.from(base64Data, 'base64');
-
-      // Use sharp to compress. Convert to JPEG for better compression, lower quality.
-      // Adjust quality (1-100) as needed. 70 is a good balance for web.
-      const compressedBuffer = await sharp(buffer)
-        .jpeg({ quality: 70 })
-        .toBuffer();
-
-      const compressedDataUrl = `data:image/jpeg;base64,${compressedBuffer.toString('base64')}`;
-      res.json({ compressedImageDataUrl: compressedDataUrl });
-    } catch (error) {
-      console.error('Error compressing image:', error);
-      res.status(500).json({ error: 'Failed to compress image.' });
     }
   });
 
@@ -1482,90 +1452,84 @@ async function startServer() {
     return `${words} ${currencyName} لا غير`;
   }
 
+  // Utility to sanitize user input strings from HTML tags to prevent XSS
+  function sanitizeInput(val: any): string {
+    if (typeof val !== 'string') return '';
+    return val.replace(/<[^>]*>?/gm, '').trim();
+  }
+
   // Route for generating car contracts (as used by ContractWizard.tsx)
   app.post('/api/legal/car-contract', authenticateToken, async (req, res) => {
-    const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price, currency } = req.body;
-    const numericPrice = parseInt(price.toString().replace(/,/g, ''), 10);
-    const priceInWords = tafqeet(numericPrice, currency || 'IQD');
-
-    if (!sellerName || !sellerPhone || !buyerName || !buyerPhone || !carModel || !vinNumber || !price) {
-      return res.status(400).json({ error: 'يرجى تقديم جميع بيانات العقد المطلوبة.' });
-    }
-
-    const normalizedSellerPhone = sellerPhone.toString().replace(/\D/g, '');
-    const normalizedBuyerPhone = buyerPhone.toString().replace(/\D/g, '');
-
-    if (!/^[0-9]{10}$/.test(normalizedSellerPhone) || !/^[0-9]{10}$/.test(normalizedBuyerPhone)) {
-      return res.status(400).json({ error: 'يرجى إدخال أرقام جوال عراقية صحيحة بدون رمز الدولة.' });
-    }
-
-    const prompt = `أنت مساعد قانوني عراقي محترف. قم بصياغة عقد بيع وشراء مركبة باللغة العربية.
-البائع: ${sellerName} (+964${normalizedSellerPhone})
-المشتري: ${buyerName} (+964${normalizedBuyerPhone})
-نوع المركبة وموديلها: ${carModel}
-رقم الشاصي: ${vinNumber}
-السعر المتفق عليه: ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'} (${priceInWords})
-
-يجب أن يتضمن العقد:
-1. مقدمة تعريفية بالأطراف والمركبة.
-2. بنود البيع والتسليم.
-3. شروط الدفع وتأكيد الاستلام.
-4. بنود الإعفاء من المسؤولية.
-5. إقرار التوقيع والمادة القانونية الحاكمة.
-اكتب العقد بصيغة قانونية واضحة ومهنية.`;
-
     try {
-      let contractText: string;
+      // Use local template generation to avoid AI errors and costs
+      const sellerName = sanitizeInput(req.body.sellerName);
+      const buyerName = sanitizeInput(req.body.buyerName);
+      const carModel = sanitizeInput(req.body.carModel);
+      const vinNumber = sanitizeInput(req.body.vinNumber);
+      const customClauses = sanitizeInput(req.body.customClauses);
+      const { sellerPhone, buyerPhone, price, currency, optionalClauses = [] } = req.body;
 
-      if (geminiClient) {
-        const model = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
-        const result = await model.generateContent(prompt);
-        contractText = result.response.text().trim();
-      } else {
-        contractText = `عقد بيع وشراء مركبة
+      const numericPrice = parseInt(String(price || '0').replace(/,/g, ''), 10);
+      const priceInWords = tafqeet(numericPrice, currency || 'IQD');
 
-البائع: ${sellerName} (+964${normalizedSellerPhone})
-المشتري: ${buyerName} (+964${normalizedBuyerPhone})
-نوع المركبة وموديلها: ${carModel}
-رقم الشاصي: ${vinNumber}
-السعر المتفق عليه: ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'} (${priceInWords})
+      if (!sellerName || !sellerPhone || !buyerName || !buyerPhone || !carModel || !vinNumber || !price) {
+        return res.status(400).json({ error: 'يرجى تقديم جميع بيانات العقد المطلوبة.' });
+      }
 
-يتفق الطرفان على ما يلي:
-1. يبيع البائع للمشتري المركبة المشار إليها أعلاه بحالة جيدة.
-2. يسلم البائع المركبة للمشتري بعد استلام المبلغ المتفق عليه.
-3. يتحمل المشتري كافة المسؤوليات القانونية بعد التسليم.
-4. يكون القانون العراقي هو الحاكم لأي نزاع ينشأ عن هذا العقد.
+      const normalizedSellerPhone = sellerPhone.toString().replace(/\D/g, '');
+      const normalizedBuyerPhone = buyerPhone.toString().replace(/\D/g, '');
+
+      if (!/^[0-9]{10}$/.test(normalizedSellerPhone) || !/^[0-9]{10}$/.test(normalizedBuyerPhone)) {
+        return res.status(400).json({ error: 'يرجى إدخال أرقام جوال عراقية صحيحة بدون رمز الدولة.' });
+      }
+
+      // Map IDs to actual clause text
+      const clauseMap: Record<string, string> = {
+        'engine_warranty': 'يضمن البائع سلامة المحرك والجير لمدة 3 أيام من تاريخ الاستلام، وفي حال ظهور خلل فني جوهري يحق للمشتري إعادة المركبة.',
+        'traffic_test': 'يعتبر هذا البيع معلقاً على شرط اجتياز المركبة للفحص الفني في دائرة المرور المختصة.',
+        'previous_fines': 'يتحمل الطرف الأول (البائع) كافة الغرامات المرورية والديون الحكومية المترتبة على المركبة حتى تاريخ توقيع هذا العقد.',
+        'transfer_period': 'يلتزم البائع بالحضور أمام دائرة المرور لغرض تحويل ملكية المركبة باسم المشتري خلال مدة لا تتجاوز 10 أيام من تاريخه.',
+      };
+
+      let additionalConditions = '';
+      if (optionalClauses.length > 0) {
+        additionalConditions = '\n\nشروط إضافية متفق عليها:\n' + optionalClauses
+          .map((id: string, index: number) => `${index + 6}. ${clauseMap[id] || id}`)
+          .join('\n');
+      }
+
+      if (customClauses) {
+        additionalConditions += `\n\nبند مضاف من الأطراف:\n- ${customClauses}`;
+      }
+
+      const contractText = `عقد بيع وشراء مركبة
+
+أنه في يوم ${new Date().toLocaleDateString('ar-IQ')}، تم الاتفاق والتراضي بين كل من:
+
+الطرف الأول (البائع): السيد/ة ${sellerName} (رقم الهاتف: +964${normalizedSellerPhone})
+الطرف الثاني (المشتري): السيد/ة ${buyerName} (رقم الهاتف: +964${normalizedBuyerPhone})
+
+باع الطرف الأول للطرف الثاني المركبة الموصوفة أدناه:
+- نوع المركبة وموديلها: ${carModel}
+- رقم الشاصي (VIN): ${vinNumber}
+
+الثمن: تم هذا البيع نظير ثمن إجمالي قدره ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'} (${priceInWords}).
+
+شروط العقد:
+1. يقر الطرف الأول (البائع) بأن المركبة المباعة خالية من أي ديون أو حجوزات قانونية حتى تاريخ هذا العقد.
+2. يقر الطرف الثاني (المشتري) بأنه قد عاين المركبة معاينة تامة وقبل شراءها بحالتها الراهنة.
+3. يتعهد الطرف الأول بتسليم المركبة وكافة وثائقها القانونية للطرف الثاني فور استلام الثمن المذكور.
+4. تنتقل كافة المسؤوليات القانونية والمخالفات المترتبة على المركبة إلى عهدة الطرف الثاني من لحظة استلامه لها.
+5. يخضع هذا العقد لأحكام القوانين العراقية النافذة.
 
 التوقيعات:
-البائع: ____________________
-المشتري: ____________________`;
-      }
+توقيع الطرف الأول (البائع): ............................
+توقيع الطرف الثاني (المشتري): ............................`;
 
       res.json({ data: { contractText } });
     } catch (error) {
-      // Logging مفصل لأخطاء Gemini AI
-      console.error('❌ [AI Error] Contract generation failed:', error);
-      let userFacingError = 'فشل في توليد العقد. يرجى المحاولة مرة أخرى.';
-
-      // Attempt to extract more specific error messages from the Gemini API response
-      if (error instanceof Error) {
-        console.error(`- Stack: ${error.stack}`);
-        if (error.message.includes('API key')) {
-          userFacingError = 'خطأ في مفتاح API لخدمة الذكاء الاصطناعي. يرجى التحقق من إعدادات الخادم.';
-        } else if (error.message.includes('safety settings')) {
-          userFacingError = 'فشل توليد العقد بسبب محتوى غير مناسب في المدخلات. يرجى مراجعة البيانات.';
-        } else if (error.message.includes('rate limit')) {
-          userFacingError = 'تم تجاوز حد الاستخدام لخدمة الذكاء الاصطناعي. يرجى المحاولة لاحقاً.';
-        } else {
-          // Fallback for other specific messages from the AI service
-          userFacingError = `خطأ من خدمة الذكاء الاصطناعي: ${error.message}`;
-        }
-      } else if ((error as any).response && (error as any).response.data && (error as any).response.data.error) {
-        // Fallback for Axios-like errors with a structured response from the API
-        userFacingError = `خطأ من خدمة الذكاء الاصطناعي: ${(error as any).response.data.error.message || (error as any).response.data.error}`;
-      }
-
-      res.status(500).json({ error: userFacingError });
+      console.error('Local contract generation failed:', error);
+      res.status(500).json({ error: 'فشل في إعداد مسودة العقد. يرجى مراجعة البيانات والمحاولة مرة أخرى.' });
     }
   });
 
@@ -1630,6 +1594,59 @@ async function startServer() {
 
     console.log(`Save contract request: seller=${sellerName}, buyer=${buyerName}, status=${status || 'final'}`);
     res.json({ data: { success: true, message: 'تم حفظ العقد في المحفظة بنجاح.' } });
+  });
+
+  // --- Contract Template Sync Routes ---
+  app.get('/api/app/contract-templates', authenticateToken, async (req, res) => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: (req as any).user.userId },
+        select: { contractTemplates: true }
+      });
+      res.json({ data: (user as any)?.contractTemplates || [] });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch templates' });
+    }
+  });
+
+  app.post('/api/app/contract-templates', authenticateToken, async (req, res) => {
+    try {
+      const { text } = req.body;
+      const userId = (req as any).user.userId;
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const templates = (user as any).contractTemplates || [];
+
+      const updated = [text, ...templates.filter((t: string) => t !== text)].slice(0, 10);
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { contractTemplates: updated } as any
+      });
+
+      res.json({ data: updated });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to sync template' });
+    }
+  });
+
+  app.delete('/api/app/contract-templates', authenticateToken, async (req, res) => {
+    try {
+      const { index } = req.body;
+      const userId = (req as any).user.userId;
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const templates = (user as any).contractTemplates || [];
+
+      const updated = templates.filter((_: any, i: number) => i !== index);
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { contractTemplates: updated } as any
+      });
+
+      res.json({ data: updated });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete template' });
+    }
   });
 
   app.post('/api/legal/request-review', authenticateToken, async (req, res) => {
@@ -1779,7 +1796,7 @@ async function startServer() {
     try {
       // Hardened null check to prevent TypeError at server.ts:1677
       const rawSettings = await getAiSettings();
-      const aiConfig = rawSettings || { enabled: true, topK: 3, fallbackMode: false, maxTokens: 2048 };
+      const aiConfig = rawSettings || { enabled: true, topK: 3, fallbackMode: false, maxTokens: 2048, jpegQuality: 70, forceLocalMode: false };
 
       if (!aiConfig.enabled) {
         return res.json({
@@ -1788,6 +1805,23 @@ async function startServer() {
           sources: [],
         });
       }
+
+      if (aiConfig.forceLocalMode) {
+        // تحسين خوارزمية البحث المحلي بزيادة عدد المراجع المسترجعة للفرز الأولي
+        // لضمان تغطية أوسع للمواد القانونية عند غياب معالجة AI
+        const localTopK = (Number(topK) || aiConfig.topK) + 2;
+        const sources = getTopRelevantDocuments(question || '', localTopK);
+
+        const localAnswer = buildLocalAnswer(question || '', sources.slice(0, Number(topK) || aiConfig.topK));
+
+        return res.json({
+          question,
+          answer: `**[نظام البحث القانوني المباشر]**\n\n${localAnswer}`,
+          sources,
+          mode: 'local',
+        });
+      }
+
       if (aiConfig.fallbackMode) {
         return res.json({
           question,
@@ -1816,7 +1850,7 @@ async function startServer() {
         .join('\n\n');
 
       const model = geminiClient.getGenerativeModel({
-        model: 'gemini-1.5-flash-latest',
+        model: 'gemini-1.5-flash', // Stable model identifier to avoid 404 errors
         systemInstruction: buildGeminiSystemPrompt(selectedTone, referenceSummary),
         safetySettings: [
           {
@@ -1873,15 +1907,14 @@ async function startServer() {
         res.write(`data: ${JSON.stringify({ error: "انقطع الاتصال أو حدث خطأ أثناء المعالجة." })}\n\n`);
         res.end();
       } else {
-        let userFacingError = 'فشل في معالجة الطلب. حاول مرة أخرى لاحقاً.';
-        if (error instanceof Error) {
-          if (error.message.includes('API key')) {
-            userFacingError = 'خطأ في مفتاح API للذكاء الاصطناعي.';
-          } else if (error.message.includes('safety')) {
-            userFacingError = 'تم حجب الإجابة لدواعي السلامة.';
-          }
-        }
-        res.status(500).json({ error: userFacingError });
+        // Fallback to local dataset immediately if AI fails
+        const localSources = getTopRelevantDocuments(question, 3);
+        res.json({
+          question,
+          answer: buildLocalAnswer(question, localSources),
+          sources: localSources,
+          mode: 'local',
+        });
       }
     }
   });

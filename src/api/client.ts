@@ -257,12 +257,27 @@ class ApiClient {
     }
 
     async generateCarContract(data: any): Promise<ApiResponse<{ contractText: string }>> {
-        const response = await this.client.post('/api/legal/generate-contract', data);
+        const response = await this.client.post('/api/legal/car-contract', data);
         return response.data;
     }
 
     async whatsappCarContract(data: any): Promise<ApiResponse<any>> {
         const response = await this.client.post('/api/legal/whatsapp-contract', data);
+        return response.data;
+    }
+
+    async getContractTemplates(): Promise<ApiResponse<string[]>> {
+        const response = await this.client.get('/api/app/contract-templates');
+        return response.data;
+    }
+
+    async saveContractTemplate(text: string): Promise<ApiResponse<string[]>> {
+        const response = await this.client.post('/api/app/contract-templates', { text });
+        return response.data;
+    }
+
+    async deleteContractTemplate(index: number): Promise<ApiResponse<string[]>> {
+        const response = await this.client.delete('/api/app/contract-templates', { data: { index } });
         return response.data;
     }
 

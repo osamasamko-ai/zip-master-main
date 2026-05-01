@@ -36,6 +36,7 @@ export default function AIChat() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLocalOnlyMode, setIsLocalOnlyMode] = useState(false);
   const [tone, setTone] = useState<'formal' | 'simple' | 'friendly'>('formal');
   const [activeSources, setActiveSources] = useState<Source[] | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -80,6 +81,9 @@ export default function AIChat() {
       });
 
       const data = await response.json();
+
+      // تحديث حالة وضع البحث المحلي بناءً على رد الخادم
+      setIsLocalOnlyMode(data.mode === 'local');
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -170,6 +174,24 @@ export default function AIChat() {
             ref={scrollRef}
             className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar"
           >
+            <AnimatePresence>
+              {isLocalOnlyMode && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="mx-auto max-w-2xl mb-2"
+                >
+                  <div className="bg-amber-50 border border-amber-200 rounded-2xl p-4 flex items-start gap-3 shadow-sm">
+                    <i className="fa-solid fa-database text-amber-500 mt-1"></i>
+                    <p className="text-xs font-black text-amber-800 leading-relaxed text-right">
+                      وضع الاعتماد الكلي على القاعدة المحلية مفعّل. يتم الآن استخراج الإجابات والمراجع مباشرة من القوانين العراقية الرسمية لضمان أعلى مستويات الموثوقية القانونية.
+                    </p>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-md mx-auto">
                 <div className="w-20 h-20 bg-brand-navy/5 rounded-[2rem] flex items-center justify-center text-brand-navy text-3xl">
