@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ActionButton from '../components/ui/ActionButton';
 import apiClient from '../api/client';
 import html2pdf from 'html2pdf.js';
@@ -6,6 +6,91 @@ import { motion, AnimatePresence } from 'framer-motion';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+
+const SignaturePad = ({ onSave, value, placeholder }: { onSave: (data: string) => void, value: string, placeholder: string }) => {
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [isDrawing, setIsDrawing] = useState(false);
+
+    const clearCanvas = useCallback(() => {
+        const canvas = canvasRef.current;
+        if (canvas) {
+            const ctx = canvas.getContext('2d');
+            if (ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (!value) clearCanvas();
+    }, [value, clearCanvas]);
+
+    const getPos = (e: any) => {
+        const canvas = canvasRef.current;
+        if (!canvas) return { x: 0, y: 0 };
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        return {
+            x: (clientX - rect.left) * (canvas.width / rect.width),
+            y: (clientY - rect.top) * (canvas.height / rect.height)
+        };
+    };
+
+    const startDrawing = (e: any) => {
+        setIsDrawing(true);
+        const pos = getPos(e);
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) {
+            ctx.beginPath();
+            ctx.moveTo(pos.x, pos.y);
+            ctx.lineWidth = 2.5;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#1B365D';
+        }
+    };
+
+    const draw = (e: any) => {
+        if (!isDrawing) return;
+        const pos = getPos(e);
+        const ctx = canvasRef.current?.getContext('2d');
+        if (ctx) {
+            ctx.lineTo(pos.x, pos.y);
+            ctx.stroke();
+        }
+    };
+
+    const stopDrawing = () => {
+        if (!isDrawing) return;
+        setIsDrawing(false);
+        const canvas = canvasRef.current;
+        if (canvas) {
+            onSave(canvas.toDataURL());
+        }
+    };
+
+    return (
+        <div className="relative w-full h-40 bg-white rounded-2xl border border-slate-200 overflow-hidden cursor-crosshair shadow-inner">
+            <canvas
+                ref={canvasRef}
+                width={800}
+                height={200}
+                className="w-full h-full touch-none"
+                onMouseDown={startDrawing}
+                onMouseMove={draw}
+                onMouseUp={stopDrawing}
+                onMouseLeave={stopDrawing}
+                onTouchStart={startDrawing}
+                onTouchMove={draw}
+                onTouchEnd={stopDrawing}
+            />
+            {!value && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none opacity-30">
+                    <i className="fa-solid fa-signature text-3xl mb-2 text-slate-300"></i>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">وقع هنا: {placeholder}</p>
+                </div>
+            )}
+        </div>
+    );
+};
 
 export default function ContractWizard() {
     const { user } = useAuth();
@@ -19,6 +104,7 @@ export default function ContractWizard() {
         carModel: '', // نوع وموديل السيارة
         vinNumber: '', // رقم الشاصي
         price: '', // السعر المتفق عليه
+        currency: 'IQD', // العملة المحددة
         reminderDuration: 24, // مدة التذكير الافتراضية
     });
     const [generatedContractText, setGeneratedContractText] = useState('');
@@ -69,6 +155,18 @@ export default function ContractWizard() {
 
     const nextStep = () => setStep(prev => prev + 1);
     const prevStep = () => setStep(prev => prev - 1);
+
+    const compressSignature = async (signatureDataUrl: string) => {
+        if (!signatureDataUrl) return '';
+        try {
+            // Assuming apiClient.compressImage exists and sends dataUrl to server for compression
+            const response = await apiClient.compressImage(signatureDataUrl);
+            return response.data.compressedImageDataUrl;
+        } catch (error) {
+            console.error('Client-side compression failed, using original signature:', error);
+            return signatureDataUrl; // Fallback to original if compression fails
+        }
+    };
 
     // جلب قائمة المحامين عند حفظ المسودة
     useEffect(() => {
@@ -190,6 +288,9 @@ export default function ContractWizard() {
         setIsSendingWhatsApp(true);
         setIsSavingToWallet(true);
         setContractError('');
+
+        const compressedSeller = await compressSignature(sellerSignature);
+        const compressedBuyer = await compressSignature(buyerSignature);
         try {
             // 1. توليد الـ PDF كـ Blob
             const element = document.createElement('div');
@@ -284,7 +385,19 @@ export default function ContractWizard() {
         element.innerHTML = `
             <h1 style="font-size: 28px; font-weight: bold; color: #1B365D; margin-bottom: 10px; text-align: center;">عقد بيع وشراء مركبة</h1>
             <p style="font-size: 16px; color: #4A5568; margin-bottom: 20px; text-align: right;">${generatedContractText.replace(/\n/g, '<br>')}</p>
-            <p style="font-size: 13px; color: #718096; margin-top: 30px; text-align: center;">تم التوقيع إلكترونياً والموافقة على الشروط أعلاه.</p>
+            <div style="display: flex; justify-content: space-between; margin-top: 40px; direction: rtl;">
+                <div style="text-align: center; width: 45%;">
+                    <p style="font-weight: bold; margin-bottom: 10px;">توقيع البائع:</p>
+                    <img src="${compressedSeller}" style="max-w-full h-auto border-b border-slate-200 pb-2" />
+                    <p style="font-size: 12px; color: #666;">${formData.sellerName}</p>
+                </div>
+                <div style="text-align: center; width: 45%;">
+                    <p style="font-weight: bold; margin-bottom: 10px;">توقيع المشتري:</p>
+                    <img src="${compressedBuyer}" style="max-w-full h-auto border-b border-slate-200 pb-2" />
+                    <p style="font-size: 12px; color: #666;">${formData.buyerName}</p>
+                </div>
+            </div>
+            <p style="font-size: 11px; color: #999; margin-top: 40px; text-align: center;">تم التوقيع إلكترونياً والموافقة على الشروط أعلاه عبر منصة القسطاس.</p>
         `;
 
         const opt = {
@@ -300,9 +413,33 @@ export default function ContractWizard() {
     };
 
     return (
-        <div className="app-view p-6 text-right">
-            <div className="max-w-2xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-premium">
-                <h2 className="text-2xl font-black text-brand-dark mb-6">إنشاء عقد بيع سيارة ذكي</h2>
+        <div className="app-view fade-in space-y-8 pb-12 text-center">
+            {/* Premium Header Banner */}
+            <section className="relative overflow-hidden rounded-[2.5rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.03] p-8 shadow-premium">
+                <div className="absolute -left-20 -top-20 h-56 w-56 rounded-full bg-brand-gold/10 blur-3xl"></div>
+                <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="text-center lg:text-right">
+                        <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">AI Contract Engine</p>
+                        <h2 className="mt-3 text-3xl font-black text-brand-dark">منشئ العقود الذكي</h2>
+                        <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
+                            أداة احترافية لتوليد عقود بيع السيارات بضمانات قانونية، توقيع إلكتروني ملزم، وتوثيق فوري في محفظتك الرقمية.
+                        </p>
+                    </div>
+                    <div className="flex gap-3">
+                        <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm min-w-[140px] text-center mx-auto lg:mx-0">
+                            <p className="text-[11px] font-black uppercase text-slate-400">الخطوات</p>
+                            <p className="mt-1 text-2xl font-black text-brand-navy">{step} / {totalSteps}</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Centered Medal Layout Card */}
+            <div className="max-w-3xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 p-8 md:p-12 shadow-premium relative">
+                <h2 className="text-2xl font-black text-brand-dark mb-8 flex items-center justify-center gap-3">
+                    <i className="fa-solid fa-file-signature text-brand-gold"></i>
+                    إصدار عقد مركبة جديد
+                </h2>
 
                 <div className="mb-10">
                     <div className="flex justify-between items-center mb-8 relative">
@@ -334,7 +471,7 @@ export default function ContractWizard() {
                         <div className="h-10 w-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-gold shrink-0">
                             <i className="fa-solid fa-lightbulb"></i>
                         </div>
-                        <div>
+                        <div className="flex-1">
                             <p className="text-sm font-black text-brand-dark">{stepTitles[step - 1]}</p>
                             <p className="text-xs font-bold text-slate-500 mt-1 leading-relaxed">{stepDescriptions[step]}</p>
                         </div>
@@ -352,7 +489,7 @@ export default function ContractWizard() {
                         {step === 1 && (
                             <div className="space-y-6">
                                 <div className="space-y-4">
-                                    <h3 className="font-black text-slate-700 text-sm flex items-center gap-2 border-r-4 border-brand-gold pr-3">بيانات البائع</h3>
+                                    <h3 className="font-black text-slate-700 text-sm flex items-center justify-center gap-2 border-r-4 border-brand-gold pr-3">بيانات البائع</h3>
                                     <input
                                         placeholder="اسم البائع الكامل"
                                         className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
@@ -381,7 +518,7 @@ export default function ContractWizard() {
                                 </div>
 
                                 <div className="space-y-4 pt-4">
-                                    <h3 className="font-black text-slate-700 text-sm flex items-center gap-2 border-r-4 border-brand-navy pr-3">بيانات المشتري</h3>
+                                    <h3 className="font-black text-slate-700 text-sm flex items-center justify-center gap-2 border-r-4 border-brand-navy pr-3">بيانات المشتري</h3>
                                     <input
                                         placeholder="اسم المشتري الكامل"
                                         className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
@@ -422,7 +559,7 @@ export default function ContractWizard() {
 
                         {step === 2 && (
                             <div className="space-y-4">
-                                <h3 className="font-black text-slate-700 text-sm border-r-4 border-brand-gold pr-3 mb-4">بيانات المركبة والثمن</h3>
+                                <h3 className="font-black text-slate-700 text-sm border-r-4 border-brand-gold pr-3 mb-4 text-center">بيانات المركبة والثمن</h3>
                                 <div className="space-y-4">
                                     <div className="relative">
                                         <input
@@ -442,14 +579,40 @@ export default function ContractWizard() {
                                         />
                                         <i className="fa-solid fa-hashtag absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
                                     </div>
-                                    <div className="relative">
-                                        <input
-                                            placeholder="السعر المتفق عليه"
-                                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-black text-brand-navy focus:bg-white focus:border-brand-navy transition-all"
-                                            onChange={e => setFormData({ ...formData, price: e.target.value })}
-                                            value={formData.price}
-                                        />
-                                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">د.ع</span>
+                                    <div className="space-y-3">
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, currency: 'IQD' })}
+                                                className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.currency === 'IQD' ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+                                            >
+                                                دينار عراقي (د.ع)
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, currency: 'USD' })}
+                                                className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.currency === 'USD' ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+                                            >
+                                                دولار أمريكي ($)
+                                            </button>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                placeholder="السعر المتفق عليه"
+                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-black text-brand-navy focus:bg-white focus:border-brand-navy transition-all"
+                                                onChange={e => {
+                                                    const val = e.target.value.replace(/,/g, '');
+                                                    if (/^\d*$/.test(val)) {
+                                                        const formatted = val.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                                                        setFormData({ ...formData, price: formatted });
+                                                    }
+                                                }}
+                                                value={formData.price}
+                                            />
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">
+                                                {formData.currency === 'IQD' ? 'د.ع' : '$'}
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="flex gap-3 mt-6">
@@ -468,9 +631,28 @@ export default function ContractWizard() {
                                     <h3 className="font-black text-slate-700 text-sm">مراجعة مسودة العقد</h3>
                                     <StatusBadge tone="success">تم التوليد بذكاء</StatusBadge>
                                 </div>
-                                {generatedContractText ? (
+                                {generatedContractText ? ( // Use a separate div for rendering to allow HTML injection
                                     <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap max-h-96 overflow-y-auto custom-scrollbar font-medium shadow-inner">
-                                        {generatedContractText}
+                                        <div dangerouslySetInnerHTML={{ __html: generatedContractText.replace(/\n/g, '<br>') }} />
+
+                                        {(sellerSignature || buyerSignature) && (
+                                            <div className="mt-8 pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center text-center gap-4">
+                                                {sellerSignature && (
+                                                    <div className="w-full sm:w-1/2 p-2">
+                                                        <p className="font-bold text-brand-dark mb-2">توقيع البائع:</p>
+                                                        <img src={sellerSignature} alt="Seller Signature" className="max-w-full h-auto mx-auto border-b border-slate-200 pb-2" />
+                                                        <p className="text-xs text-slate-500 mt-1">{formData.sellerName}</p>
+                                                    </div>
+                                                )}
+                                                {buyerSignature && (
+                                                    <div className="w-full sm:w-1/2 p-2">
+                                                        <p className="font-bold text-brand-dark mb-2">توقيع المشتري:</p>
+                                                        <img src={buyerSignature} alt="Buyer Signature" className="max-w-full h-auto mx-auto border-b border-slate-200 pb-2" />
+                                                        <p className="text-xs text-slate-500 mt-1">{formData.buyerName}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
                                 ) : (
                                     <div className="p-10 bg-red-50 rounded-[2rem] text-red-600 text-center border border-red-100">
@@ -582,23 +764,39 @@ export default function ContractWizard() {
                                 <h3 className="font-black text-slate-700 text-sm border-r-4 border-brand-navy pr-3">التوقيع الإلكتروني والمصادقة</h3>
                                 <div className="space-y-6 p-6 rounded-[2rem] border border-slate-200 bg-slate-50/50 shadow-inner">
                                     <div className="space-y-3">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">توقيع البائع</label>
-                                        <input
-                                            type="text"
+                                        <div className="flex items-center justify-between px-1">
+                                            {sellerSignature && (
+                                                <button
+                                                    onClick={() => setSellerSignature('')}
+                                                    className="text-[9px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
+                                                >
+                                                    <i className="fa-solid fa-rotate-left"></i> مسح وإعادة البدء
+                                                </button>
+                                            )}
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mr-auto">توقيع البائع</label>
+                                        </div>
+                                        <SignaturePad
                                             placeholder={formData.sellerName}
                                             value={sellerSignature}
-                                            onChange={e => setSellerSignature(e.target.value)}
-                                            className="w-full p-4 bg-white rounded-2xl border border-slate-200 outline-none text-right font-signature text-brand-navy text-2xl shadow-sm focus:border-brand-navy transition-all"
+                                            onSave={setSellerSignature}
                                         />
                                     </div>
                                     <div className="space-y-3">
-                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">توقيع المشتري</label>
-                                        <input
-                                            type="text"
+                                        <div className="flex items-center justify-between px-1">
+                                            {buyerSignature && (
+                                                <button
+                                                    onClick={() => setBuyerSignature('')}
+                                                    className="text-[9px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
+                                                >
+                                                    <i className="fa-solid fa-rotate-left"></i> مسح وإعادة البدء
+                                                </button>
+                                            )}
+                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mr-auto">توقيع المشتري</label>
+                                        </div>
+                                        <SignaturePad
                                             placeholder={formData.buyerName}
                                             value={buyerSignature}
-                                            onChange={e => setBuyerSignature(e.target.value)}
-                                            className="w-full p-4 bg-white rounded-2xl border border-slate-200 outline-none text-right font-signature text-brand-navy text-2xl shadow-sm focus:border-brand-navy transition-all"
+                                            onSave={setBuyerSignature}
                                         />
                                     </div>
                                     <label className="flex items-start justify-end gap-3 cursor-pointer group bg-white p-4 rounded-2xl border border-slate-100">

@@ -89,6 +89,7 @@ import {
   toggleCaseArchive,
   updateCaseProgress,
   markCaseMessagesAsRead,
+  // ... other imports
   mapWorkspaceCase,
   updateProCaseStatuses,
   updateProMessageState,
@@ -96,6 +97,7 @@ import {
 } from './src/server/workspaceData';
 
 // Constants for Legal Fees
+import sharp from 'sharp'; // Import sharp for image processing
 const CONTRACT_CREATION_FEE = 25000;
 const LAWYER_REVIEW_FEE = 15000;
 const PROMO_CODE_DISCOUNT = 10000; // خصم ثابت لكود الخصم
@@ -170,6 +172,22 @@ async function startServer() {
   const io = new Server(httpServer, {
     cors: { origin: "*" }
   });
+
+  // Diagnostic: List available Gemini models on startup
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
+      const data = await response.json() as any;
+      if (data.models) {
+        console.log('🤖 [AI-Discovery] Available Models for your API Key:');
+        data.models.forEach((m: any) => console.log(`   - ${m.name}`));
+      } else {
+        console.warn('⚠️ [AI-Discovery] Could not retrieve models. Check your API key permissions.', data);
+      }
+    } catch (err) {
+      console.error('❌ [AI-Discovery] Failed to connect to Gemini discovery service:', err);
+    }
+  }
 
   const PORT = Number(process.env.PORT || 3000);
   const adminBootstrapSecret = process.env.ADMIN_BOOTSTRAP_SECRET;
@@ -1332,7 +1350,7 @@ async function startServer() {
     }
 
     try {
-      const model = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
+      const model = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
       const prompt = `أنت مساعد قانوني عراقي محترف. قم بصياغة مسودة لـ ${docType}. 
       سياق القضية: ${caseContext}. 
       متطلبات إضافية: ${specificRequirements}.
@@ -1376,9 +1394,99 @@ async function startServer() {
     }
   });
 
+  // New endpoint for image compression
+  app.post('/api/utils/compress-image', authenticateToken, async (req, res) => {
+    const { imageDataUrl } = req.body; // Expecting a data:image/png;base64,... string
+
+    if (!imageDataUrl || !imageDataUrl.startsWith('data:image/')) {
+      return res.status(400).json({ error: 'Invalid image data URL provided.' });
+    }
+
+    try {
+      // Extract base64 part and mime type
+      const [mime, base64Data] = imageDataUrl.split(';base64,');
+      const buffer = Buffer.from(base64Data, 'base64');
+
+      // Use sharp to compress. Convert to JPEG for better compression, lower quality.
+      // Adjust quality (1-100) as needed. 70 is a good balance for web.
+      const compressedBuffer = await sharp(buffer)
+        .jpeg({ quality: 70 })
+        .toBuffer();
+
+      const compressedDataUrl = `data:image/jpeg;base64,${compressedBuffer.toString('base64')}`;
+      res.json({ compressedImageDataUrl: compressedDataUrl });
+    } catch (error) {
+      console.error('Error compressing image:', error);
+      res.status(500).json({ error: 'Failed to compress image.' });
+    }
+  });
+
+  // Utility for Arabic Tafqeet (Simplified)
+  function tafqeet(amount: number, currency: 'IQD' | 'USD'): string {
+    const units = ["", "واحد", "اثنان", "ثلاثة", "أربعة", "خمسة", "ستة", "سبعة", "ثمانية", "تسعة"];
+    const teens = ["عشرة", "أحد عشر", "اثنا عشر", "ثلاثة عشر", "أربعة عشر", "خمسة عشر", "ستة عشر", "سبعة عشر", "ثمانية عشر", "تسعة عشر"];
+    const tens = ["", "عشرة", "عشرون", "ثلاثون", "أربعون", "خمسون", "ستون", "سبعون", "ثمانون", "تسعون"];
+    const hundreds = ["", "مائة", "مائتان", "ثلاثمائة", "أربعمائة", "خمسائة", "ستمائة", "سبعمائة", "ثمانمائة", "تسعمائة"];
+
+    if (amount === 0) return "صفر";
+
+    const convertLessThanOneThousand = (n: number): string => {
+      let res = "";
+      if (n >= 100) {
+        res += hundreds[Math.floor(n / 100)];
+        n %= 100;
+        if (n > 0) res += " و ";
+      }
+      if (n >= 20) {
+        const unit = n % 10;
+        if (unit > 0) res += units[unit] + " و ";
+        res += tens[Math.floor(n / 10)];
+      } else if (n >= 10) {
+        res += teens[n - 10];
+      } else if (n > 0) {
+        res += units[n];
+      }
+      return res;
+    };
+
+    const convert = (n: number): string => {
+      if (n === 0) return "";
+      if (n < 1000) return convertLessThanOneThousand(n);
+      if (n < 1000000) {
+        const thousands = Math.floor(n / 1000);
+        const remainder = n % 1000;
+        let res = "";
+        if (thousands === 1) res = "ألف";
+        else if (thousands === 2) res = "ألفان";
+        else if (thousands >= 3 && thousands <= 10) res = convertLessThanOneThousand(thousands) + " آلاف";
+        else res = convertLessThanOneThousand(thousands) + " ألف";
+        if (remainder > 0) res += " و " + convert(remainder);
+        return res;
+      }
+      if (n < 1000000000) {
+        const millions = Math.floor(n / 1000000);
+        const remainder = n % 1000000;
+        let res = "";
+        if (millions === 1) res = "مليون";
+        else if (millions === 2) res = "مليونان";
+        else if (millions >= 3 && millions <= 10) res = convertLessThanOneThousand(millions) + " ملايين";
+        else res = convertLessThanOneThousand(millions) + " مليون";
+        if (remainder > 0) res += " و " + convert(remainder);
+        return res;
+      }
+      return n.toString();
+    };
+
+    const words = convert(amount);
+    const currencyName = currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي';
+    return `${words} ${currencyName} لا غير`;
+  }
+
   // Route for generating car contracts (as used by ContractWizard.tsx)
   app.post('/api/legal/car-contract', authenticateToken, async (req, res) => {
-    const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price } = req.body;
+    const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price, currency } = req.body;
+    const numericPrice = parseInt(price.toString().replace(/,/g, ''), 10);
+    const priceInWords = tafqeet(numericPrice, currency || 'IQD');
 
     if (!sellerName || !sellerPhone || !buyerName || !buyerPhone || !carModel || !vinNumber || !price) {
       return res.status(400).json({ error: 'يرجى تقديم جميع بيانات العقد المطلوبة.' });
@@ -1396,7 +1504,7 @@ async function startServer() {
 المشتري: ${buyerName} (+964${normalizedBuyerPhone})
 نوع المركبة وموديلها: ${carModel}
 رقم الشاصي: ${vinNumber}
-السعر المتفق عليه: ${price} دينار عراقي
+السعر المتفق عليه: ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'} (${priceInWords})
 
 يجب أن يتضمن العقد:
 1. مقدمة تعريفية بالأطراف والمركبة.
@@ -1410,7 +1518,7 @@ async function startServer() {
       let contractText: string;
 
       if (geminiClient) {
-        const model = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const model = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
         const result = await model.generateContent(prompt);
         contractText = result.response.text().trim();
       } else {
@@ -1420,7 +1528,7 @@ async function startServer() {
 المشتري: ${buyerName} (+964${normalizedBuyerPhone})
 نوع المركبة وموديلها: ${carModel}
 رقم الشاصي: ${vinNumber}
-السعر المتفق عليه: ${price} دينار عراقي
+السعر المتفق عليه: ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'} (${priceInWords})
 
 يتفق الطرفان على ما يلي:
 1. يبيع البائع للمشتري المركبة المشار إليها أعلاه بحالة جيدة.
@@ -1663,29 +1771,16 @@ async function startServer() {
       history?: ChatHistoryItem[];
     };
 
-    if (!question || typeof question !== 'string') {
-      return res.status(400).json({ error: 'السؤال مطلوب كـ string.' });
-    }
-
     // API Key safety check
     if (!geminiClient) {
       console.warn("Gemini Client not initialized. Check GEMINI_API_KEY environment variable.");
     }
 
     try {
-      const aiConfig = await getAiSettings();
+      // Hardened null check to prevent TypeError at server.ts:1677
+      const rawSettings = await getAiSettings();
+      const aiConfig = rawSettings || { enabled: true, topK: 3, fallbackMode: false, maxTokens: 2048 };
 
-      // Defensive check: If aiConfig is null or undefined, treat AI as disabled.
-      // This handles cases where getAiSettings might unexpectedly return null,
-      // even though adminData.ts is designed to provide defaults.
-      if (aiConfig === null || aiConfig === undefined) {
-        return res.json({
-          question,
-          answer: 'الميزة الذكية معطلة حالياً. الرجاء التواصل مع الدعم أو المحاولة لاحقاً.',
-          sources: [],
-        });
-      }
-      // Now that aiConfig is guaranteed not to be null/undefined, check its 'enabled' property
       if (!aiConfig.enabled) {
         return res.json({
           question,
@@ -1721,7 +1816,7 @@ async function startServer() {
         .join('\n\n');
 
       const model = geminiClient.getGenerativeModel({
-        model: 'gemini-1.5-flash',
+        model: 'gemini-1.5-flash-latest',
         systemInstruction: buildGeminiSystemPrompt(selectedTone, referenceSummary),
         safetySettings: [
           {

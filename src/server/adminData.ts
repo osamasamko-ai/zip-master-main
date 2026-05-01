@@ -418,32 +418,82 @@ export async function getSystemSettings(): Promise<SystemSettings> {
 
 export async function updateSystemSettings(settings: Partial<SystemSettings>) {
     const current = await prisma.systemSetting.findFirst();
-    const updated = await prisma.systemSetting.update({
-        where: { id: current?.id },
-        data: settings
-    }) as any;
+    let updated: any;
+
+    if (!current) {
+        updated = await prisma.systemSetting.create({
+            data: { ...settings } as any
+        });
+    } else {
+        updated = await prisma.systemSetting.update({
+            where: { id: current.id },
+            data: settings
+        });
+    }
+
     invalidateCache('system-settings');
     return updated;
 }
 
 export async function getAiSettings(): Promise<AiSettings> {
     return getCached('ai-settings', async () => {
-        const settings = await prisma.aiSetting.findFirst();
-        return (settings as any) || {
-            enabled: true,
-            topK: 3,
-            fallbackMode: false,
-            maxTokens: 2048
-        };
+        // Reduced logging to keep console clean unless there's an actual error
+        try {
+            const settings = await prisma.aiSetting.findFirst();
+
+            if (!settings) {
+                console.warn('⚠️ [AI-CONFIG] No record found in "AiSetting" table. Returning default configuration.');
+                return {
+                    enabled: true,
+                    topK: 3,
+                    fallbackMode: false,
+                    maxTokens: 2048
+                } as any;
+            }
+
+            // Validation for unexpected null values within a found record
+            const raw = settings as any;
+            const requiredKeys: (keyof AiSettings)[] = ['enabled', 'topK', 'fallbackMode', 'maxTokens'];
+            const missingKeys = requiredKeys.filter(k => raw[k] === null || raw[k] === undefined);
+
+            if (missingKeys.length > 0) {
+                console.error(`🚨 [AI-CONFIG] Found database record but some fields are NULL: [${missingKeys.join(', ')}]. Object:`, raw);
+            } else {
+                console.log('✅ [AI-CONFIG] Settings loaded and validated successfully from database.');
+            }
+
+            return settings as any;
+        } catch (error) {
+            console.warn('⚠️ [AI-CONFIG] Database fetch failed, using fallback settings.');
+            // Fallback to prevent null pointer exceptions in callers
+            return {
+                enabled: true,
+                topK: 3,
+                fallbackMode: false,
+                maxTokens: 2048
+            } as any;
+        }
     });
 }
 
 export async function updateAiSettings(settings: Partial<AiSettings>) {
     const current = await prisma.aiSetting.findFirst();
-    const updated = await prisma.aiSetting.update({
-        where: { id: current?.id },
-        data: settings
-    }) as any;
+    let updated: any;
+
+    if (!current) {
+        updated = await prisma.aiSetting.create({
+            data: {
+                enabled: true, topK: 3, fallbackMode: false, maxTokens: 2048,
+                ...settings
+            } as any
+        });
+    } else {
+        updated = await prisma.aiSetting.update({
+            where: { id: current.id },
+            data: settings
+        });
+    }
+
     invalidateCache('ai-settings');
     return updated;
 }
@@ -475,10 +525,22 @@ export async function getWorkflowSettings(): Promise<WorkflowSettings> {
 
 export async function updateWorkflowSettings(settings: Partial<WorkflowSettings>) {
     const current = await prisma.workflowSetting.findFirst();
-    const updated = await prisma.workflowSetting.update({
-        where: { id: current?.id },
-        data: settings
-    }) as any;
+    let updated: any;
+
+    if (!current) {
+        updated = await prisma.workflowSetting.create({
+            data: {
+                allowNewCases: true, enforceSignedDocs: true, autoAssignLawyers: false, openCasesPerLawyer: 5,
+                ...settings
+            } as any
+        });
+    } else {
+        updated = await prisma.workflowSetting.update({
+            where: { id: current.id },
+            data: settings
+        });
+    }
+
     invalidateCache('workflow-settings');
     return updated;
 }
