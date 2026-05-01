@@ -7,9 +7,9 @@ export default function ContractWizard() {
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         sellerName: '',
-        sellerEmail: '',
+        sellerPhone: '',
         buyerName: '',
-        buyerEmail: '',
+        buyerPhone: '',
         carModel: '', // نوع وموديل السيارة
         vinNumber: '', // رقم الشاصي
         price: '', // السعر المتفق عليه
@@ -22,18 +22,27 @@ export default function ContractWizard() {
     const [sellerSignature, setSellerSignature] = useState('');
     const [buyerSignature, setBuyerSignature] = useState('');
     const [agreedToTerms, setAgreedToTerms] = useState(false);
-    const [emailErrors, setEmailErrors] = useState({ seller: '', buyer: '' });
+    const [phoneErrors, setPhoneErrors] = useState({ seller: '', buyer: '' });
     const [isPaying, setIsPaying] = useState(false);
     const [isPaid, setIsPaid] = useState(false);
 
     const totalSteps = 6; // Increased for payment step
+    const stepTitles = ['بيانات الأطراف', 'تفاصيل المركبة', 'مراجعة العقد', 'الدفع', 'التوقيع', 'الانتهاء'];
+    const stepDescriptions: Record<number, string> = {
+        1: 'أدخل أسماء الأطراف وأرقام الجوال العراقية بدون رمز الدولة.',
+        2: 'أدخل تفاصيل السيارة والسعر المتفق عليه بدقة.',
+        3: 'راجع مسودة العقد وتأكد من جميع البنود.',
+        4: 'أكمل الدفع ليتم حفظ العقد رسمياً.',
+        5: 'أضف توقيعك الإلكتروني ووافق على الشروط.',
+        6: 'تم! يمكنك تحميل العقد أو إنشاء عقد جديد.',
+    };
+
+    const validatePhone = (phone: string) => {
+        return /^[0-9]{10}$/.test(phone);
+    };
 
     const nextStep = () => setStep(prev => prev + 1);
     const prevStep = () => setStep(prev => prev - 1);
-
-    const validateEmail = (email: string) => {
-        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-    };
 
     const handleGenerateContract = async () => {
         setIsLoadingContract(true);
@@ -47,7 +56,7 @@ export default function ContractWizard() {
             // to create the contract text based on formData and Iraqi law dataset.
             const response = await apiClient.generateCarContract(formData);
 
-            setGeneratedContractText(response.contractText);
+            setGeneratedContractText(response.data.contractText);
             nextStep(); // Move to the next step (Contract Review)
         } catch (error: any) {
             console.error('Error generating contract:', error);
@@ -132,10 +141,16 @@ export default function ContractWizard() {
             <div className="max-w-2xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 p-8 shadow-premium">
                 <h2 className="text-2xl font-black text-brand-dark mb-6">إنشاء عقد بيع سيارة ذكي</h2>
 
-                <div className="flex justify-between mb-8 flex-row-reverse">
-                    {Array.from({ length: totalSteps }).map((_, index) => (
-                        <div key={index} className={`h-2 flex-1 mx-1 rounded-full ${step >= (index + 1) ? 'bg-brand-navy' : 'bg-slate-100'}`} />
-                    ))}
+                <div className="space-y-4 mb-8">
+                    <div className="flex justify-between flex-row-reverse">
+                        {Array.from({ length: totalSteps }).map((_, index) => (
+                            <div key={index} className={`h-2 flex-1 mx-1 rounded-full ${step >= (index + 1) ? 'bg-brand-navy' : 'bg-slate-100'}`} />
+                        ))}
+                    </div>
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4 text-right">
+                        <p className="text-sm font-black text-brand-dark">{stepTitles[step - 1]}</p>
+                        <p className="text-xs text-slate-500 mt-1">{stepDescriptions[step]}</p>
+                    </div>
                 </div>
 
                 {step === 1 && (
@@ -150,21 +165,25 @@ export default function ContractWizard() {
                                     onChange={e => setFormData({ ...formData, sellerName: e.target.value })}
                                     value={formData.sellerName}
                                 />
-                                <input
-                                    type="email"
-                                    placeholder="البريد الإلكتروني للبائع"
-                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
-                                    onChange={e => setFormData({ ...formData, sellerEmail: e.target.value })}
-                                    onBlur={() => {
-                                        const isValid = validateEmail(formData.sellerEmail);
-                                        setEmailErrors(prev => ({
-                                            ...prev,
-                                            seller: isValid || !formData.sellerEmail ? '' : 'صيغة البريد الإلكتروني غير صحيحة'
-                                        }));
-                                    }}
-                                    value={formData.sellerEmail}
-                                />
-                                {emailErrors.seller && <p className="text-rose-500 text-[10px] font-bold mr-2">{emailErrors.seller}</p>}
+                                <div className="flex items-center gap-3">
+                                    <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-500">+964</span>
+                                    <input
+                                        type="tel"
+                                        placeholder="7701234567"
+                                        maxLength={10}
+                                        className="min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
+                                        onChange={e => setFormData({ ...formData, sellerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                        onBlur={() => {
+                                            const isValid = validatePhone(formData.sellerPhone);
+                                            setPhoneErrors(prev => ({
+                                                ...prev,
+                                                seller: isValid || !formData.sellerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
+                                            }));
+                                        }}
+                                        value={formData.sellerPhone}
+                                    />
+                                </div>
+                                {phoneErrors.seller && <p className="text-rose-500 text-[10px] font-bold mr-2">{phoneErrors.seller}</p>}
                             </div>
                             <div className="space-y-2">
                                 <p className="text-xs font-bold text-slate-500 mr-2">معلومات المشتري</p>
@@ -174,24 +193,35 @@ export default function ContractWizard() {
                                     onChange={e => setFormData({ ...formData, buyerName: e.target.value })}
                                     value={formData.buyerName}
                                 />
-                                <input
-                                    type="email"
-                                    placeholder="البريد الإلكتروني للمشتري"
-                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
-                                    onChange={e => setFormData({ ...formData, buyerEmail: e.target.value })}
-                                    onBlur={() => {
-                                        const isValid = validateEmail(formData.buyerEmail);
-                                        setEmailErrors(prev => ({
-                                            ...prev,
-                                            buyer: isValid || !formData.buyerEmail ? '' : 'صيغة البريد الإلكتروني غير صحيحة'
-                                        }));
-                                    }}
-                                    value={formData.buyerEmail}
-                                />
-                                {emailErrors.buyer && <p className="text-rose-500 text-[10px] font-bold mr-2">{emailErrors.buyer}</p>}
+                                <div className="flex items-center gap-3">
+                                    <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-500">+964</span>
+                                    <input
+                                        type="tel"
+                                        placeholder="7701234567"
+                                        maxLength={10}
+                                        className="min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right"
+                                        onChange={e => setFormData({ ...formData, buyerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                        onBlur={() => {
+                                            const isValid = validatePhone(formData.buyerPhone);
+                                            setPhoneErrors(prev => ({
+                                                ...prev,
+                                                buyer: isValid || !formData.buyerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
+                                            }));
+                                        }}
+                                        value={formData.buyerPhone}
+                                    />
+                                </div>
+                                {phoneErrors.buyer && <p className="text-rose-500 text-[10px] font-bold mr-2">{phoneErrors.buyer}</p>}
                             </div>
                         </div>
-                        <ActionButton onClick={nextStep} variant="primary" className="w-full" disabled={!formData.sellerEmail || !formData.buyerEmail || !!emailErrors.seller || !!emailErrors.buyer}>التالي</ActionButton>
+                        <ActionButton
+                            onClick={nextStep}
+                            variant="primary"
+                            className="w-full"
+                            disabled={!formData.sellerPhone || !formData.buyerPhone || !!phoneErrors.seller || !!phoneErrors.buyer}
+                        >
+                            التالي
+                        </ActionButton>
                     </div>
                 )}
 
@@ -244,6 +274,23 @@ export default function ContractWizard() {
                             <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
                             <ActionButton onClick={nextStep} variant="primary" className="flex-[2]" disabled={!generatedContractText}>الموافقة والتوقيع</ActionButton>
                         </div>
+                    </div>
+                )}
+
+                {step === 4 && (
+                    <div className="space-y-4">
+                        <h3 className="font-bold text-slate-700">الدفع عبر زين كاش</h3>
+                        <div className="bg-slate-50 p-6 rounded-2xl border border-slate-200 text-sm leading-relaxed text-slate-700">
+                            <p>من فضلك أكمل الدفع بقيمة 25,000 دينار عراقي عبر خدمة زين كاش لإتمام عقد البيع.</p>
+                            <p className="mt-3 text-[13px] text-slate-500">سيتم حفظ العقد في محفظتك بعد اكتمال الدفع.</p>
+                        </div>
+                        <div className="flex gap-3">
+                            <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
+                            <ActionButton onClick={handleZainCashPayment} variant="primary" className="flex-[2]" disabled={isPaying}>
+                                {isPaying ? 'جاري الدفع...' : 'ادفع عبر زين كاش'}
+                            </ActionButton>
+                        </div>
+                        {contractError && <p className="text-red-500 text-sm mt-2">{contractError}</p>}
                     </div>
                 )}
 

@@ -52,7 +52,7 @@ export default function Support() {
             setSubmitStatus('success');
             setFormData({
                 name: user?.name || '',
-                email: user?.email || '',
+                phone: '',
                 subject: '',
                 message: '',
             });

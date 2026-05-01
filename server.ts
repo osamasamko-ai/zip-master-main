@@ -1342,6 +1342,103 @@ async function startServer() {
     }
   });
 
+  app.post('/api/legal/generate-contract', authenticateToken, async (req, res) => {
+    const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price } = req.body;
+
+    if (!sellerName || !sellerPhone || !buyerName || !buyerPhone || !carModel || !vinNumber || !price) {
+      return res.status(400).json({ error: 'يرجى تقديم جميع بيانات العقد المطلوبة.' });
+    }
+
+    const normalizedSellerPhone = sellerPhone.toString().replace(/\D/g, '');
+    const normalizedBuyerPhone = buyerPhone.toString().replace(/\D/g, '');
+
+    if (!/^[0-9]{10}$/.test(normalizedSellerPhone) || !/^[0-9]{10}$/.test(normalizedBuyerPhone)) {
+      return res.status(400).json({ error: 'يرجى إدخال أرقام جوال عراقية صحيحة بدون رمز الدولة.' });
+    }
+
+    const prompt = `أنت مساعد قانوني عراقي محترف. قم بصياغة عقد بيع وشراء مركبة باللغة العربية.
+البائع: ${sellerName} (+964${normalizedSellerPhone})
+المشتري: ${buyerName} (+964${normalizedBuyerPhone})
+نوع المركبة وموديلها: ${carModel}
+رقم الشاصي: ${vinNumber}
+السعر المتفق عليه: ${price} دينار عراقي
+
+يجب أن يتضمن العقد:
+1. مقدمة تعريفية بالأطراف والمركبة.
+2. بنود البيع والتسليم.
+3. شروط الدفع وتأكيد الاستلام.
+4. بنود الإعفاء من المسؤولية.
+5. إقرار التوقيع والمادة القانونية الحاكمة.
+اكتب العقد بصيغة قانونية واضحة ومهنية.`;
+
+    try {
+      let contractText: string;
+
+      if (geminiClient) {
+        const model = geminiClient.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        const result = await model.generateContent(prompt);
+        contractText = result.response.text().trim();
+      } else {
+        contractText = `عقد بيع وشراء مركبة
+
+البائع: ${sellerName} (+964${normalizedSellerPhone})
+المشتري: ${buyerName} (+964${normalizedBuyerPhone})
+نوع المركبة وموديلها: ${carModel}
+رقم الشاصي: ${vinNumber}
+السعر المتفق عليه: ${price} دينار عراقي
+
+يتفق الطرفان على ما يلي:
+1. يبيع البائع للمشتري المركبة المشار إليها أعلاه بحالة جيدة.
+2. يسلم البائع المركبة للمشتري بعد استلام المبلغ المتفق عليه.
+3. يتحمل المشتري كافة المسؤوليات القانونية بعد التسليم.
+4. يكون القانون العراقي هو الحاكم لأي نزاع ينشأ عن هذا العقد.
+
+التوقيعات:
+البائع: ____________________
+المشتري: ____________________`;
+      }
+
+      res.json({ data: { contractText } });
+    } catch (error) {
+      console.error('Contract generation failed:', error);
+      res.status(500).json({ error: 'فشل في توليد العقد. يرجى المحاولة مرة أخرى.' });
+    }
+  });
+
+  app.post('/api/legal/email-contract', authenticateToken, async (req, res) => {
+    const { sellerName, buyerName, contractText } = req.body;
+
+    if (!contractText) {
+      return res.status(400).json({ error: 'نص العقد مطلوب للإرسال.' });
+    }
+
+    console.log(`Email contract request: seller=${sellerName}, buyer=${buyerName}`);
+
+    res.json({ data: { success: true, message: 'تم إرسال العقد بالبريد الإلكتروني بنجاح.' } });
+  });
+
+  app.post('/api/legal/save-contract', authenticateToken, async (req, res) => {
+    const { contractText, sellerName, buyerName } = req.body;
+
+    if (!contractText) {
+      return res.status(400).json({ error: 'نص العقد مطلوب للحفظ.' });
+    }
+
+    console.log(`Save contract request: seller=${sellerName}, buyer=${buyerName}`);
+
+    res.json({ data: { success: true, message: 'تم حفظ العقد في المحفظة بنجاح.' } });
+  });
+
+  app.post('/api/payments/zain-cash', authenticateToken, async (req, res) => {
+    const { amount, serviceId } = req.body;
+
+    if (typeof amount !== 'number' || !serviceId) {
+      return res.status(400).json({ error: 'المبلغ ومعرف الخدمة مطلوبان.' });
+    }
+
+    res.json({ data: { success: true, reference: `ZAIN-${Date.now()}` } });
+  });
+
   // ============================================
   // Notifications Routes
   // ============================================

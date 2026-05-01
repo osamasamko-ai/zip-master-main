@@ -271,6 +271,11 @@ class ApiClient {
         return response.data;
     }
 
+    async processZainCashPayment(amount: number, serviceId: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/payments/zain-cash', { amount, serviceId });
+        return response.data;
+    }
+
     async sendSupportRequest(data: { name: string; phone: string; subject: string; message: string }): Promise<ApiResponse<any>> {
         const response = await this.client.post('/api/support/request', data);
         return response.data;
