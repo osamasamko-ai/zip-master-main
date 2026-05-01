@@ -1943,7 +1943,7 @@ export default function UserDashboard() {
       <div className="mb-5 flex items-center justify-between rounded-2xl border border-white/10 bg-brand-navy/95 p-4 text-white shadow-lg shadow-brand-navy/20 backdrop-blur-md animate-in slide-in-from-top duration-500">
         <div className="flex min-w-0 items-center gap-3">
           <div className="hidden sm:flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3 py-1.5">
-            <i className="fa-solid fa-wallet text-brand-gold text-xs"></i>
+            <i className="fa-solid fa-vault text-brand-gold text-xs"></i>
             <span className="text-xs font-black">{availableBalance.toLocaleString('ar-IQ')} د.ع</span>
           </div>
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">

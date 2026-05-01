@@ -53,6 +53,8 @@ const USER_DASHBOARD_SERVICES = [
     category: 'عقود',
   },
 ];
+const CONTRACT_CREATION_FEE = 25000; // رسوم ثابتة لإنشاء العقد
+const PROMO_CODE_DISCOUNT = 10000; // خصم ثابت لكود الخصم
 
 function parseJsonArray(value?: string | null): string[] {
   if (!value) return [];
@@ -759,6 +761,77 @@ export async function addCreditBalance(
       },
     });
 
+    return { updatedUser, transaction };
+  });
+
+  return {
+    balance: result.updatedUser.accountBalance,
+    transaction: {
+      id: result.transaction.id,
+      label: result.transaction.label,
+      amount: `${result.transaction.amount.toLocaleString('en-US')} د.ع`,
+      status: 'مدفوع',
+      date: formatRelativeDate(result.transaction.createdAt),
+      source: result.transaction.source,
+      type: result.transaction.type,
+    },
+  };
+}
+
+export async function deductFromWalletForService(
+  userId: string,
+  requestedAmount: number,
+  serviceName: string,
+  promoCode?: string,
+) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new Error('المستخدم غير موجود.');
+  }
+
+  let finalAmount = requestedAmount;
+  let discountApplied = 0;
+  let transactionLabel = serviceName;
+
+  if (promoCode === 'NEWUSER100') { // مثال بسيط لكود خصم
+    // في بيئة إنتاجية، يجب التحقق من:
+    // 1. صلاحية الكود (تاريخ انتهاء، عدد مرات الاستخدام)
+    // 2. إذا كان المستخدم "جديداً" (مثلاً، لا توجد لديه معاملات سابقة)
+    // 3. إذا كان الكود قد استخدم من قبل هذا المستخدم
+
+    // للتبسيط، نطبق الخصم مباشرة
+    discountApplied = PROMO_CODE_DISCOUNT;
+    finalAmount = Math.max(0, requestedAmount - discountApplied);
+    transactionLabel = `${serviceName} (مع خصم ${discountApplied.toLocaleString()} د.ع)`;
+  }
+
+  if (user.accountBalance < finalAmount) {
+    throw new Error('رصيد المحفظة غير كافٍ لإتمام العملية.');
+  }
+
+  const result = await prisma.$transaction(async (tx) => {
+    const updatedUser = await tx.user.update({
+      where: { id: userId },
+      data: {
+        accountBalance: {
+          decrement: finalAmount,
+        },
+      },
+      select: {
+        accountBalance: true,
+      },
+    });
+
+    const transaction = await tx.transaction.create({
+      data: {
+        userId,
+        amount: finalAmount,
+        label: transactionLabel,
+        source: 'Wallet',
+        type: 'debit',
+        status: 'completed',
+      },
+    });
     return { updatedUser, transaction };
   });
 

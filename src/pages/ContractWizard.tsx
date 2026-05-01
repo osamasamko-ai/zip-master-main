@@ -29,6 +29,10 @@ export default function ContractWizard() {
     const [isDraftSaved, setIsDraftSaved] = useState(false);
     const [isRequestingReview, setIsRequestingReview] = useState(false);
     const [isReviewRequested, setIsReviewRequested] = useState(false);
+    const [promoCodeInput, setPromoCodeInput] = useState('');
+    const [appliedPromoCode, setAppliedPromoCode] = useState<string | null>(null);
+    const [discountAmount, setDiscountAmount] = useState(0);
+    const [isApplyingPromo, setIsApplyingPromo] = useState(false);
     const [availableLawyers, setAvailableLawyers] = useState<any[]>([]);
     const [selectedLawyerId, setSelectedLawyerId] = useState('');
     const [contractError, setContractError] = useState('');
@@ -152,14 +156,33 @@ export default function ContractWizard() {
     const handleWalletPayment = async () => {
         setIsPaying(true);
         try {
-            // خصم رسوم الإنشاء الثابتة (25,000 د.ع)
-            await apiClient.payFromWallet(25000, 'إنشاء عقد مركبة ذكي');
+            const finalAmount = 25000 - discountAmount;
+            await apiClient.payFromWallet(finalAmount, 'إنشاء عقد مركبة ذكي', appliedPromoCode || undefined);
             setIsPaid(true);
             nextStep();
         } catch (error: any) {
             setContractError(error.response?.data?.error || 'رصيد المحفظة غير كافٍ. يرجى شحن الرصيد أولاً.');
         } finally {
             setIsPaying(false);
+        }
+    };
+
+    const handleApplyPromoCode = async () => {
+        if (!promoCodeInput.trim()) return;
+        setIsApplyingPromo(true);
+        setContractError('');
+        try {
+            const response = await apiClient.applyPromoCode(promoCodeInput.trim());
+            setDiscountAmount(response.data.discountAmount);
+            setAppliedPromoCode(promoCodeInput.trim());
+            setContractError(response.data.message); // عرض رسالة النجاح كخطأ مؤقت
+            setTimeout(() => setContractError(''), 5000);
+        } catch (error: any) {
+            setDiscountAmount(0);
+            setAppliedPromoCode(null);
+            setContractError(error.response?.data?.error || 'فشل تطبيق كود الخصم.');
+        } finally {
+            setIsApplyingPromo(false);
         }
     };
 
@@ -488,12 +511,42 @@ export default function ContractWizard() {
                                     </div>
                                     <div className="flex justify-between items-center flex-row-reverse">
                                         <span className="text-xs font-black text-slate-400">المبلغ المستحق:</span>
-                                        <span className="text-2xl font-black text-emerald-600">25,000 <span className="text-xs text-slate-400">د.ع</span></span>
+                                        <span className="text-2xl font-black text-emerald-600">{(25000 - discountAmount).toLocaleString()} <span className="text-xs text-slate-400">د.ع</span></span>
                                     </div>
                                     <div className="flex justify-between items-center flex-row-reverse pt-2 border-t border-slate-100">
                                         <span className="text-xs font-black text-slate-400">رصيدك الحالي:</span>
                                         <span className="text-sm font-black text-brand-navy">{(user?.accountBalance || 0).toLocaleString()} د.ع</span>
                                     </div>
+                                </div>
+
+                                <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200 space-y-4">
+                                    <div className="flex justify-between items-center flex-row-reverse">
+                                        <span className="text-xs font-black text-slate-400">كود الخصم:</span>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="أدخل الكود"
+                                                value={promoCodeInput}
+                                                onChange={(e) => setPromoCodeInput(e.target.value)}
+                                                className="w-32 p-2 bg-white rounded-lg border border-slate-200 outline-none text-right text-sm font-bold"
+                                                disabled={isApplyingPromo || discountAmount > 0}
+                                            />
+                                            <ActionButton
+                                                onClick={handleApplyPromoCode}
+                                                variant="secondary"
+                                                size="sm"
+                                                disabled={isApplyingPromo || !promoCodeInput.trim() || discountAmount > 0}
+                                            >
+                                                {isApplyingPromo ? 'جاري التطبيق...' : 'تطبيق'}
+                                            </ActionButton>
+                                        </div>
+                                    </div>
+                                    {discountAmount > 0 && (
+                                        <div className="flex justify-between items-center flex-row-reverse pt-2 border-t border-slate-100">
+                                            <span className="text-xs font-black text-emerald-600">الخصم المطبق:</span>
+                                            <span className="text-sm font-black text-emerald-600">{discountAmount.toLocaleString()} د.ع</span>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="flex gap-3">
@@ -508,7 +561,7 @@ export default function ContractWizard() {
                                         </button>
                                     ) : (
                                         <button
-                                            onClick={handleWalletPayment}
+                                            onClick={handleWalletPayment} // سيتم تمرير promoCode من خلال formData
                                             disabled={isPaying}
                                             className="flex-[2] bg-brand-navy text-white rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-brand-dark transition-all shadow-xl shadow-brand-navy/20 active:scale-95 disabled:opacity-50"
                                         >

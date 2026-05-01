@@ -215,7 +215,7 @@ export default function AIChat() {
                       <div className="mt-4 pt-4 border-t border-slate-50 flex flex-wrap gap-2 justify-end">
                         <button
                           onClick={() => setActiveSources(msg.sources!)}
-                          className="text-[10px] font-black bg-slate-50 text-brand-navy px-3 py-1.5 rounded-lg border border-slate-100 hover:bg-brand-navy hover:text-white transition"
+                          className="text-[10px] font-black bg-slate-50 text-brand-navy px-3 py-1.5 rounded-lg border border-slate-100 hover:bg-brand-navy hover:text-white transition shadow-sm"
                         >
                           <i className="fa-solid fa-book-bookmark ml-1"></i>
                           عرض {msg.sources.length} مراجع قانونية

@@ -295,8 +295,13 @@ class ApiClient {
         return response.data;
     }
 
-    async payFromWallet(amount: number, serviceName: string): Promise<ApiResponse<any>> {
-        const response = await this.client.post('/api/app/billing/pay-wallet', { amount, serviceName });
+    async applyPromoCode(code: string): Promise<ApiResponse<{ discountAmount: number; message: string }>> {
+        const response = await this.client.post('/api/promo/apply', { code });
+        return response.data;
+    }
+
+    async payFromWallet(amount: number, serviceName: string, promoCode?: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/app/billing/pay-wallet', { amount, serviceName, promoCode });
         return response.data;
     }
 

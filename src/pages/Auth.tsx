@@ -391,9 +391,8 @@ export default function Auth() {
                   <button
                     type="button"
                     onClick={() => switchMode('login')}
-                    className={`relative rounded-[1.1rem] px-4 py-3 text-sm font-black transition ${
-                      !isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
-                    }`}
+                    className={`relative rounded-[1.1rem] px-4 py-3 text-sm font-black transition ${!isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
+                      }`}
                   >
                     {!isRegisterMode && (
                       <motion.span
@@ -406,9 +405,8 @@ export default function Auth() {
                   <button
                     type="button"
                     onClick={() => switchMode('register')}
-                    className={`relative rounded-[1.1rem] px-4 py-3 text-sm font-black transition ${
-                      isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
-                    }`}
+                    className={`relative rounded-[1.1rem] px-4 py-3 text-sm font-black transition ${isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
+                      }`}
                   >
                     {isRegisterMode && (
                       <motion.span
@@ -498,11 +496,10 @@ export default function Auth() {
                             onChange={(e) => setName(e.target.value)}
                             onBlur={() => markFieldTouched('name')}
                             required
-                            className={`w-full rounded-[1.2rem] border px-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${
-                              getFieldError('name')
+                            className={`w-full rounded-[1.2rem] border px-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('name')
                                 ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
                                 : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
-                            }`}
+                              }`}
                           />
                           <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-300">
                             <i className="fa-solid fa-id-card" />
@@ -523,11 +520,10 @@ export default function Auth() {
                             onBlur={() => markFieldTouched('email')}
                             required
                             dir="ltr"
-                            className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${
-                              getFieldError('email')
+                            className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('email')
                                 ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
                                 : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
-                            }`}
+                              }`}
                           />
                           <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-300">
                             <i className="fa-solid fa-envelope" />
@@ -552,11 +548,10 @@ export default function Auth() {
                             onChange={(e) => setPassword(e.target.value)}
                             onBlur={() => markFieldTouched('password')}
                             required
-                            className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${
-                              getFieldError('password')
+                            className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('password')
                                 ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
                                 : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
-                            }`}
+                              }`}
                           />
                           <button
                             type="button"
@@ -590,9 +585,8 @@ export default function Auth() {
                                 return (
                                   <div
                                     key={requirement.key}
-                                    className={`flex flex-row-reverse items-center justify-end gap-2 rounded-xl px-3 py-2 text-[11px] font-bold ${
-                                      met ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-slate-500'
-                                    }`}
+                                    className={`flex flex-row-reverse items-center justify-end gap-2 rounded-xl px-3 py-2 text-[11px] font-bold ${met ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-slate-500'
+                                      }`}
                                   >
                                     <span>{requirement.text}</span>
                                     <i className={`fa-solid ${met ? 'fa-circle-check' : 'fa-circle'} text-[12px]`} />
@@ -616,20 +610,18 @@ export default function Auth() {
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             onBlur={() => markFieldTouched('confirmPassword')}
                             required
-                            className={`w-full rounded-[1.2rem] border pl-24 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${
-                              getFieldError('confirmPassword') || passwordsMismatch
+                            className={`w-full rounded-[1.2rem] border pl-24 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('confirmPassword') || passwordsMismatch
                                 ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
                                 : passwordsMatch
                                   ? 'border-emerald-300 bg-emerald-50/70 focus:border-emerald-500 focus:ring-emerald-500/10'
                                   : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
-                            }`}
+                              }`}
                           />
                           <div className="absolute inset-y-0 left-3 flex items-center gap-2">
                             {confirmPassword && (
                               <div
-                                className={`rounded-full px-2 py-1 text-[10px] font-black ${
-                                  passwordsMatch ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
-                                }`}
+                                className={`rounded-full px-2 py-1 text-[10px] font-black ${passwordsMatch ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                                  }`}
                               >
                                 {passwordsMatch ? 'متطابقة' : 'غير متطابقة'}
                               </div>
@@ -655,11 +647,10 @@ export default function Auth() {
                         <button
                           type="button"
                           onClick={() => setSelectedRole('user')}
-                          className={`rounded-[1.4rem] border px-4 py-4 text-right transition ${
-                            selectedRole === 'user'
+                          className={`rounded-[1.4rem] border px-4 py-4 text-right transition ${selectedRole === 'user'
                               ? 'border-brand-navy bg-brand-navy/5 shadow-[0_14px_30px_-24px_rgba(26,35,126,0.75)]'
                               : 'border-slate-200 bg-slate-50/70 hover:border-brand-navy/30 hover:bg-white'
-                          }`}
+                            }`}
                         >
                           <div className="flex flex-row-reverse items-start gap-3">
                             <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${selectedRole === 'user' ? 'bg-brand-navy text-white' : 'bg-white text-slate-400'}`}>
@@ -675,11 +666,10 @@ export default function Auth() {
                         <button
                           type="button"
                           onClick={() => setSelectedRole('pro')}
-                          className={`rounded-[1.4rem] border px-4 py-4 text-right transition ${
-                            selectedRole === 'pro'
+                          className={`rounded-[1.4rem] border px-4 py-4 text-right transition ${selectedRole === 'pro'
                               ? 'border-brand-navy bg-brand-navy/5 shadow-[0_14px_30px_-24px_rgba(26,35,126,0.75)]'
                               : 'border-slate-200 bg-slate-50/70 hover:border-brand-navy/30 hover:bg-white'
-                          }`}
+                            }`}
                         >
                           <div className="flex flex-row-reverse items-start gap-3">
                             <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${selectedRole === 'pro' ? 'bg-brand-navy text-white' : 'bg-white text-slate-400'}`}>
@@ -743,11 +733,10 @@ export default function Auth() {
                           onBlur={() => markFieldTouched('email')}
                           required
                           dir="ltr"
-                          className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${
-                            getFieldError('email')
+                          className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('email')
                               ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
                               : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
-                          }`}
+                            }`}
                         />
                         <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-300">
                           <i className="fa-solid fa-envelope" />
@@ -772,11 +761,10 @@ export default function Auth() {
                           onChange={(e) => setPassword(e.target.value)}
                           onBlur={() => markFieldTouched('password')}
                           required
-                          className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${
-                            getFieldError('password')
+                          className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('password')
                               ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
                               : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
-                          }`}
+                            }`}
                         />
                         <button
                           type="button"
@@ -802,7 +790,7 @@ export default function Auth() {
                       <button
                         type="button"
                         onClick={() => setShowForgotPassword(true)}
-                        className="text-xs font-black text-brand-navy transition hover:text-brand-dark"
+                        className="text-xs font-black text-brand-navy transition hover:text-brand-dark hover:underline"
                       >
                         هل نسيت كلمة المرور؟
                       </button>
@@ -870,11 +858,10 @@ export default function Auth() {
                     initial="hidden"
                     animate="visible"
                     exit="exit"
-                    className={`mt-5 rounded-[1.2rem] border px-4 py-3 ${
-                      forgotPasswordMessage.type === 'success'
+                    className={`mt-5 rounded-[1.2rem] border px-4 py-3 ${forgotPasswordMessage.type === 'success'
                         ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                         : 'border-rose-200 bg-rose-50 text-rose-700'
-                    }`}
+                      }`}
                   >
                     <div className="flex flex-row-reverse items-start gap-3">
                       <i className={`fa-solid ${forgotPasswordMessage.type === 'success' ? 'fa-circle-check' : 'fa-circle-exclamation'} mt-0.5`} />

@@ -121,9 +121,9 @@ export default function Profile() {
       setLawyer((current: any) =>
         current && current.id === lawyerId
           ? {
-              ...current,
-              followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (current.followers ?? 0) + delta),
-            }
+            ...current,
+            followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (current.followers ?? 0) + delta),
+          }
           : current,
       );
 
@@ -131,9 +131,9 @@ export default function Profile() {
         current.map((item) =>
           item.id === lawyerId
             ? {
-                ...item,
-                followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (item.followers ?? 0) + delta),
-              }
+              ...item,
+              followers: typeof followerCount === 'number' ? followerCount : Math.max(0, (item.followers ?? 0) + delta),
+            }
             : item,
         ),
       );
@@ -355,7 +355,7 @@ export default function Profile() {
               <div className="mt-4 flex flex-wrap justify-end gap-3">
                 {lawyer.highlights.map((item) => (
                   <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700">
-                    {item}
+                    <i className="fa-solid fa-star-of-life ml-1 text-brand-gold"></i> {item}
                   </span>
                 ))}
               </div>

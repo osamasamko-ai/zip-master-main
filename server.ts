@@ -98,6 +98,7 @@ import {
 // Constants for Legal Fees
 const CONTRACT_CREATION_FEE = 25000;
 const LAWYER_REVIEW_FEE = 15000;
+const PROMO_CODE_DISCOUNT = 10000; // خصم ثابت لكود الخصم
 
 dotenv.config({ path: '.env.local' });
 dotenv.config();
@@ -1556,6 +1557,45 @@ app.post('/api/legal/request-review', authenticateToken, async (req, res) => {
   });
 
   res.json({ data: { success: true } });
+});
+
+app.post('/api/promo/apply', authenticateToken, async (req, res) => {
+  const { code } = req.body;
+  const currentUser = (req as any).user;
+
+  // مثال بسيط: كود خصم ثابت للمستخدمين الجدد (يمكن تطويره لاحقاً)
+  if (code === 'NEWUSER100') {
+    // في بيئة إنتاجية، يجب التحقق من:
+    // 1. صلاحية الكود (تاريخ انتهاء، عدد مرات الاستخدام)
+    // 2. إذا كان المستخدم "جديداً" (مثلاً، لا توجد لديه معاملات سابقة)
+    // 3. إذا كان الكود قد استخدم من قبل هذا المستخدم
+
+    // للتبسيط، نفترض أنه صالح ويمنح خصماً ثابتاً
+    return res.json({
+      data: {
+        discountAmount: PROMO_CODE_DISCOUNT,
+        message: `تم تطبيق خصم ${PROMO_CODE_DISCOUNT.toLocaleString()} د.ع بنجاح!`,
+      },
+    });
+  } else {
+    return res.status(400).json({
+      error: 'كود الخصم غير صالح أو انتهت صلاحيته.',
+    });
+  }
+});
+
+// مسار الدفع من المحفظة
+app.post('/api/app/billing/pay-wallet', authenticateToken, async (req, res) => {
+  const currentUser = (req as any).user;
+  const { amount, serviceName, promoCode } = req.body;
+
+  try {
+    const result = await deductFromWalletForService(currentUser.userId, amount, serviceName, promoCode);
+    res.json({ data: result, message: 'تم الدفع بنجاح من المحفظة.' });
+  } catch (error: any) {
+    console.error('Wallet payment failed:', error);
+    res.status(400).json({ error: error.message || 'فشل الدفع من المحفظة.' });
+  }
 });
 
 app.post('/api/payments/zain-cash', authenticateToken, async (req, res) => {
