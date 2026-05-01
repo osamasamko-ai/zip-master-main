@@ -271,6 +271,16 @@ class ApiClient {
         return response.data;
     }
 
+    async saveDraftContract(data: any): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/legal/save-contract', { ...data, status: 'draft' });
+        return response.data;
+    }
+
+    async requestContractReview(data: { lawyerId: string; contractId?: string; notes?: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/legal/request-review', data);
+        return response.data;
+    }
+
     async uploadContractPdf(blob: Blob): Promise<ApiResponse<{ url: string }>> {
         const formData = new FormData();
         formData.append('pdf', blob, 'contract.pdf');
@@ -280,8 +290,13 @@ class ApiClient {
         return response.data;
     }
 
-    async scheduleContractReminder(data: { contractId: string; phone: string; name: string }): Promise<ApiResponse<any>> {
+    async scheduleContractReminder(data: { contractId: string; phone: string; name: string; hours: number }): Promise<ApiResponse<any>> {
         const response = await this.client.post('/api/legal/schedule-reminder', data);
+        return response.data;
+    }
+
+    async payFromWallet(amount: number, serviceName: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/app/billing/pay-wallet', { amount, serviceName });
         return response.data;
     }
 

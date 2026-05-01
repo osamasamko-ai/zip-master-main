@@ -12,7 +12,7 @@ type CaseStatus = 'pending' | 'review' | 'active' | 'closed';
 
 type WorkspaceTab = 'summary' | 'chat' | 'docs' | 'ai' | 'financials';
 type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded';
-type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed';
+type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed' | 'drafts';
 
 type CaseMessageSender = 'user' | 'lawyer';
 type MessageDeliveryState = 'sending' | 'failed';
@@ -153,7 +153,8 @@ const CaseSidebar = ({
       (statusFilter === 'needs_action' && hasAction) ||
       (statusFilter === 'in_progress' && c.status === 'active') ||
       (statusFilter === 'waiting' && c.status === 'review') ||
-      (statusFilter === 'completed' && c.status === 'closed');
+      (statusFilter === 'completed' && c.status === 'closed') ||
+      (statusFilter === 'drafts' && c.documents.some(d => d.actionRequired === 'مسودة' || !d.isSigned));
     return matchesArchive && matchesSearch && matchesStatus;
   });
 
@@ -1451,8 +1452,8 @@ export default function MyCases() {
                 />
                 <i className="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
               </div>
-              <div className="flex gap-1 mt-4 overflow-x-auto no-scrollbar pb-1">
-                {(['needs_action', 'in_progress', 'waiting', 'completed', 'all'] as const).map((f) => (
+              <div className="flex gap-1 mt-4 overflow-x-auto no-scrollbar pb-1 flex-row-reverse">
+                {(['needs_action', 'drafts', 'in_progress', 'waiting', 'completed', 'all'] as const).map((f) => (
                   <button
                     key={f}
                     onClick={() => setSidebarStatusFilter(f)}
@@ -1460,13 +1461,15 @@ export default function MyCases() {
                   >
                     {f === 'needs_action'
                       ? 'تحتاج إجراء'
-                      : f === 'in_progress'
-                        ? 'قيد التنفيذ'
-                        : f === 'waiting'
-                          ? 'بانتظار المحامي'
-                          : f === 'completed'
-                            ? 'مكتملة'
-                            : 'الكل'}
+                      : f === 'drafts'
+                        ? 'المسودات'
+                        : f === 'in_progress'
+                          ? 'قيد التنفيذ'
+                          : f === 'waiting'
+                            ? 'بانتظار المحامي'
+                            : f === 'completed'
+                              ? 'مكتملة'
+                              : 'الكل'}
                   </button>
                 ))}
               </div>

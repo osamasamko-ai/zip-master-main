@@ -4,8 +4,12 @@ import apiClient from '../api/client';
 import html2pdf from 'html2pdf.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import StatusBadge from '../components/ui/StatusBadge';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 
 export default function ContractWizard() {
+    const { user } = useAuth();
+    const navigate = useNavigate();
     const [step, setStep] = useState(1);
     const [formData, setFormData] = useState({
         sellerName: '',
@@ -15,11 +19,18 @@ export default function ContractWizard() {
         carModel: '', // نوع وموديل السيارة
         vinNumber: '', // رقم الشاصي
         price: '', // السعر المتفق عليه
+        reminderDuration: 24, // مدة التذكير الافتراضية
     });
     const [generatedContractText, setGeneratedContractText] = useState('');
     const [isLoadingContract, setIsLoadingContract] = useState(false);
     const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false);
     const [isSavingToWallet, setIsSavingToWallet] = useState(false);
+    const [isSavingDraft, setIsSavingDraft] = useState(false);
+    const [isDraftSaved, setIsDraftSaved] = useState(false);
+    const [isRequestingReview, setIsRequestingReview] = useState(false);
+    const [isReviewRequested, setIsReviewRequested] = useState(false);
+    const [availableLawyers, setAvailableLawyers] = useState<any[]>([]);
+    const [selectedLawyerId, setSelectedLawyerId] = useState('');
     const [contractError, setContractError] = useState('');
     const [sellerSignature, setSellerSignature] = useState('');
     const [buyerSignature, setBuyerSignature] = useState('');
@@ -55,6 +66,21 @@ export default function ContractWizard() {
     const nextStep = () => setStep(prev => prev + 1);
     const prevStep = () => setStep(prev => prev - 1);
 
+    // جلب قائمة المحامين عند حفظ المسودة
+    useEffect(() => {
+        if (isDraftSaved) {
+            const loadLawyers = async () => {
+                try {
+                    const res = await apiClient.getLawyers();
+                    setAvailableLawyers(res.data || []);
+                } catch (err) {
+                    console.error('Failed to load lawyers', err);
+                }
+            };
+            loadLawyers();
+        }
+    }, [isDraftSaved]);
+
     // Local storage keys for draft saving
     const DRAFT_FORM_DATA_KEY = 'contractWizardFormDataDraft';
     const DRAFT_STEP_KEY = 'contractWizardStepDraft';
@@ -89,6 +115,14 @@ export default function ContractWizard() {
         localStorage.removeItem(DRAFT_STEP_KEY);
     }, []);
 
+    // تنبيه عند الدخول إذا كان الرصيد أقل من 5,000
+    useEffect(() => {
+        if (user && user.accountBalance < 5000 && step === 1) {
+            setContractError('تنبيه: رصيدك الحالي أقل من 5,000 د.ع. يرجى شحن الرصيد لتتمكن من إصدار العقود المدفوعة.');
+            setTimeout(() => setContractError(''), 8000);
+        }
+    }, [user?.accountBalance, step]);
+
     useEffect(() => {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }, [step]);
@@ -115,15 +149,15 @@ export default function ContractWizard() {
         }
     };
 
-    const handleZainCashPayment = async () => {
+    const handleWalletPayment = async () => {
         setIsPaying(true);
         try {
-            // Simulate Zain Cash payment process
-            await apiClient.processZainCashPayment(25000, 'srv-5');
+            // خصم رسوم الإنشاء الثابتة (25,000 د.ع)
+            await apiClient.payFromWallet(25000, 'إنشاء عقد مركبة ذكي');
             setIsPaid(true);
             nextStep();
         } catch (error: any) {
-            setContractError(error.response?.data?.error || 'فشل الدفع عبر زين كاش. يرجى التأكد من رصيدك والمحاولة مرة أخرى.');
+            setContractError(error.response?.data?.error || 'رصيد المحفظة غير كافٍ. يرجى شحن الرصيد أولاً.');
         } finally {
             setIsPaying(false);
         }
@@ -157,7 +191,8 @@ export default function ContractWizard() {
                 apiClient.scheduleContractReminder({
                     contractId: `CTR-${Date.now()}`,
                     phone: formData.buyerPhone,
-                    name: formData.buyerName
+                    name: formData.buyerName,
+                    hours: formData.reminderDuration
                 })
             ]);
 
@@ -169,6 +204,47 @@ export default function ContractWizard() {
         } finally {
             setIsSendingWhatsApp(false);
             setIsSavingToWallet(false);
+        }
+    };
+
+    const handleSaveDraft = async () => {
+        if (!generatedContractText) return;
+        setIsSavingDraft(true);
+        setContractError('');
+        try {
+            await apiClient.saveDraftContract({
+                ...formData,
+                contractText: generatedContractText,
+            });
+            setIsDraftSaved(true);
+            setStep(6); // الانتقال مباشرة للخطوة النهائية كمسودة
+        } catch (error: any) {
+            console.error('Error saving draft:', error.response?.data?.error || error.message);
+            setContractError('فشل حفظ المسودة. يرجى المحاولة مرة أخرى.');
+        } finally {
+            setIsSavingDraft(false);
+        }
+    };
+
+    const handleRequestReview = async () => {
+        if (!selectedLawyerId) {
+            setContractError('يرجى اختيار محامٍ للمراجعة.');
+            return;
+        }
+        setIsRequestingReview(true);
+        setContractError('');
+        try {
+            await apiClient.requestContractReview({
+                lawyerId: selectedLawyerId,
+                notes: `طلب مراجعة عقد بيع سيارة (${formData.carModel})`,
+                payFromWallet: true // تفعيل الخصم لمراجعة المحامي
+            });
+            setIsReviewRequested(true);
+        } catch (error: any) {
+            console.error('Error requesting review:', error);
+            setContractError('فشل إرسال طلب المراجعة. يرجى المحاولة لاحقاً.');
+        } finally {
+            setIsRequestingReview(false);
         }
     };
 
@@ -382,15 +458,15 @@ export default function ContractWizard() {
                                 )}
                                 <div className="flex gap-3 pt-4">
                                     <ActionButton onClick={prevStep} variant="secondary" className="flex-1">تعديل</ActionButton>
-                                    <a
-                                        href={`https://wa.me/964${formData.sellerPhone}?text=${encodeURIComponent(`مرحباً ${formData.sellerName}، أنا المشتري ${formData.buyerName}. أود مناقشة مسودة العقد لسيارة ${formData.carModel}`)}`}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="flex-1 bg-emerald-500 text-white rounded-2xl flex items-center justify-center gap-2 text-xs font-black hover:bg-emerald-600 transition shadow-lg shadow-emerald-500/20"
+                                    <ActionButton
+                                        onClick={handleSaveDraft}
+                                        variant="secondary"
+                                        className="flex-1 border-brand-gold text-brand-gold hover:bg-brand-gold hover:text-white"
+                                        disabled={isSavingDraft || !generatedContractText}
                                     >
-                                        <i className="fa-brands fa-whatsapp text-lg"></i> ناقش البائع
-                                    </a>
-                                    <ActionButton onClick={nextStep} variant="primary" className="flex-[1.5] py-4 shadow-lg shadow-brand-navy/20" disabled={!generatedContractText}>الموافقة والدفع</ActionButton>
+                                        {isSavingDraft ? 'جاري الحفظ...' : 'حفظ كمسودة للمراجعة'}
+                                    </ActionButton>
+                                    <ActionButton onClick={nextStep} variant="primary" className="flex-[1.2] py-4 shadow-lg shadow-brand-navy/20" disabled={!generatedContractText}>الموافقة والدفع</ActionButton>
                                 </div>
                             </div>
                         )}
@@ -414,19 +490,36 @@ export default function ContractWizard() {
                                         <span className="text-xs font-black text-slate-400">المبلغ المستحق:</span>
                                         <span className="text-2xl font-black text-emerald-600">25,000 <span className="text-xs text-slate-400">د.ع</span></span>
                                     </div>
+                                    <div className="flex justify-between items-center flex-row-reverse pt-2 border-t border-slate-100">
+                                        <span className="text-xs font-black text-slate-400">رصيدك الحالي:</span>
+                                        <span className="text-sm font-black text-brand-navy">{(user?.accountBalance || 0).toLocaleString()} د.ع</span>
+                                    </div>
                                 </div>
 
                                 <div className="flex gap-3">
                                     <ActionButton onClick={prevStep} variant="secondary" className="flex-1" disabled={isPaying}>رجوع</ActionButton>
-                                    <button
-                                        onClick={handleZainCashPayment}
-                                        disabled={isPaying}
-                                        className="flex-[2] bg-[#ff0000] text-white rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-[#cc0000] transition-all shadow-xl shadow-red-500/20 active:scale-95 disabled:opacity-50"
-                                    >
-                                        {isPaying ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-mobile-screen"></i>}
-                                        {isPaying ? 'جاري التحويل...' : 'ادفع بواسطة ZainCash'}
-                                    </button>
+                                    {(user?.accountBalance || 0) < 25000 ? (
+                                        <button
+                                            onClick={() => navigate('/billing')}
+                                            className="flex-[2] bg-brand-gold text-brand-dark rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-yellow-500 transition-all shadow-xl shadow-brand-gold/20 active:scale-95"
+                                        >
+                                            <i className="fa-solid fa-circle-plus"></i>
+                                            شحن الرصيد للمتابعة
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleWalletPayment}
+                                            disabled={isPaying}
+                                            className="flex-[2] bg-brand-navy text-white rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-brand-dark transition-all shadow-xl shadow-brand-navy/20 active:scale-95 disabled:opacity-50"
+                                        >
+                                            {isPaying ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-vault"></i>}
+                                            {isPaying ? 'جاري المعالجة...' : 'تأكيد الدفع من المحفظة'}
+                                        </button>
+                                    )}
                                 </div>
+                                {(user?.accountBalance || 0) < 25000 && (
+                                    <p className="text-rose-500 text-[10px] font-black text-center animate-pulse">رصيدك غير كافٍ لإتمام العملية. يرجى الشحن أولاً.</p>
+                                )}
                                 {contractError && <p className="text-rose-500 text-xs font-black mt-2 text-center animate-pulse">{contractError}</p>}
                             </div>
                         )}
@@ -467,6 +560,22 @@ export default function ContractWizard() {
                                             className="h-5 w-5 rounded-lg accent-brand-navy mt-1"
                                         />
                                     </label>
+
+                                    <div className="space-y-3 pt-4 border-t border-slate-100">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">تنبيه التذكير التلقائي (WhatsApp)</label>
+                                        <div className="flex gap-2">
+                                            {[12, 24, 48, 72].map(hours => (
+                                                <button
+                                                    key={hours}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, reminderDuration: hours })}
+                                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.reminderDuration === hours ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                                >
+                                                    {hours === 24 ? 'يوم واحد' : hours === 48 ? 'يومين' : `${hours} ساعة`}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="flex gap-3">
                                     <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
@@ -481,22 +590,62 @@ export default function ContractWizard() {
                         {step === 6 && (
                             <div className="text-center space-y-6 py-4">
                                 <div className="relative">
-                                    <div className="w-24 h-24 bg-emerald-50 rounded-[2.5rem] flex items-center justify-center mx-auto text-emerald-500 text-4xl shadow-sm border border-emerald-100">
-                                        <i className="fa-solid fa-file-circle-check"></i>
+                                    <div className={`w-24 h-24 ${isDraftSaved ? 'bg-amber-50 text-amber-500 border-amber-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100'} rounded-[2.5rem] flex items-center justify-center mx-auto text-4xl shadow-sm border`}>
+                                        <i className={`fa-solid ${isDraftSaved ? 'fa-file-pen' : 'fa-file-circle-check'}`}></i>
                                     </div>
                                     <motion.div
                                         initial={{ scale: 0 }}
                                         animate={{ scale: 1 }}
-                                        className="absolute -top-2 -right-1/3 translate-x-1/2 w-48 h-48 bg-emerald-500/5 rounded-full -z-10 blur-2xl"
+                                        className={`absolute -top-2 -right-1/3 translate-x-1/2 w-48 h-48 ${isDraftSaved ? 'bg-amber-500/5' : 'bg-emerald-500/5'} rounded-full -z-10 blur-2xl`}
                                     ></motion.div>
                                 </div>
 
                                 <div className="space-y-2">
-                                    <h3 className="text-2xl font-black text-brand-dark">تم التوقيع والأرشفة بنجاح!</h3>
+                                    <h3 className="text-2xl font-black text-brand-dark">
+                                        {isDraftSaved ? 'تم حفظ المسودة بنجاح!' : 'تم التوقيع والأرشفة بنجاح!'}
+                                    </h3>
                                     <p className="text-sm font-bold text-slate-500 px-10 leading-relaxed">
-                                        تم إرسال نسخة من العقد عبر WhatsApp للأطراف المعنية وتمت أرشفة الوثيقة في محفظتك القانونية.
+                                        {isDraftSaved
+                                            ? isReviewRequested
+                                                ? 'تم إرسال طلب المراجعة للمحامي بنجاح. ستصلك رسالة WhatsApp فور اكتمال التدقيق.'
+                                                : 'تم حفظ العقد كمسودة في محفظتك. يمكنك الآن طلب مراجعة قانونية من محامٍ قبل إرساله للمشتري.'
+                                            : 'تم إرسال نسخة من العقد عبر WhatsApp للأطراف المعنية وتمت أرشفة الوثيقة في محفظتك القانونية.'}
                                     </p>
                                 </div>
+
+                                {isDraftSaved && !isReviewRequested && (
+                                    <div className="px-8 space-y-4">
+                                        <div className="text-right">
+                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">اختر محامياً للمراجعة</label>
+                                            <div className="grid gap-2 max-h-48 overflow-y-auto p-1 custom-scrollbar">
+                                                {availableLawyers.map(lawyer => (
+                                                    <button
+                                                        key={lawyer.id}
+                                                        onClick={() => setSelectedLawyerId(lawyer.id)}
+                                                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${selectedLawyerId === lawyer.id ? 'border-brand-navy bg-brand-navy/5' : 'border-slate-100 hover:border-brand-gold'}`}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <img src={lawyer.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="" />
+                                                            <div className="text-right">
+                                                                <p className="text-xs font-black text-brand-dark">{lawyer.name}</p>
+                                                                <p className="text-[10px] text-slate-400 font-bold">{lawyer.specialty}</p>
+                                                            </div>
+                                                        </div>
+                                                        {selectedLawyerId === lawyer.id && <i className="fa-solid fa-circle-check text-brand-navy"></i>}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <button
+                                            onClick={handleRequestReview}
+                                            disabled={isRequestingReview || !selectedLawyerId}
+                                            className="w-full py-4 bg-brand-gold text-brand-dark rounded-2xl font-black text-sm shadow-lg shadow-brand-gold/20 hover:bg-yellow-500 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                                        >
+                                            {isRequestingReview ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-user-shield"></i>}
+                                            إرسال للمراجعة القانونية
+                                        </button>
+                                    </div>
+                                )}
 
                                 <div className="bg-slate-50 p-5 rounded-[2rem] border border-slate-100 flex items-center gap-4 text-right max-w-sm mx-auto">
                                     <div className="h-12 w-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-gold shrink-0">
@@ -514,7 +663,12 @@ export default function ContractWizard() {
                                         تحميل العقد (PDF)
                                     </ActionButton>
                                     <ActionButton
-                                        onClick={() => { setStep(1); clearDraft(); setFormData({ sellerName: '', sellerPhone: '', buyerName: '', buyerPhone: '', carModel: '', vinNumber: '', price: '', }); }}
+                                        onClick={() => {
+                                            setStep(1);
+                                            clearDraft();
+                                            setIsDraftSaved(false);
+                                            setFormData({ sellerName: '', sellerPhone: '', buyerName: '', buyerPhone: '', carModel: '', vinNumber: '', price: '', reminderDuration: 24 });
+                                        }}
                                         variant="secondary"
                                         className="flex-1 py-4"
                                     >
