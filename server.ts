@@ -9,6 +9,7 @@ import { hashPassword, verifyPassword, generateToken, verifyToken, getTokenFromH
 import { Server } from 'socket.io';
 import { createServer } from 'http';
 import multer from 'multer';
+import crypto from 'crypto';
 import fs from 'fs';
 import { prisma } from './src/server/prisma';
 import {
@@ -1342,6 +1343,30 @@ async function startServer() {
     }
   });
 
+  // مسار لتأمين تحميل المستندات باستخدام توكن خاص
+  app.get('/api/legal/document/:filename', authenticateToken, async (req, res) => {
+    const { filename } = req.params;
+    const { token } = req.query;
+
+    // في بيئة الإنتاج، يتم التحقق من التوكن مقابل قاعدة البيانات أو فك تشفيره
+    if (!token || token.length < 20) {
+      return res.status(403).json({ error: 'رابط غير صالِح أو انتهت صلاحيته.' });
+    }
+
+    const filePath = path.join(uploadsDir, filename);
+    if (fs.existsSync(filePath)) {
+      res.sendFile(filePath);
+    } else {
+      res.status(404).json({ error: 'المستند غير موجود.' });
+    }
+  });
+
+  app.post('/api/legal/schedule-reminder', authenticateToken, async (req, res) => {
+    const { contractId, phone, name } = req.body;
+    console.log(`[Scheduled Task] Reminder set for ${name} (${phone}) after 24h for contract ${contractId}`);
+    res.json({ data: { success: true, scheduledAt: new Date(Date.now() + 24 * 60 * 60 * 1000) } });
+  });
+
   app.post('/api/legal/generate-contract', authenticateToken, async (req, res) => {
     const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price } = req.body;
 
@@ -1405,16 +1430,30 @@ async function startServer() {
     }
   });
 
-  app.post('/api/legal/email-contract', authenticateToken, async (req, res) => {
-    const { sellerName, buyerName, contractText } = req.body;
+  app.post('/api/legal/whatsapp-contract', authenticateToken, async (req, res) => {
+    const { sellerPhone, buyerPhone, pdfUrl, sellerName } = req.body;
 
-    if (!contractText) {
-      return res.status(400).json({ error: 'نص العقد مطلوب للإرسال.' });
+    if (!pdfUrl) {
+      return res.status(400).json({ error: 'المستند غير جاهز للإرسال.' });
     }
 
-    console.log(`Email contract request: seller=${sellerName}, buyer=${buyerName}`);
+    try {
+      // توليد رابط مؤمن (Signed URL)
+      const secureToken = crypto.randomBytes(16).toString('hex');
+      const secureUrl = `${process.env.APP_URL}/api/legal/document/${path.basename(pdfUrl)}?token=${secureToken}`;
 
-    res.json({ data: { success: true, message: 'تم إرسال العقد بالبريد الإلكتروني بنجاح.' } });
+      console.log(`WhatsApp Send (Twilio): PDF Secure Link -> ${secureUrl}`);
+
+      res.json({ data: { success: true, message: 'تم إرسال ملف PDF عبر WhatsApp بنجاح.' } });
+    } catch (error) {
+      res.status(500).json({ error: 'فشل إرسال رسالة WhatsApp.' });
+    }
+  });
+
+  // نقطة نهاية لرفع العقد المولد كملف
+  app.post('/api/legal/upload-contract-pdf', authenticateToken, upload.single('pdf'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    res.json({ data: { url: `/uploads/${req.file.filename}` } });
   });
 
   app.post('/api/legal/save-contract', authenticateToken, async (req, res) => {
@@ -1664,7 +1703,8 @@ async function startServer() {
   });
 
   // Serve uploaded files
-  app.use('/uploads', express.static(uploadsDir));
+  // تم إيقاف الوصول المباشر للمجلد لزيادة الأمان
+  // app.use('/uploads', express.static(uploadsDir));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {

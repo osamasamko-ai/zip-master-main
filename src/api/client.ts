@@ -261,13 +261,27 @@ class ApiClient {
         return response.data;
     }
 
-    async emailCarContract(data: any): Promise<ApiResponse<any>> {
-        const response = await this.client.post('/api/legal/email-contract', data);
+    async whatsappCarContract(data: any): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/legal/whatsapp-contract', data);
         return response.data;
     }
 
     async saveContractToWallet(data: any): Promise<ApiResponse<any>> {
         const response = await this.client.post('/api/legal/save-contract', data);
+        return response.data;
+    }
+
+    async uploadContractPdf(blob: Blob): Promise<ApiResponse<{ url: string }>> {
+        const formData = new FormData();
+        formData.append('pdf', blob, 'contract.pdf');
+        const response = await this.client.post('/api/legal/upload-contract-pdf', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
+    }
+
+    async scheduleContractReminder(data: { contractId: string; phone: string; name: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/legal/schedule-reminder', data);
         return response.data;
     }
 
