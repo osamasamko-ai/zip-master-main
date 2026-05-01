@@ -1348,10 +1348,20 @@ async function startServer() {
     }
   });
 
-  // مسار لتأمين تحميل المستندات باستخدام توكن خاص
+  // Route for scheduling reminders (as used by ContractWizard.tsx)
+  app.post('/api/legal/schedule-reminder', authenticateToken, async (req, res) => {
+    const { contractId, phone, name, hours } = req.body;
+    // In a real application, you would integrate with a reminder service here (e.g., Twilio, a cron job).
+    // For now, we'll just log it and return success.
+    console.log(`[REMINDER] Scheduled reminder for contract ${contractId} for ${name} (${phone}) in ${hours} hours.`);
+    res.json({ success: true, message: 'تم جدولة التذكير بنجاح.' });
+  });
+
+  // Route for securing document downloads with a special token
   app.get('/api/legal/document/:filename', authenticateToken, async (req, res) => {
     const { filename } = req.params;
     const { token } = req.query;
+
 
     // في بيئة الإنتاج، يتم التحقق من التوكن مقابل قاعدة البيانات أو فك تشفيره
     if (!token || token.length < 20) {
@@ -1366,8 +1376,8 @@ async function startServer() {
     }
   });
 
-  app.post('/api/legal/schedule-reminder', authenticateToken, async (req, res) => {
-    const { contractId, phone, nametract', authenticateToken, async (req, res) => {
+  // Route for generating car contracts (as used by ContractWizard.tsx)
+  app.post('/api/legal/car-contract', authenticateToken, async (req, res) => {
     const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price } = req.body;
 
     if (!sellerName || !sellerPhone || !buyerName || !buyerPhone || !carModel || !vinNumber || !price) {
@@ -1426,438 +1436,449 @@ async function startServer() {
       res.json({ data: { contractText } });
     } catch (error) {
       // Logging مفصل لأخطاء Gemini AI
-      console.error('❌ [AI Error] Contract generation failed');
-      if (error insta
-      console.error(`- Stack: ${error.stack}`);
-    }
-      اولة مرة أخرى.';
+      console.error('❌ [AI Error] Contract generation failed:', error);
+      let userFacingError = 'فشل في توليد العقد. يرجى المحاولة مرة أخرى.';
 
-    // Attempt to extract more specific error messages from the Gemini API response
-    if (error.message) {
-      if (error.message.includes('API key')) {
-        userFacingError = 'خطأ في مفتاح API لخدمة الذكاء الاصطناعي. يرجى التحقق من إعدادات الخادم.';
-      } else if (error.message.includes('safety settings')) {
-        userFacingError = 'فشل توليد العقد بسبب محتوى غير مناسب في المدخلات. يرجى مراجعة البيانات.';
-      } else if (error.message.includes('rate limit')) {
-        userFacingError = 'تم تجاوز حد الاستخدام لخدمة الذكاء الاصطناعي. يرجى المحاولة لاحقاً.';
-      } else {
-        // Fallback for other specific messages from the AI service
-        userFacingError = `خطأ من خدمة الذكاء الاصطناعي: ${error.message}`;
+      // Attempt to extract more specific error messages from the Gemini API response
+      if (error instanceof Error) {
+        console.error(`- Stack: ${error.stack}`);
+        if (error.message.includes('API key')) {
+          userFacingError = 'خطأ في مفتاح API لخدمة الذكاء الاصطناعي. يرجى التحقق من إعدادات الخادم.';
+        } else if (error.message.includes('safety settings')) {
+          userFacingError = 'فشل توليد العقد بسبب محتوى غير مناسب في المدخلات. يرجى مراجعة البيانات.';
+        } else if (error.message.includes('rate limit')) {
+          userFacingError = 'تم تجاوز حد الاستخدام لخدمة الذكاء الاصطناعي. يرجى المحاولة لاحقاً.';
+        } else {
+          // Fallback for other specific messages from the AI service
+          userFacingError = `خطأ من خدمة الذكاء الاصطناعي: ${error.message}`;
+        }
+      } else if ((error as any).response && (error as any).response.data && (error as any).response.data.error) {
+        // Fallback for Axios-like errors with a structured response from the API
+        userFacingError = `خطأ من خدمة الذكاء الاصطناعي: ${(error as any).response.data.error.message || (error as any).response.data.error}`;
       }
-    } else if (error.response && error.response.data && error.response.data.error) {
-      // Fallback for Axios-like errors with a structured response from the API
-      userFacingError = `خطأ من خدمة الذكاء الاصطناعي: ${error.response.data.error.message || error.response.data.error}`;
-    }
 
-    res.status(500).json({ error: userFacingError });
-  }
-  });
-
-app.post('/api/legal/whatsapp-contract', authenticateToken, async (req, res) => {
-  const { sellerPhone, buyerPhone, pdfUrl, sellerName } = req.body;
-
-  if (!pdfUrl) {
-    return res.status(400).json({ error: 'المستند غير جاهز للإرسال.' });
-  }
-
-  try {
-    // توليد رابط مؤمن (Signed URL)
-    const secureToken = crypto.randomBytes(16).toString('hex');
-    const secureUrl = `${process.env.APP_URL}/api/legal/document/${path.basename(pdfUrl)}?token=${secureToken}`;
-
-    console.log(`WhatsApp Send (Twilio): PDF Secure Link -> ${secureUrl}`);
-
-    res.json({ data: { success: true, message: 'تم إرسال ملف PDF عبر WhatsApp بنجاح.' } });
-  } catch (error) {
-    res.status(500).json({ error: 'فشل إرسال رسالة WhatsApp.' });
-  }
-});
-
-// نقطة نهاية لرفع العقد المولد كملف
-app.post('/api/legal/upload-contract-pdf', authenticateToken, upload.single('pdf'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-  res.json({ data: { url: `/uploads/${req.file.filename}` } });
-});
-
-app.post('/api/legal/save-contract', authenticateToken, async (req, res) => {
-  const currentUser = (req as any).user;
-  const { contractText, sellerName, buyerName, status, payFromWallet } = req.body;
-
-  if (!contractText) {
-    return res.status(400).json({ error: 'نص العقد مطلوب للحفظ.' });
-  }
-
-  // إذا طلب المستخدم الدفع من المحفظة عند الحفظ النهائي
-  if (payFromWallet) {
-    const user = await prisma.user.findUnique({ where: { id: currentUser.userId } });
-    if (!user || user.accountBalance < CONTRACT_CREATION_FEE) {
-      return res.status(400).json({ error: 'رصيد المحفظة غير كافٍ لإتمام العملية.' });
-    }
-
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: currentUser.userId },
-        data: { accountBalance: { decrement: CONTRACT_CREATION_FEE } }
-      }),
-      prisma.transaction.create({
-        data: {
-          userId: currentUser.userId,
-          amount: CONTRACT_CREATION_FEE,
-          label: 'رسوم إنشاء عقد مركبة',
-          type: 'debit',
-          status: 'completed',
-          source: 'Wallet'
-        }
-      })
-    ]);
-  }
-
-  console.log(`Save contract request: seller=${sellerName}, buyer=${buyerName}, status=${status || 'final'}`);
-  res.json({ data: { success: true, message: 'تم حفظ العقد في المحفظة بنجاح.' } });
-});
-
-app.post('/api/legal/request-review', authenticateToken, async (req, res) => {
-  const currentUser = (req as any).user;
-  const { lawyerId, notes, payFromWallet } = req.body;
-
-  if (!lawyerId) return res.status(400).json({ error: 'يجب اختيار محامٍ للمراجعة.' });
-
-  if (payFromWallet) {
-    const user = await prisma.user.findUnique({ where: { id: currentUser.userId } });
-    if (!user || user.accountBalance < LAWYER_REVIEW_FEE) {
-      return res.status(400).json({ error: 'رصيدك لا يكفي لطلب مراجعة المحامي.' });
-    }
-
-    await prisma.$transaction([
-      prisma.user.update({
-        where: { id: currentUser.userId },
-        data: { accountBalance: { decrement: LAWYER_REVIEW_FEE } }
-      }),
-      prisma.transaction.create({
-        data: {
-          userId: currentUser.userId,
-          amount: LAWYER_REVIEW_FEE,
-          label: 'رسوم مراجعة قانونية لعقد',
-          type: 'debit',
-          status: 'completed',
-          source: 'Wallet'
-        }
-      })
-    ]);
-  }
-
-  await prisma.notification.create({
-    data: {
-      userId: lawyerId, // إرسال الإشعار للمحامي المختار
-      title: 'طلب مراجعة مسودة',
-      message: `طلب مراجعة جديد من العميل ${currentUser.name}: ${notes || 'عقد بيع مركبة'}`,
-      type: 'info',
-      link: '/pro', // توجيه المحامي للوحة التحكم الخاصة به
+      res.status(500).json({ error: userFacingError });
     }
   });
 
-  res.json({ data: { success: true } });
-});
+  app.post('/api/legal/whatsapp-contract', authenticateToken, async (req, res) => {
+    const { sellerPhone, buyerPhone, pdfUrl, sellerName } = req.body;
 
-app.post('/api/promo/apply', authenticateToken, async (req, res) => {
-  const { code } = req.body;
-  const currentUser = (req as any).user;
+    if (!pdfUrl) {
+      return res.status(400).json({ error: 'المستند غير جاهز للإرسال.' });
+    }
 
-  // مثال بسيط: كود خصم ثابت للمستخدمين الجدد (يمكن تطويره لاحقاً)
-  if (code === 'NEWUSER100') {
-    // في بيئة إنتاجية، يجب التحقق من:
-    // 1. صلاحية الكود (تاريخ انتهاء، عدد مرات الاستخدام)
-    // 2. إذا كان المستخدم "جديداً" (مثلاً، لا توجد لديه معاملات سابقة)
-    // 3. إذا كان الكود قد استخدم من قبل هذا المستخدم
+    try {
+      // توليد رابط مؤمن (Signed URL)
+      const secureToken = crypto.randomBytes(16).toString('hex');
+      const secureUrl = `${process.env.APP_URL}/api/legal/document/${path.basename(pdfUrl)}?token=${secureToken}`;
 
-    // للتبسيط، نفترض أنه صالح ويمنح خصماً ثابتاً
-    return res.json({
+      console.log(`WhatsApp Send (Twilio): PDF Secure Link -> ${secureUrl}`);
+
+      res.json({ data: { success: true, message: 'تم إرسال ملف PDF عبر WhatsApp بنجاح.' } });
+    } catch (error) {
+      res.status(500).json({ error: 'فشل إرسال رسالة WhatsApp.' });
+    }
+  });
+
+  // نقطة نهاية لرفع العقد المولد كملف
+  app.post('/api/legal/upload-contract-pdf', authenticateToken, upload.single('pdf'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    res.json({ data: { url: `/uploads/${req.file.filename}` } });
+  });
+
+  app.post('/api/legal/save-contract', authenticateToken, async (req, res) => {
+    const currentUser = (req as any).user;
+    const { contractText, sellerName, buyerName, status, payFromWallet } = req.body;
+
+    if (!contractText) {
+      return res.status(400).json({ error: 'نص العقد مطلوب للحفظ.' });
+    }
+
+    // إذا طلب المستخدم الدفع من المحفظة عند الحفظ النهائي
+    if (payFromWallet) {
+      const user = await prisma.user.findUnique({ where: { id: currentUser.userId } });
+      if (!user || user.accountBalance < CONTRACT_CREATION_FEE) {
+        return res.status(400).json({ error: 'رصيد المحفظة غير كافٍ لإتمام العملية.' });
+      }
+
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: currentUser.userId },
+          data: { accountBalance: { decrement: CONTRACT_CREATION_FEE } }
+        }),
+        prisma.transaction.create({
+          data: {
+            userId: currentUser.userId,
+            amount: CONTRACT_CREATION_FEE,
+            label: 'رسوم إنشاء عقد مركبة',
+            type: 'debit',
+            status: 'completed',
+            source: 'Wallet'
+          }
+        })
+      ]);
+    }
+
+    console.log(`Save contract request: seller=${sellerName}, buyer=${buyerName}, status=${status || 'final'}`);
+    res.json({ data: { success: true, message: 'تم حفظ العقد في المحفظة بنجاح.' } });
+  });
+
+  app.post('/api/legal/request-review', authenticateToken, async (req, res) => {
+    const currentUser = (req as any).user;
+    const { lawyerId, notes, payFromWallet } = req.body;
+
+    if (!lawyerId) return res.status(400).json({ error: 'يجب اختيار محامٍ للمراجعة.' });
+
+    if (payFromWallet) {
+      const user = await prisma.user.findUnique({ where: { id: currentUser.userId } });
+      if (!user || user.accountBalance < LAWYER_REVIEW_FEE) {
+        return res.status(400).json({ error: 'رصيدك لا يكفي لطلب مراجعة المحامي.' });
+      }
+
+      await prisma.$transaction([
+        prisma.user.update({
+          where: { id: currentUser.userId },
+          data: { accountBalance: { decrement: LAWYER_REVIEW_FEE } }
+        }),
+        prisma.transaction.create({
+          data: {
+            userId: currentUser.userId,
+            amount: LAWYER_REVIEW_FEE,
+            label: 'رسوم مراجعة قانونية لعقد',
+            type: 'debit',
+            status: 'completed',
+            source: 'Wallet'
+          }
+        })
+      ]);
+    }
+
+    await prisma.notification.create({
       data: {
-        discountAmount: PROMO_CODE_DISCOUNT,
-        message: `تم تطبيق خصم ${PROMO_CODE_DISCOUNT.toLocaleString()} د.ع بنجاح!`,
-      },
+        userId: lawyerId, // إرسال الإشعار للمحامي المختار
+        title: 'طلب مراجعة مسودة',
+        message: `طلب مراجعة جديد من العميل ${currentUser.name}: ${notes || 'عقد بيع مركبة'}`,
+        type: 'info',
+        link: '/pro', // توجيه المحامي للوحة التحكم الخاصة به
+      }
     });
-  } else {
-    return res.status(400).json({
-      error: 'كود الخصم غير صالح أو انتهت صلاحيته.',
-    });
-  }
-});
 
-// مسار الدفع من المحفظة
-app.post('/api/app/billing/pay-wallet', authenticateToken, async (req, res) => {
-  const currentUser = (req as any).user;
-  const { amount, serviceName, promoCode } = req.body;
+    res.json({ data: { success: true } });
+  });
 
-  try {
-    const result = await deductFromWalletForService(currentUser.userId, amount, serviceName, promoCode);
-    res.json({ data: result, message: 'تم الدفع بنجاح من المحفظة.' });
-  } catch (error: any) {
-    console.error('Wallet payment failed:', error);
-    res.status(400).json({ error: error.message || 'فشل الدفع من المحفظة.' });
-  }
-});
-
-app.post('/api/payments/zain-cash', authenticateToken, async (req, res) => {
-  const { amount, serviceId } = req.body;
-
-  if (typeof amount !== 'number' || !serviceId) {
-    return res.status(400).json({ error: 'المبلغ ومعرف الخدمة مطلوبان.' });
-  }
-
-  res.json({ data: { success: true, reference: `ZAIN-${Date.now()}` } });
-});
-
-// ============================================
-// Notifications Routes
-// ============================================
-
-app.get('/api/notifications', authenticateToken, async (req, res) => {
-  try {
+  app.post('/api/promo/apply', authenticateToken, async (req, res) => {
+    const { code } = req.body;
     const currentUser = (req as any).user;
-    const notifications = await prisma.notification.findMany({
-      where: { userId: currentUser.userId },
-      orderBy: { createdAt: 'desc' },
-      take: 20
-    });
-    res.json({ data: notifications });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch notifications' });
-  }
-});
 
-app.post('/api/notifications/:id/read', authenticateToken, async (req, res) => {
-  try {
-    const currentUser = (req as any).user;
-    await prisma.notification.updateMany({
-      where: {
-        id: req.params.id,
-        userId: currentUser.userId
-      },
-      data: { read: true }
-    });
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to mark notification as read' });
-  }
-});
+    // مثال بسيط: كود خصم ثابت للمستخدمين الجدد (يمكن تطويره لاحقاً)
+    if (code === 'NEWUSER100') {
+      // في بيئة إنتاجية، يجب التحقق من:
+      // 1. صلاحية الكود (تاريخ انتهاء، عدد مرات الاستخدام)
+      // 2. إذا كان المستخدم "جديداً" (مثلاً، لا توجد لديه معاملات سابقة)
+      // 3. إذا كان الكود قد استخدم من قبل هذا المستخدم
 
-app.get('/api/legal/docs', async (req, res) => {
-  const docs = await getLegalDocs();
-  res.json(docs);
-});
-
-app.post('/api/legal/ask', async (req, res) => {
-  const { question, topK, tone, history } = req.body as {
-    question?: string;
-    topK?: number;
-    tone?: ToneMode;
-    history?: ChatHistoryItem[];
-  };
-
-  if (!question || typeof question !== 'string') {
-    return res.status(400).json({ error: 'السؤال مطلوب كـ string.' });
-  }
-
-  // API Key safety check
-  if (!geminiClient) {
-    console.warn("Gemini Client not initialized. Check GEMINI_API_KEY environment variable.");
-  }
-
-  try {
-    const aiConfig = await getAiSettings();
-    if (!aiConfig.enabled) {
+      // للتبسيط، نفترض أنه صالح ويمنح خصماً ثابتاً
       return res.json({
-        question,
-        answer: 'الميزة الذكية معطلة حالياً. الرجاء التواصل مع الدعم أو المحاولة لاحقاً.',
-        sources: [],
+        data: {
+          discountAmount: PROMO_CODE_DISCOUNT,
+          message: `تم تطبيق خصم ${PROMO_CODE_DISCOUNT.toLocaleString()} د.ع بنجاح!`,
+        },
+      });
+    } else {
+      return res.status(400).json({
+        error: 'كود الخصم غير صالح أو انتهت صلاحيته.',
       });
     }
-    if (aiConfig.fallbackMode) {
-      return res.json({
-        question,
-        answer: 'المساعد الذكي يعمل في وضع التخزين المؤقت. يمكن للمدير إعادة تمكين الوضع الكامل من لوحة التحكم.',
-        sources: [],
-      });
+  });
+
+  // مسار الدفع من المحفظة
+  app.post('/api/app/billing/pay-wallet', authenticateToken, async (req, res) => {
+    const currentUser = (req as any).user;
+    const { amount, serviceName, promoCode } = req.body;
+
+    try {
+      const result = await deductFromWalletForService(currentUser.userId, amount, serviceName, promoCode);
+      res.json({ data: result, message: 'تم الدفع بنجاح من المحفظة.' });
+    } catch (error: any) {
+      console.error('Wallet payment failed:', error);
+      res.status(400).json({ error: error.message || 'فشل الدفع من المحفظة.' });
+    }
+  });
+
+  app.post('/api/payments/zain-cash', authenticateToken, async (req, res) => {
+    const { amount, serviceId } = req.body;
+
+    if (typeof amount !== 'number' || !serviceId) {
+      return res.status(400).json({ error: 'المبلغ ومعرف الخدمة مطلوبان.' });
     }
 
-    const selectedTone: ToneMode = tone === 'simple' || tone === 'friendly' || tone === 'formal' ? tone : 'formal';
-    const sources = getTopRelevantDocuments(question, Number(topK) || aiConfig.topK);
+    res.json({ data: { success: true, reference: `ZAIN-${Date.now()}` } });
+  });
 
+  // ============================================
+  // Notifications Routes
+  // ============================================
+
+  app.get('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const notifications = await prisma.notification.findMany({
+        where: { userId: currentUser.userId },
+        orderBy: { createdAt: 'desc' },
+        take: 20
+      });
+      res.json({ data: notifications });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch notifications' });
+    }
+  });
+
+  app.post('/api/notifications/:id/read', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      await prisma.notification.updateMany({
+        where: {
+          id: req.params.id,
+          userId: currentUser.userId
+        },
+        data: { read: true }
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to mark notification as read' });
+    }
+  });
+
+  app.get('/api/legal/docs', async (req, res) => {
+    const docs = await getLegalDocs();
+    res.json(docs);
+  });
+
+  app.post('/api/legal/ask', async (req, res) => {
+    const { question, topK, tone, history } = req.body as {
+      question?: string;
+      topK?: number;
+      tone?: ToneMode;
+      history?: ChatHistoryItem[];
+    };
+
+    if (!question || typeof question !== 'string') {
+      return res.status(400).json({ error: 'السؤال مطلوب كـ string.' });
+    }
+
+    // API Key safety check
     if (!geminiClient) {
-      return res.json({
-        question,
-        answer: buildLocalAnswer(question, sources),
-        sources,
-        mode: 'local',
+      console.warn("Gemini Client not initialized. Check GEMINI_API_KEY environment variable.");
+    }
+
+    try {
+      const aiConfig = await getAiSettings();
+
+      // Defensive check: If aiConfig is null or undefined, treat AI as disabled.
+      // This handles cases where getAiSettings might unexpectedly return null,
+      // even though adminData.ts is designed to provide defaults.
+      if (aiConfig === null || aiConfig === undefined) {
+        return res.json({
+          question,
+          answer: 'الميزة الذكية معطلة حالياً. الرجاء التواصل مع الدعم أو المحاولة لاحقاً.',
+          sources: [],
+        });
+      }
+      // Now that aiConfig is guaranteed not to be null/undefined, check its 'enabled' property
+      if (!aiConfig.enabled) {
+        return res.json({
+          question,
+          answer: 'الميزة الذكية معطلة حالياً. الرجاء التواصل مع الدعم أو المحاولة لاحقاً.',
+          sources: [],
+        });
+      }
+      if (aiConfig.fallbackMode) {
+        return res.json({
+          question,
+          answer: 'المساعد الذكي يعمل في وضع التخزين المؤقت. يمكن للمدير إعادة تمكين الوضع الكامل من لوحة التحكم.',
+          sources: [],
+        });
+      }
+
+      const selectedTone: ToneMode = tone === 'simple' || tone === 'friendly' || tone === 'formal' ? tone : 'formal';
+      const sources = getTopRelevantDocuments(question, Number(topK) || aiConfig.topK);
+
+      if (!geminiClient) {
+        return res.json({
+          question,
+          answer: buildLocalAnswer(question, sources),
+          sources,
+          mode: 'local',
+        });
+      }
+
+      const referenceSummary = sources
+        .map(
+          (source, index) =>
+            `${index + 1}. ${source.title} | ${source.law} | ${source.article}\nالملخص: ${source.summary}\nالمصدر: ${source.source}`
+        )
+        .join('\n\n');
+
+      const model = geminiClient.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        systemInstruction: buildGeminiSystemPrompt(selectedTone, referenceSummary),
+        safetySettings: [
+          {
+            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
+            threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
+            threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
+            threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+          },
+          {
+            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
+            threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+          },
+        ],
       });
-    }
 
-    const referenceSummary = sources
-      .map(
-        (source, index) =>
-          `${index + 1}. ${source.title} | ${source.law} | ${source.article}\nالملخص: ${source.summary}\nالمصدر: ${source.source}`
-      )
-      .join('\n\n');
-
-    const model = geminiClient.getGenerativeModel({
-      model: 'gemini-1.5-flash',
-      systemInstruction: buildGeminiSystemPrompt(selectedTone, referenceSummary),
-      safetySettings: [
-        {
-          category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+      const result = await model.generateContentStream({
+        contents: mapHistoryToGeminiContents(Array.isArray(history) ? history : [], question),
+        generationConfig: {
+          temperature: selectedTone === 'friendly' ? 0.7 : selectedTone === 'simple' ? 0.35 : 0.25,
         },
-        {
-          category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-        },
-        {
-          category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-          threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH,
-        },
-      ],
-    });
+      });
 
-    const result = await model.generateContentStream({
-      contents: mapHistoryToGeminiContents(Array.isArray(history) ? history : [], question),
-      generationConfig: {
-        temperature: selectedTone === 'friendly' ? 0.7 : selectedTone === 'simple' ? 0.35 : 0.25,
-      },
-    });
+      // Set headers for SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
 
-    // Set headers for SSE
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
-    res.flushHeaders();
-
-    let fullAnswer = "";
-    try {
-      for await (const chunk of result.stream) {
-        const chunkText = chunk.text();
-        fullAnswer += chunkText;
-        res.write(`data: ${JSON.stringify({ chunk: chunkText, sources: fullAnswer.length < 100 ? sources : [] })}\n\n`);
+      let fullAnswer = "";
+      try {
+        for await (const chunk of result.stream) {
+          const chunkText = chunk.text();
+          fullAnswer += chunkText;
+          res.write(`data: ${JSON.stringify({ chunk: chunkText, sources: fullAnswer.length < 100 ? sources : [] })}\n\n`);
+        }
+      } catch (streamError) {
+        console.error("Stream interrupted:", streamError);
+        res.write(`data: ${JSON.stringify({ error: "انقطع الاتصال أثناء توليد الإجابة." })}\n\n`);
+      } finally {
+        res.end();
       }
-    } catch (streamError) {
-      console.error("Stream interrupted:", streamError);
-      res.write(`data: ${JSON.stringify({ error: "انقطع الاتصال أثناء توليد الإجابة." })}\n\n`);
-    } finally {
-      res.end();
-    }
 
-  } catch (error) {
-    // Logging مفصل لأخطاء الـ RAG والدردشة
-    console.error('❌ [AI Error] RAG query failed');
-    if (error instanceof Error) {
-      console.error;
-    }
+    } catch (error) {
+      console.error('❌ [AI Error] RAG query failed:', error);
 
-    try {
-      const fallbacend a normal JSON response here if headers were sent.
-        if(!res.headersSent) {
-        return res.json({ ...fallbackData, mode: 'fallback' });
-      }
-    } catch {
-      if (!res.headersSent) {
-        return res.status(500).json({ error: 'فشل في معالجة الطلب. حاول مرة أخرى لاحقاً.' });
+      // Check if headers have already been sent (meaning SSE stream has started)
+      if (res.headersSent) {
+        res.write(`data: ${JSON.stringify({ error: "انقطع الاتصال أو حدث خطأ أثناء المعالجة." })}\n\n`);
+        res.end();
+      } else {
+        let userFacingError = 'فشل في معالجة الطلب. حاول مرة أخرى لاحقاً.';
+        if (error instanceof Error) {
+          if (error.message.includes('API key')) {
+            userFacingError = 'خطأ في مفتاح API للذكاء الاصطناعي.';
+          } else if (error.message.includes('safety')) {
+            userFacingError = 'تم حجب الإجابة لدواعي السلامة.';
+          }
+        }
+        res.status(500).json({ error: userFacingError });
       }
     }
-  }
-});
-
-// ============================================
-// Document Upload Routes
-// ============================================
-
-app.post('/api/profile/documents/national-id', authenticateToken, upload.single('document'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'لم يتم تحديد ملف' });
-    }
-
-    const user = (req as any).user;
-    const fileUrl = `/uploads/${req.file.filename}`;
-
-    const lawyerProfile = await prisma.lawyerProfile.upsert({
-      where: { userId: user.id },
-      update: { nationalIdUrl: fileUrl, nationalIdVerified: false },
-      create: {
-        userId: user.id,
-        nationalIdUrl: fileUrl,
-        nationalIdVerified: false,
-      },
-    });
-
-    res.json({
-      success: true,
-      message: 'تم رفع البطاقة الوطنية بنجاح',
-      fileUrl,
-      lawyerProfile,
-    });
-  } catch (error) {
-    console.error('National ID upload failed:', error);
-    res.status(500).json({ error: 'فشل رفع البطاقة الوطنية' });
-  }
-});
-
-app.post('/api/profile/documents/lawyer-license', authenticateToken, upload.single('document'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'لم يتم تحديد ملف' });
-    }
-
-    const user = (req as any).user;
-    const fileUrl = `/uploads/${req.file.filename}`;
-
-    const lawyerProfile = await prisma.lawyerProfile.upsert({
-      where: { userId: user.id },
-      update: { lawyerLicenseUrl: fileUrl, lawyerLicenseVerified: false },
-      create: {
-        userId: user.id,
-        lawyerLicenseUrl: fileUrl,
-        lawyerLicenseVerified: false,
-      },
-    });
-
-    res.json({
-      success: true,
-      message: 'تم رفع بطاقة المحاماة بنجاح',
-      fileUrl,
-      lawyerProfile,
-    });
-  } catch (error) {
-    console.error('Lawyer license upload failed:', error);
-    res.status(500).json({ error: 'فشل رفع بطاقة المحاماة' });
-  }
-});
-
-// Serve uploaded files
-// تم إيقاف الوصول المباشر للمجلد لزيادة الأمان
-// app.use('/uploads', express.static(uploadsDir));
-
-// Vite middleware for development
-if (process.env.NODE_ENV !== 'production') {
-  const vite = await createViteServer({
-    server: { middlewareMode: true },
-    appType: 'spa',
   });
-  app.use(vite.middlewares);
-} else {
-  const distPath = path.join(process.cwd(), 'dist');
-  app.use(express.static(distPath));
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(distPath, 'index.html'));
-  });
-}
 
-httpServer.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running. Local: http://localhost:${PORT} | Network: Accessible via your IP on port ${PORT}`);
-});
+  // ============================================
+  // Document Upload Routes
+  // ============================================
+
+  app.post('/api/profile/documents/national-id', authenticateToken, upload.single('document'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'لم يتم تحديد ملف' });
+      }
+
+      const user = (req as any).user;
+      const fileUrl = `/uploads/${req.file.filename}`;
+
+      const lawyerProfile = await prisma.lawyerProfile.upsert({
+        where: { userId: user.id },
+        update: { nationalIdUrl: fileUrl, nationalIdVerified: false },
+        create: {
+          userId: user.id,
+          nationalIdUrl: fileUrl,
+          nationalIdVerified: false,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'تم رفع البطاقة الوطنية بنجاح',
+        fileUrl,
+        lawyerProfile,
+      });
+    } catch (error) {
+      console.error('National ID upload failed:', error);
+      res.status(500).json({ error: 'فشل رفع البطاقة الوطنية' });
+    }
+  });
+
+  app.post('/api/profile/documents/lawyer-license', authenticateToken, upload.single('document'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: 'لم يتم تحديد ملف' });
+      }
+
+      const user = (req as any).user;
+      const fileUrl = `/uploads/${req.file.filename}`;
+
+      const lawyerProfile = await prisma.lawyerProfile.upsert({
+        where: { userId: user.id },
+        update: { lawyerLicenseUrl: fileUrl, lawyerLicenseVerified: false },
+        create: {
+          userId: user.id,
+          lawyerLicenseUrl: fileUrl,
+          lawyerLicenseVerified: false,
+        },
+      });
+
+      res.json({
+        success: true,
+        message: 'تم رفع بطاقة المحاماة بنجاح',
+        fileUrl,
+        lawyerProfile,
+      });
+    } catch (error) {
+      console.error('Lawyer license upload failed:', error);
+      res.status(500).json({ error: 'فشل رفع بطاقة المحاماة' });
+    }
+  });
+
+  // Serve uploaded files
+  // تم إيقاف الوصول المباشر للمجلد لزيادة الأمان
+  // app.use('/uploads', express.static(uploadsDir));
+
+  // Vite middleware for development
+  if (process.env.NODE_ENV !== 'production') {
+    const vite = await createViteServer({
+      server: { middlewareMode: true },
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  } else {
+    const distPath = path.join(process.cwd(), 'dist');
+    app.use(express.static(distPath));
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(distPath, 'index.html'));
+    });
+  }
+
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running. Local: http://localhost:${PORT} | Network: Accessible via your IP on port ${PORT}`);
+  });
 }
 
 startServer();

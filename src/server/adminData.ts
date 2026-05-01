@@ -405,7 +405,15 @@ export function getExportCsv(type: 'kyc' | 'transactions'): string {
 }
 
 export async function getSystemSettings(): Promise<SystemSettings> {
-    return getCached('system-settings', async () => prisma.systemSetting.findFirst() as any);
+    return getCached('system-settings', async () => {
+        const settings = await prisma.systemSetting.findFirst();
+        return (settings as any) || {
+            maintenanceMode: false,
+            announcement: '',
+            offlineMessage: 'الموقع تحت الصيانة حالياً.',
+            supportEmail: 'support@example.com'
+        };
+    });
 }
 
 export async function updateSystemSettings(settings: Partial<SystemSettings>) {
@@ -419,7 +427,15 @@ export async function updateSystemSettings(settings: Partial<SystemSettings>) {
 }
 
 export async function getAiSettings(): Promise<AiSettings> {
-    return getCached('ai-settings', async () => prisma.aiSetting.findFirst() as any);
+    return getCached('ai-settings', async () => {
+        const settings = await prisma.aiSetting.findFirst();
+        return (settings as any) || {
+            enabled: true,
+            topK: 3,
+            fallbackMode: false,
+            maxTokens: 2048
+        };
+    });
 }
 
 export async function updateAiSettings(settings: Partial<AiSettings>) {
@@ -446,7 +462,15 @@ export async function updatePaymentGateway(key: string, enabled: boolean, feePer
 }
 
 export async function getWorkflowSettings(): Promise<WorkflowSettings> {
-    return getCached('workflow-settings', async () => prisma.workflowSetting.findFirst() as any);
+    return getCached('workflow-settings', async () => {
+        const settings = await prisma.workflowSetting.findFirst();
+        return (settings as any) || {
+            allowNewCases: true,
+            enforceSignedDocs: true,
+            autoAssignLawyers: false,
+            openCasesPerLawyer: 5
+        };
+    });
 }
 
 export async function updateWorkflowSettings(settings: Partial<WorkflowSettings>) {
