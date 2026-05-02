@@ -216,6 +216,62 @@ export default function ContractWizard() {
     const [isPaid, setIsPaid] = useState(false);
 
     const totalSteps = 7; // Increased for template selection step
+
+    // --- Missing logic for custom templates ---
+    const filteredCustomTemplates = useMemo(() => {
+        return userCustomTemplates.filter(t =>
+            t.name.toLowerCase().includes(customTemplateSearch.toLowerCase())
+        );
+    }, [userCustomTemplates, customTemplateSearch]);
+
+    const handleDeleteTemplate = async (index: number) => {
+        try {
+            const res = await apiClient.deleteContractTemplate(index);
+            setUserCustomTemplates(res.data || []);
+        } catch (err) {
+            console.error('Failed to delete template', err);
+        }
+    };
+
+    const handleSaveAsTemplate = async () => {
+        if (!generatedContractText) return;
+        const name = window.prompt('أدخل اسماً للقالب الجديد:');
+        if (!name) return;
+        setIsSavingTemplate(true);
+        try {
+            const res = await apiClient.saveContractTemplate({ name, text: generatedContractText });
+            setUserCustomTemplates(res.data || []);
+            setContractError('تم حفظ القالب بنجاح');
+            setTimeout(() => setContractError(''), 3000);
+        } catch (err) {
+            console.error('Failed to save template', err);
+        } finally {
+            setIsSavingTemplate(false);
+        }
+    };
+
+    // --- Client-side Contract Generator (Fallback) ---
+    const generateContractTextLocally = useCallback(() => {
+        const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price, currency, customClauses } = formData;
+        const dateStr = new Date().toLocaleDateString('ar-IQ');
+        const clauseMap: Record<string, string> = {
+            'engine_warranty': 'يضمن البائع سلامة المحرك والجير لمدة 3 أيام من تاريخ الاستلام، وفي حال ظهور خلل فني جوهري يحق للمشتري إعادة المركبة.',
+            'traffic_test': 'يعتبر هذا البيع معلقاً على شرط اجتياز المركبة للفحص الفني في دائرة المرور المختصة.',
+            'previous_fines': 'يتحمل الطرف الأول (البائع) كافة الغرامات المرورية والديون الحكومية المترتبة على المركبة حتى تاريخ توقيع هذا العقد.',
+            'transfer_period': 'يلتزم البائع بالحضور أمام دائرة المرور لغرض تحويل ملكية المركبة باسم المشتري خلال مدة لا تتجاوز 10 أيام من تاريخه.',
+        };
+
+        let additionalConditions = '';
+        if (selectedClauses.length > 0) {
+            additionalConditions = '\n\nشروط إضافية متفق عليها:\n' + selectedClauses
+                .map((id, index) => `${index + 6}. ${clauseMap[id] || id}`)
+                .join('\n');
+        }
+        if (customClauses) additionalConditions += `\n\nبند مضاف من الأطراف:\n- ${customClauses}`;
+
+        return `عقد بيع وشراء مركبة\n\nأنه في يوم ${dateStr}، تم الاتفاق والتراضي بين كل من:\n\nالطرف الأول (البائع): السيد/ة ${sellerName} (رقم الهاتف: +964${sellerPhone})\nالطرف الثاني (المشتري): السيد/ة ${buyerName} (رقم الهاتف: +964${buyerPhone})\n\nباع الطرف الأول للطرف الثاني المركبة الموصوفة أدناه:\n- نوع المركبة وموديلها: ${carModel}\n- رقم الشاصي (VIN): ${vinNumber}\n\nالثمن: تم هذا البيع نظير ثمن إجمالي قدره ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'}.\n\nشروط العقد:\n1. يقر الطرف الأول (البائع) بأن المركبة المباعة خالية من أي ديون أو حجوزات قانونية حتى تاريخ هذا العقد.\n2. يقر الطرف الثاني (المشتري) بأنه قد عاين المركبة معاينة تامة وقبل شراءها بحالتها الراهنة.\n3. يتعهد الطرف الأول بتسليم المركبة وكافة وثائقها القانونية للطرف الثاني فور استلام الثمن المذكور.\n4. تنتقل كافة المسؤوليات القانونية والمخالفات المترتبة على المركبة إلى عهدة الطرف الثاني من لحظة استلامه لها.\n5. يخضع هذا العقد لأحكام القوانين العراقية النافذة.${additionalConditions}\n\nالتوقيعات:\nتوقيع الطرف الأول (البائع): ............................\nتوقيع الطرف الثاني (المشتري): ............................`;
+    }, [formData, selectedClauses]);
+
     const stepTitles = ['اختيار القالب', 'بيانات الأطراف', 'تفاصيل المركبة', 'مراجعة العقد', 'الدفع', 'التوقيع', 'الانتهاء'];
     const stepDescriptions: Record<number, string> = {
         0: 'اختر نوع العقد الذي ترغب بإنشائه أو ابدأ من الصفر.',
@@ -361,15 +417,22 @@ export default function ContractWizard() {
 
         try {
             // Request standard contract template from server
-            // The server now provides a fixed legal template instead of using AI
-            // to create the contract text based on formData and Iraqi law dataset.
             const response = await apiClient.generateCarContract({ ...formData, optionalClauses: selectedClauses });
-
-            setGeneratedContractText(response.data.contractText);
+            setGeneratedContractText(response.data.data.contractText);
             nextStep(); // Move to the next step (Contract Review)
         } catch (error: any) {
-            console.error('Error generating contract:', error.response?.data?.error || error.message);
-            setContractError(error.response?.data?.error || 'حدث خطأ أثناء توليد العقد. يرجى المحاولة مرة أخرى.');
+            console.warn('Server generation failed, falling back to local template...', error);
+
+            // "Go around it" by generating locally if AI or server fails
+            const localText = generateContractTextLocally();
+            if (localText) {
+                setGeneratedContractText(localText);
+                setContractError('تم استخدام القالب المحلي لضمان استمرارية العمل. يرجى مراجعة البنود بعناية.');
+                setTimeout(() => setContractError(''), 5000);
+                nextStep();
+            } else {
+                setContractError('تعذر توليد العقد حالياً. يرجى التأكد من ملء جميع البيانات.');
+            }
         } finally {
             setIsLoadingContract(false);
         }
@@ -395,9 +458,9 @@ export default function ContractWizard() {
         setContractError('');
         try {
             const response = await apiClient.applyPromoCode(promoCodeInput.trim());
-            setDiscountAmount(response.data.discountAmount);
+            setDiscountAmount(response.data.data.discountAmount);
             setAppliedPromoCode(promoCodeInput.trim());
-            setContractError(response.data.message); // عرض رسالة النجاح كخطأ مؤقت
+            setContractError(response.data.data.message); // عرض رسالة النجاح كخطأ مؤقت
             setTimeout(() => setContractError(''), 5000);
         } catch (error: any) {
             setDiscountAmount(0);

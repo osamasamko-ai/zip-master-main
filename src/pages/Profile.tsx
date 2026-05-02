@@ -101,10 +101,10 @@ export default function Profile() {
           apiClient.getLawyers(),
         ]);
         setLoadError('');
-        setLawyer(profileResponse.data.lawyer);
-        setReviews(profileResponse.data.reviews || []);
-        setActivityItems(profileResponse.data.activity || []);
-        setRelatedLawyers((lawyersResponse.data || []).filter((item: any) => item.id !== params.id && item.specialty === profileResponse.data.lawyer.specialty).slice(0, 2));
+        setLawyer(profileResponse.data.data.lawyer);
+        setReviews(profileResponse.data.data.reviews || []);
+        setActivityItems(profileResponse.data.data.activity || []);
+        setRelatedLawyers((lawyersResponse.data.data || []).filter((item: any) => item.id !== params.id && item.specialty === profileResponse.data.data.lawyer.specialty).slice(0, 2));
       } catch (error) {
         console.error('Failed to load lawyer profile', error);
         setLoadError('تعذر فتح ملف المحامي حالياً. حاول مرة أخرى.');

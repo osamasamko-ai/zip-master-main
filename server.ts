@@ -1470,7 +1470,8 @@ async function startServer() {
       const { sellerPhone, buyerPhone, price, currency, optionalClauses = [] } = req.body;
 
       const numericPrice = parseInt(String(price || '0').replace(/,/g, ''), 10);
-      const priceInWords = tafqeet(numericPrice, currency || 'IQD');
+      // Simplified: no need for Arabic number conversion to avoid any potential issues
+      // const priceInWords = tafqeet(numericPrice, currency || 'IQD');
 
       if (!sellerName || !sellerPhone || !buyerName || !buyerPhone || !carModel || !vinNumber || !price) {
         return res.status(400).json({ error: 'يرجى تقديم جميع بيانات العقد المطلوبة.' });
@@ -1504,7 +1505,7 @@ async function startServer() {
 
       const contractText = `عقد بيع وشراء مركبة
 
-أنه في يوم ${new Date().toLocaleDateString('ar-IQ')}، تم الاتفاق والتراضي بين كل من:
+أنه في يوم ${new Date().toLocaleDateString('ar') || new Date().toDateString()}، تم الاتفاق والتراضي بين كل من:
 
 الطرف الأول (البائع): السيد/ة ${sellerName} (رقم الهاتف: +964${normalizedSellerPhone})
 الطرف الثاني (المشتري): السيد/ة ${buyerName} (رقم الهاتف: +964${normalizedBuyerPhone})
@@ -1513,7 +1514,7 @@ async function startServer() {
 - نوع المركبة وموديلها: ${carModel}
 - رقم الشاصي (VIN): ${vinNumber}
 
-الثمن: تم هذا البيع نظير ثمن إجمالي قدره ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'} (${priceInWords}).
+الثمن: تم هذا البيع نظير ثمن إجمالي قدره ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'}.
 
 شروط العقد:
 1. يقر الطرف الأول (البائع) بأن المركبة المباعة خالية من أي ديون أو حجوزات قانونية حتى تاريخ هذا العقد.
@@ -1521,6 +1522,8 @@ async function startServer() {
 3. يتعهد الطرف الأول بتسليم المركبة وكافة وثائقها القانونية للطرف الثاني فور استلام الثمن المذكور.
 4. تنتقل كافة المسؤوليات القانونية والمخالفات المترتبة على المركبة إلى عهدة الطرف الثاني من لحظة استلامه لها.
 5. يخضع هذا العقد لأحكام القوانين العراقية النافذة.
+
+${additionalConditions}
 
 التوقيعات:
 توقيع الطرف الأول (البائع): ............................
