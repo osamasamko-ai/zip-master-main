@@ -266,13 +266,13 @@ class ApiClient {
         return response.data;
     }
 
-    async getContractTemplates(): Promise<ApiResponse<string[]>> {
+    async getContractTemplates(): Promise<ApiResponse<any[]>> {
         const response = await this.client.get('/api/app/contract-templates');
         return response.data;
     }
 
-    async saveContractTemplate(text: string): Promise<ApiResponse<string[]>> {
-        const response = await this.client.post('/api/app/contract-templates', { text });
+    async saveContractTemplate(data: { name: string; text: string }): Promise<ApiResponse<any[]>> {
+        const response = await this.client.post('/api/app/contract-templates', data);
         return response.data;
     }
 

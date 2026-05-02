@@ -60,6 +60,7 @@ export interface UserRecord {
     accountBalance: number;
     licenseStatus: 'pending' | 'verified' | 'rejected';
     notes: string;
+    contractTemplates?: any[];
 }
 
 export interface FeatureFlag {
@@ -247,7 +248,8 @@ export async function getUsers(): Promise<UserRecord[]> {
         accountBalance: u.accountBalance,
         notes: u.notes || '',
         notificationsEnabled: u.notificationsEnabled,
-        licenseStatus: (u.lawyerProfile?.licenseStatus as any) || 'pending'
+        licenseStatus: (u.lawyerProfile?.licenseStatus as any) || 'pending',
+        contractTemplates: u.contractTemplates || []
     }));
 }
 
@@ -274,7 +276,8 @@ export async function getUserById(id: string): Promise<UserRecord | null> {
         accountBalance: user.accountBalance,
         notes: user.notes || '',
         notificationsEnabled: user.notificationsEnabled,
-        licenseStatus: (user.lawyerProfile?.licenseStatus as any) || 'pending'
+        licenseStatus: (user.lawyerProfile?.licenseStatus as any) || 'pending',
+        contractTemplates: (user as any).contractTemplates || []
     };
 }
 
@@ -308,7 +311,8 @@ export async function updateUserProfile(id: string, updates: Partial<UserRecord>
             accountBalance: user.accountBalance,
             notes: user.notes || '',
             notificationsEnabled: user.notificationsEnabled,
-            licenseStatus: (user.lawyerProfile?.licenseStatus as any) || 'pending'
+            licenseStatus: (user.lawyerProfile?.licenseStatus as any) || 'pending',
+            contractTemplates: (user as any).contractTemplates || []
         };
     } catch (error) {
         console.error('Error updating user profile:', error);
@@ -628,6 +632,7 @@ export async function createUser(userData: { email: string; passwordHash: string
             marketingEmails: false,
             language: 'ar', // Default language
             subscriptionTier: 'basic', // Default subscription tier
+            contractTemplates: [], // Initialize empty templates array
         },
         include: { lawyerProfile: true }
     });

@@ -1600,8 +1600,7 @@ async function startServer() {
   app.get('/api/app/contract-templates', authenticateToken, async (req, res) => {
     try {
       const user = await prisma.user.findUnique({
-        where: { id: (req as any).user.userId },
-        select: { contractTemplates: true }
+        where: { id: (req as any).user.userId }
       });
       res.json({ data: (user as any)?.contractTemplates || [] });
     } catch (error) {
@@ -1611,12 +1610,12 @@ async function startServer() {
 
   app.post('/api/app/contract-templates', authenticateToken, async (req, res) => {
     try {
-      const { text } = req.body;
+      const { name, text } = req.body;
       const userId = (req as any).user.userId;
       const user = await prisma.user.findUnique({ where: { id: userId } });
       const templates = (user as any).contractTemplates || [];
 
-      const updated = [text, ...templates.filter((t: string) => t !== text)].slice(0, 10);
+      const updated = [{ name, text }, ...templates.filter((t: any) => t.name !== name)].slice(0, 10);
 
       await prisma.user.update({
         where: { id: userId },
