@@ -6,6 +6,18 @@ import { motion, AnimatePresence } from 'framer-motion';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
+import { io } from 'socket.io-client';
+
+const StepLabel = ({ label, active, completed }: { label: string, active: boolean, completed: boolean }) => (
+    <p className={`mt-2 text-[10px] font-black uppercase tracking-tighter transition-colors duration-300 ${active ? 'text-brand-navy' : completed ? 'text-emerald-600' : 'text-slate-400'
+        }`}>
+        {label}
+    </p>
+);
+
+const FormSectionTitle = ({ title, icon, colorClass = "text-brand-gold" }: { title: string, icon: string, colorClass?: string }) => (
+    <h3 className="font-black text-slate-700 text-sm flex items-center gap-2 border-r-4 border-current pr-3 mb-4"><i className={`fa-solid ${icon} ${colorClass}`}></i> {title}</h3>
+);
 
 const CONTRACT_TEMPLATES = [
     {
@@ -61,7 +73,9 @@ const CONTRACT_TEMPLATES = [
     },
 ];
 
-const SignaturePad = ({ onSave, value, placeholder, onClear }: { onSave: (data: string) => void, value: string, placeholder: string, onClear: () => void }) => {
+const SignaturePad = ({ onSave, value, placeholder, onClear, nameValue }: { onSave: (data: string) => void, value: string, placeholder: string, onClear: () => void, nameValue: string }) => {
+    const [mode, setMode] = useState<'draw' | 'type'>('draw');
+    const typedCanvasRef = useRef<HTMLCanvasElement>(null);
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const [isDrawing, setIsDrawing] = useState(false);
 
@@ -162,7 +176,7 @@ const SignaturePad = ({ onSave, value, placeholder, onClear }: { onSave: (data: 
 };
 
 export default function ContractWizard() {
-    const { user } = useAuth();
+    const { user, refreshUser } = useAuth();
     const navigate = useNavigate();
     const [step, setStep] = useState(0); // Start at step 0 for template selection
     const [formData, setFormData] = useState({
@@ -216,8 +230,12 @@ export default function ContractWizard() {
     const [vinError, setVinError] = useState('');
     const [isPaying, setIsPaying] = useState(false);
     const [isPaid, setIsPaid] = useState(false);
-    const [isFastMode, setIsFastMode] = useState(user ? user.accountBalance < 25000 : false);
-
+    const [showPdfPreviewModal, setShowPdfPreviewModal] = useState(false);
+    const [showShareModal, setShowShareModal] = useState(false);
+    const [shareLink, setShareLink] = useState('');
+    const [currentDraftId, setCurrentDraftId] = useState<string | null>(null);
+    const [isSharingLink, setIsSharingLink] = useState(false);
+    const [isFastMode, setIsFastMode] = useState((user?.accountBalance ?? 0) < 25000);
     const totalSteps = 7; // Increased for template selection step
 
     // --- Missing logic for custom templates ---
@@ -338,6 +356,22 @@ export default function ContractWizard() {
         return vin.length === 17;
     };
 
+    const contractPriceValue = Number(formData.price.toString().replace(/,/g, '')) || 0;
+    const isStep1Valid = Boolean(
+        formData.sellerName.trim() &&
+        formData.buyerName.trim() &&
+        validatePhone(formData.sellerPhone) &&
+        validatePhone(formData.buyerPhone)
+    );
+    const isStep2Valid = Boolean(
+        formData.carModel.trim() &&
+        formData.vinNumber.length === 17 &&
+        !vinError &&
+        contractPriceValue > 0
+    );
+    const isReviewReady = Boolean(generatedContractText.trim());
+    const isSignatureReady = Boolean(sellerSignature && buyerSignature && agreedToTerms);
+
     const nextStep = () => setStep(prev => prev + 1);
     const prevStep = () => setStep(prev => prev - 1);
 
@@ -421,7 +455,7 @@ export default function ContractWizard() {
 
     // تنبيه عند الدخول إذا كان الرصيد أقل من 5,000
     useEffect(() => {
-        if (user && user.accountBalance < 5000 && step === 1) {
+        if ((user?.accountBalance ?? 0) < 5000 && step === 1) {
             setContractError('تنبيه: رصيدك الحالي أقل من 5,000 د.ع. يرجى شحن الرصيد لتتمكن من إصدار العقود المدفوعة.');
             setTimeout(() => setContractError(''), 8000);
         }
@@ -452,6 +486,24 @@ export default function ContractWizard() {
         setIsLoadingContract(true);
         setContractError('');
         setGeneratedContractText('');
+
+        if (!formData.carModel.trim()) {
+            setContractError('الرجاء إدخال نوع وموديل السيارة قبل المتابعة.');
+            setIsLoadingContract(false);
+            return;
+        }
+
+        if (formData.vinNumber.length !== 17) {
+            setContractError('رقم الشاصي يجب أن يتكون من 17 حرفاً أو رقماً.');
+            setIsLoadingContract(false);
+            return;
+        }
+
+        if (!formData.price || contractPriceValue <= 0) {
+            setContractError('الرجاء إدخال السعر الصحيح لإصدار العقد.');
+            setIsLoadingContract(false);
+            return;
+        }
 
         if (isFastMode) {
             const localText = generateContractTextLocally();
@@ -493,6 +545,7 @@ export default function ContractWizard() {
         try {
             const finalAmount = 25000 - discountAmount;
             await apiClient.payFromWallet(finalAmount, 'إنشاء عقد مركبة ذكي', appliedPromoCode || undefined);
+            if (refreshUser) await refreshUser();
             setIsPaid(true);
             nextStep();
         } catch (error: any) {
@@ -537,7 +590,7 @@ export default function ContractWizard() {
             const uploadRes = await apiClient.uploadContractPdf(pdfBlob);
             const pdfUrl = uploadRes.data.url;
 
-            const payload = {
+            const payload: any = {
                 ...formData,
                 pdfUrl: pdfUrl,
                 sellerSignature,
@@ -647,6 +700,84 @@ export default function ContractWizard() {
         clearDraft(); // Clear draft after successful download/finalization
     };
 
+    const handleShareSignatureLink = async () => {
+        setIsSharingLink(true);
+        setContractError('');
+        try {
+            // حفظ التقدم كمسودة لضمان توفر البيانات للطرف الآخر
+            const res = await apiClient.saveDraftContract({
+                ...formData,
+                contractText: generatedContractText,
+                status: 'waiting_buyer_signature'
+            });
+
+            const draftId = res.data?.id || `DRFT-${Date.now()}`;
+            const link = `${window.location.origin}/sign/${draftId}?role=buyer`;
+
+            setCurrentDraftId(draftId);
+            setShareLink(link);
+            setShowShareModal(true);
+        } catch (error) {
+            console.error('Failed to generate share link', error);
+            setContractError('فشل إنشاء رابط المشاركة. يرجى المحاولة مرة أخرى.');
+        } finally {
+            setIsSharingLink(false);
+        }
+    };
+
+    // WebSocket listener for real-time buyer signature
+    useEffect(() => {
+        if (!user?.id || !currentDraftId || step !== 5) return;
+
+        const socket = io(window.location.origin, {
+            query: { userId: user.id }
+        });
+
+        socket.on('buyer_signed', (data: any) => {
+            if (data.draftId === currentDraftId) {
+                setBuyerSignature(data.signature);
+                setContractError(`رائع! قام ${data.buyerName} بتوقيع العقد الآن.`);
+
+                // Auto-close share modal if open
+                setShowShareModal(false);
+
+                // Optional: visual feedback
+                setTimeout(() => setContractError(''), 5000);
+            }
+        });
+
+        return () => {
+            socket.disconnect();
+        };
+    }, [user?.id, currentDraftId, step]);
+
+    const renderStepHeader = () => (
+        <div className="mb-10">
+            <div className="flex justify-between items-start mb-4 relative">
+                <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-100 -z-0"></div>
+                {Array.from({ length: totalSteps }).map((_, index) => {
+                    const sNum = index;
+                    const isActive = step === sNum;
+                    const isCompleted = step > sNum;
+                    return (
+                        <div key={index} className="relative z-10 flex flex-col items-center flex-1">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500 border-4 border-white shadow-sm ${isActive ? 'bg-brand-navy text-white scale-110' :
+                                isCompleted ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'
+                                }`}>
+                                {isCompleted ? <i className="fa-solid fa-check text-xs"></i> : <i className={`fa-solid ${stepIcons[sNum]} text-xs`}></i>}
+                            </div>
+                            <StepLabel label={stepTitles[index]} active={isActive} completed={isCompleted} />
+                        </div>
+                    );
+                })}
+            </div>
+            <motion.div key={step} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="rounded-3xl border border-slate-100 bg-slate-50/50 p-5 text-right flex items-start gap-4">
+                <div className="h-10 w-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-gold shrink-0"><i className="fa-solid fa-lightbulb"></i></div>
+                <div className="flex-1"><p className="text-sm font-black text-brand-dark">{stepTitles[step]}</p><p className="text-xs font-bold text-slate-500 mt-1 leading-relaxed">{stepDescriptions[step]}</p></div>
+            </motion.div>
+        </div>
+    );
+
     const handleCopyToClipboard = () => {
         navigator.clipboard.writeText(generatedContractText);
         setContractError('تم نسخ النص إلى الحافظة');
@@ -675,216 +806,246 @@ export default function ContractWizard() {
                 </div>
             </section>
 
-            {/* Centered Medal Layout Card */}
             <div className="max-w-3xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 p-8 md:p-12 shadow-premium relative">
-                <h2 className="text-2xl font-black text-brand-dark mb-8 flex items-center justify-center gap-3">
-                    <i className="fa-solid fa-file-signature text-brand-gold"></i>
-                    إصدار عقد مركبة جديد
-                </h2>
-
                 {step === 0 ? (
-                    <motion.div
-                        key="step0"
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -20 }}
-                        transition={{ duration: 0.3 }}
-                        className="space-y-6"
-                    >
-                        <h3 className="font-black text-slate-700 text-sm border-r-4 border-brand-gold pr-3 mb-4 text-center">اختر نوع العقد</h3>
+                    <>
+                        <h2 className="text-2xl font-black text-brand-dark mb-8 flex items-center justify-center gap-3">
+                            <i className="fa-solid fa-file-signature text-brand-gold"></i>
+                            إصدار عقد مركبة جديد
+                        </h2>
+                        <motion.div key="step0" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} transition={{ duration: 0.3 }} className="space-y-6">
+                            <FormSectionTitle title="اختر نوع العقد" icon="fa-list-check" />
+                            <p className="text-[11px] text-slate-500 font-bold leading-relaxed mb-4 max-w-2xl mx-auto">
+                                ابدأ بقالب جاهز لتسريع الإجراءات، أو اختر البدء من الصفر إذا كان لديك شروط خاصة. ستتمكن من تعديل كل بند لاحقاً.
+                            </p>
 
-                        {/* Fast Mode Toggle */}
-                        <div className="flex items-center justify-between gap-4 p-5 mb-6 rounded-[2rem] border border-brand-gold/20 bg-brand-gold/5 shadow-sm">
-                            <div className="text-right">
-                                <p className="text-sm font-black text-brand-dark flex items-center gap-2">
-                                    <i className="fa-solid fa-bolt-lightning text-brand-gold text-xs"></i>
-                                    نمط التوليد السريع (بدون AI)
-                                </p>
-                                <p className="text-[10px] font-bold text-slate-500 mt-1 leading-relaxed">
-                                    {user && user.accountBalance < 25000
-                                        ? "رصيدك منخفض. تم تفعيل التوليد السريع تلقائياً لتوفير الوقت وتقليل التكاليف."
-                                        : "تخطي معالجة الذكاء الاصطناعي واستخدام القالب المحلي المباشر لتوفير الوقت."}
-                                </p>
-                            </div>
-                            <button
-                                type="button"
-                                onClick={() => setIsFastMode(!isFastMode)}
-                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${isFastMode ? 'bg-brand-navy' : 'bg-slate-300'}`}
-                            >
-                                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isFastMode ? '-translate-x-5' : 'translate-x-0'}`} />
-                            </button>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {CONTRACT_TEMPLATES.map(template => (
+                            <div className="flex items-center justify-between gap-4 p-5 mb-6 rounded-[2rem] border border-brand-gold/20 bg-brand-gold/5 shadow-sm">
+                                <div className="text-right">
+                                    <p className="text-sm font-black text-brand-dark flex items-center gap-2">
+                                        <i className="fa-solid fa-bolt-lightning text-brand-gold text-xs"></i>
+                                        نمط التوليد السريع (بدون AI)
+                                    </p>
+                                    <p className="text-[10px] font-bold text-slate-500 mt-1 leading-relaxed">
+                                        {(user?.accountBalance ?? 0) < 25000
+                                            ? "رصيدك منخفض. تم تفعيل التوليد السريع تلقائياً لتوفير الوقت وتقليل التكاليف."
+                                            : "تخطي معالجة الذكاء الاصطناعي واستخدام القالب المحلي المباشر لتوفير الوقت."}
+                                    </p>
+                                </div>
                                 <button
-                                    key={template.id}
-                                    onClick={() => handleTemplateSelect(template.id)}
-                                    className="relative p-6 rounded-[2rem] border border-slate-200 bg-slate-50 hover:border-brand-navy hover:bg-white transition-all shadow-sm hover:shadow-md text-center flex flex-col items-center justify-center group/card"
+                                    type="button"
+                                    onClick={() => setIsFastMode(!isFastMode)}
+                                    className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${isFastMode ? 'bg-brand-navy' : 'bg-slate-300'}`}
                                 >
-                                    <div
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setTemplateToPreview({ name: template.label, text: (template as any).previewText || template.description });
-                                        }}
-                                        className="absolute top-4 left-4 h-8 w-8 rounded-full bg-white text-slate-400 opacity-0 group-hover/card:opacity-100 hover:text-brand-navy hover:shadow-md transition-all flex items-center justify-center z-10"
-                                        title="معاينة النص"
-                                    >
-                                        <i className="fa-solid fa-eye text-xs"></i>
-                                    </div>
-                                    <i className={`text-4xl text-brand-navy mb-4 ${template.icon}`}></i>
-                                    <p className="text-sm font-black text-brand-dark">{template.label}</p>
-                                    <p className="text-xs text-slate-500 mt-2 leading-relaxed">{template.description}</p>
-                                    <span className="mt-4 px-4 py-2 rounded-xl bg-brand-navy text-white text-[10px] font-black shadow-lg shadow-brand-navy/20">اختيار</span>
+                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isFastMode ? '-translate-x-5' : 'translate-x-0'}`} />
                                 </button>
-                            ))}
-                        </div>
-
-                        {userCustomTemplates.length > 0 && (
-                            <div className="mt-8 pt-8 border-t border-slate-100">
-                                <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
-                                    <h3 className="font-black text-slate-700 text-sm border-r-4 border-brand-navy pr-3 text-right">قوالبي الخاصة المحفوظة</h3>
-                                    <div className="relative w-full md:w-72">
-                                        <input
-                                            type="text"
-                                            placeholder="ابحث في قوالبك..."
-                                            value={customTemplateSearch}
-                                            onChange={(e) => setCustomTemplateSearch(e.target.value)}
-                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pr-10 pl-4 text-xs font-bold focus:border-brand-navy outline-none text-right transition-all"
-                                        />
-                                        <i className="fa-solid fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-                                        {customTemplateSearch && (
-                                            <button onClick={() => setCustomTemplateSearch('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-300 hover:text-slate-500 transition-colors">
-                                                <i className="fa-solid fa-circle-xmark text-[10px]"></i>
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-right">
-                                    {filteredCustomTemplates.map((template, index) => (
-                                        <div
-                                            key={index}
-                                            className="p-5 rounded-[2rem] border border-slate-200 bg-white hover:border-brand-navy transition-all shadow-sm flex flex-col group"
-                                        >
-                                            <div className="flex justify-between items-start mb-3">
-                                                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                    <button
-                                                        onClick={() => handleDeleteTemplate(index)}
-                                                        className="h-8 w-8 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors flex items-center justify-center shadow-sm"
-                                                        title="حذف القالب"
-                                                    >
-                                                        <i className="fa-solid fa-trash-can text-[10px]"></i>
-                                                    </button>
-                                                    <button
-                                                        onClick={() => setTemplateToPreview({ name: template.name, text: template.text })}
-                                                        className="h-8 w-8 rounded-lg bg-slate-50 text-slate-400 hover:text-brand-navy hover:bg-white transition-all flex items-center justify-center shadow-sm"
-                                                        title="معاينة"
-                                                    >
-                                                        <i className="fa-solid fa-eye text-[10px]"></i>
-                                                    </button>
-                                                </div>
-                                                <div className="h-10 w-10 rounded-xl bg-brand-navy/5 text-brand-navy flex items-center justify-center">
-                                                    <i className="fa-solid fa-file-invoice"></i>
-                                                </div>
-                                            </div>
-                                            <p className="text-sm font-black text-brand-dark mb-2">{template.name}</p>
-                                            <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed mb-4">
-                                                {template.text.substring(0, 120)}...
-                                            </p>
-                                            <button
-                                                onClick={() => {
-                                                    setGeneratedContractText(template.text);
-                                                    setStep(3);
-                                                }}
-                                                className="w-full py-2.5 rounded-xl bg-brand-navy text-white text-[11px] font-black shadow-lg shadow-brand-navy/20 active:scale-95 transition-all"
-                                            >
-                                                استخدام هذا القالب
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
                             </div>
-                        )}
 
-                        {userCustomTemplates.length > 0 && filteredCustomTemplates.length === 0 && (
-                            <div className="py-12 text-center text-slate-400 bg-slate-50/50 rounded-[2rem] border border-dashed border-slate-200">
-                                <p className="text-sm font-bold">لم يتم العثور على قوالب تطابق "{customTemplateSearch}"</p>
-                            </div>
-                        )}
-
-                        {/* Template Preview Modal */}
-                        <AnimatePresence>
-                            {templateToPreview && (
-                                <div className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
-                                    <motion.div
-                                        initial={{ scale: 0.9, opacity: 0 }}
-                                        animate={{ scale: 1, opacity: 1 }}
-                                        exit={{ scale: 0.9, opacity: 0 }}
-                                        className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl text-right flex flex-col max-h-[80vh]"
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {CONTRACT_TEMPLATES.map(template => (
+                                    <button
+                                        key={template.id}
+                                        onClick={() => handleTemplateSelect(template.id)}
+                                        className="relative p-6 rounded-[2rem] border border-slate-200 bg-slate-50 hover:border-brand-navy hover:bg-white transition-all shadow-sm hover:shadow-md text-center flex flex-col items-center justify-center group/card"
                                     >
-                                        <div className="flex justify-between items-center mb-6">
-                                            <h3 className="text-xl font-black text-brand-dark">معاينة القالب: {templateToPreview.name}</h3>
-                                            <button onClick={() => setTemplateToPreview(null)} className="text-slate-400 hover:text-red-500 transition">
-                                                <i className="fa-solid fa-times text-xl"></i>
-                                            </button>
+                                        <div
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                setTemplateToPreview({ name: template.label, text: (template as any).previewText || template.description });
+                                            }}
+                                            className="absolute top-4 left-4 h-8 w-8 rounded-full bg-white text-slate-400 opacity-0 group-hover/card:opacity-100 hover:text-brand-navy hover:shadow-md transition-all flex items-center justify-center z-10"
+                                            title="معاينة النص"
+                                        >
+                                            <i className="fa-solid fa-eye text-xs"></i>
                                         </div>
-                                        <div className="flex-1 overflow-y-auto bg-slate-50 rounded-2xl p-6 mb-8 text-sm leading-relaxed text-slate-600 font-medium whitespace-pre-wrap custom-scrollbar text-right">
-                                            {templateToPreview.text}
+                                        <i className={`text-4xl text-brand-navy mb-4 ${template.icon}`}></i>
+                                        <p className="text-sm font-black text-brand-dark">{template.label}</p>
+                                        <p className="text-xs text-slate-500 mt-2 leading-relaxed">{template.description}</p>
+                                        <span className="mt-4 px-4 py-2 rounded-xl bg-brand-navy text-white text-[10px] font-black shadow-lg shadow-brand-navy/20">اختيار</span>
+                                    </button>
+                                ))}
+                            </div>
+
+                            {userCustomTemplates.length > 0 && (
+                                <div className="mt-8 pt-8 border-t border-slate-100">
+                                    <div className="mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+                                        <FormSectionTitle title="قوالبي الخاصة المحفوظة" icon="fa-bookmark" colorClass="text-brand-navy" />
+                                        <div className="relative w-full md:w-72">
+                                            <input
+                                                type="text"
+                                                placeholder="ابحث في قوالبك..."
+                                                value={customTemplateSearch}
+                                                onChange={(e) => setCustomTemplateSearch(e.target.value)}
+                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pr-10 pl-4 text-xs font-bold focus:border-brand-navy outline-none text-right transition-all"
+                                            />
+                                            <i className="fa-solid fa-search absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
                                         </div>
-                                        <div className="flex justify-center">
-                                            <ActionButton onClick={() => setTemplateToPreview(null)} variant="secondary" className="px-12">
-                                                إغلاق المعاينة
-                                            </ActionButton>
-                                        </div>
-                                    </motion.div>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-right">
+                                        {filteredCustomTemplates.map((template, index) => (
+                                            <div key={index} className="p-5 rounded-[2rem] border border-slate-200 bg-white hover:border-brand-navy transition-all shadow-sm flex flex-col group">
+                                                <div className="flex justify-between items-start mb-3">
+                                                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button onClick={() => handleDeleteTemplate(index)} className="h-8 w-8 rounded-lg bg-rose-50 text-rose-500 hover:bg-rose-500 hover:text-white transition-colors flex items-center justify-center shadow-sm" title="حذف القالب"><i className="fa-solid fa-trash-can text-[10px]"></i></button>
+                                                        <button onClick={() => setTemplateToPreview({ name: template.name, text: template.text })} className="h-8 w-8 rounded-lg bg-slate-50 text-slate-400 hover:text-brand-navy hover:bg-white transition-all flex items-center justify-center shadow-sm" title="معاينة"><i className="fa-solid fa-eye text-[10px]"></i></button>
+                                                    </div>
+                                                    <div className="h-10 w-10 rounded-xl bg-brand-navy/5 text-brand-navy flex items-center justify-center"><i className="fa-solid fa-file-invoice"></i></div>
+                                                </div>
+                                                <p className="text-sm font-black text-brand-dark mb-2">{template.name}</p>
+                                                <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed mb-4">{template.text.substring(0, 120)}...</p>
+                                                <button onClick={() => { setGeneratedContractText(template.text); setStep(3); }} className="w-full py-2.5 rounded-xl bg-brand-navy text-white text-[11px] font-black shadow-lg shadow-brand-navy/20 active:scale-95 transition-all">استخدام هذا القالب</button>
+                                            </div>
+                                        ))}
+                                    </div>
                                 </div>
                             )}
-                        </AnimatePresence>
 
-                        <ActionButton
-                            onClick={() => handleTemplateSelect(null)}
-                            variant="secondary"
-                            className="w-full mt-6 py-4"
-                        >
-                            البدء من الصفر
-                        </ActionButton>
-                    </motion.div>
+                            <ActionButton onClick={() => handleTemplateSelect(null)} variant="secondary" className="w-full mt-6 py-4">البدء من الصفر</ActionButton>
+                        </motion.div>
+                    </>
                 ) : (
-                    <div className="mb-10">
-                        <div className="flex justify-between items-center mb-8 relative">
-                            <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-100 -z-0"></div>
-                            {Array.from({ length: totalSteps }).map((_, index) => {
-                                const sNum = index; // Use index directly as stepTitles is 0-indexed
-                                const isActive = step === sNum;
-                                const isCompleted = step > sNum;
-                                return (
-                                    <div key={index} className={`relative z-10 flex flex-col items-center ${isActive ? 'scale-105' : ''} transition-transform`}>
-                                        <div className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all duration-500 border-4 border-white shadow-sm ${isActive ? 'bg-brand-navy text-white scale-110' :
-                                            isCompleted ? 'bg-emerald-500 text-white' : 'bg-slate-100 text-slate-400'
-                                            }`}>
-                                            {isCompleted ? <i className="fa-solid fa-check text-xs"></i> : <i className={`fa-solid ${stepIcons[sNum]} text-xs`}></i>}
+                    renderStepHeader()
+                )}
+
+                {/* Stepper replaced by renderStepHeader() call above when step > 0 */}
+
+                {/* Template Preview Modal */}
+                <AnimatePresence>
+                    {templateToPreview && (
+                        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="bg-white rounded-[2.5rem] p-8 max-w-2xl w-full shadow-2xl text-right flex flex-col max-h-[80vh]"
+                            >
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-black text-brand-dark">معاينة القالب: {templateToPreview.name}</h3>
+                                    <button onClick={() => setTemplateToPreview(null)} className="text-slate-400 hover:text-red-500 transition">
+                                        <i className="fa-solid fa-times text-xl"></i>
+                                    </button>
+                                </div>
+                                <div className="flex-1 overflow-y-auto bg-slate-50 rounded-2xl p-6 mb-8 text-sm leading-relaxed text-slate-600 font-medium whitespace-pre-wrap custom-scrollbar text-right">
+                                    {templateToPreview.text}
+                                </div>
+                                <div className="flex justify-center">
+                                    <ActionButton onClick={() => setTemplateToPreview(null)} variant="secondary" className="px-12">
+                                        إغلاق المعاينة
+                                    </ActionButton>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+
+                {/* Final PDF Preview Modal */}
+                <AnimatePresence>
+                    {showPdfPreviewModal && (
+                        <div className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-dark/60 backdrop-blur-sm px-4 py-8">
+                            <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                                className="bg-white rounded-[2.5rem] w-full max-w-4xl max-h-full shadow-2xl flex flex-col overflow-hidden"
+                            >
+                                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                                    <h3 className="text-xl font-black text-brand-dark">معاينة نهائية لمسودة العقد</h3>
+                                    <button onClick={() => setShowPdfPreviewModal(false)} className="text-slate-400 hover:text-red-500 transition">
+                                        <i className="fa-solid fa-times text-xl"></i>
+                                    </button>
+                                </div>
+
+                                <div className="flex-1 overflow-y-auto p-6 md:p-12 bg-slate-100/50 custom-scrollbar">
+                                    {/* A4 Paper Simulation */}
+                                    <div className="bg-white shadow-lg mx-auto w-full max-w-[210mm] p-[15mm] md:p-[20mm] text-right font-serif leading-relaxed border border-slate-200" dir="rtl">
+                                        <h1 className="text-3xl font-black text-brand-navy mb-8 text-center border-b-2 border-brand-navy/10 pb-6">عقد بيع وشراء مركبة</h1>
+                                        <div className="whitespace-pre-wrap text-[16px] text-slate-800 min-h-[400px]">
+                                            {generatedContractText}
+                                        </div>
+
+                                        <div className="mt-20 grid grid-cols-2 gap-12 text-center border-t border-slate-100 pt-8">
+                                            <div>
+                                                <p className="font-black text-brand-navy mb-16 text-sm uppercase tracking-widest">توقيع الطرف الأول (البائع)</p>
+                                                <div className="h-0.5 w-3/4 mx-auto bg-slate-200"></div>
+                                            </div>
+                                            <div>
+                                                <p className="font-black text-brand-navy mb-16 text-sm uppercase tracking-widest">توقيع الطرف الثاني (المشتري)</p>
+                                                <div className="h-0.5 w-3/4 mx-auto bg-slate-200"></div>
+                                            </div>
                                         </div>
                                     </div>
-                                );
-                            })}
+                                </div>
+
+                                <div className="p-6 border-t border-slate-100 bg-white flex gap-4">
+                                    <ActionButton onClick={() => setShowPdfPreviewModal(false)} variant="secondary" className="flex-1">العودة للمحرر</ActionButton>
+                                    <ActionButton onClick={() => { setShowPdfPreviewModal(false); nextStep(); }} variant="primary" className="flex-[2] py-4 shadow-lg shadow-brand-navy/20">تأكيد ومتابعة للدفع</ActionButton>
+                                </div>
+                            </motion.div>
                         </div>
-                        <motion.div
-                            key={step}
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            className="rounded-3xl border border-slate-100 bg-slate-50/50 p-5 text-right flex items-start gap-4"
-                        >
-                            <div className="h-10 w-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-gold shrink-0">
-                                <i className="fa-solid fa-lightbulb"></i>
-                            </div>
-                            <div className="flex-1">
-                                <p className="text-sm font-black text-brand-dark">{stepTitles[step]}</p>
-                                <p className="text-xs font-bold text-slate-500 mt-1 leading-relaxed">{stepDescriptions[step]}</p>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
+                    )}
+                </AnimatePresence>
+
+                {/* Share Signature Link Modal */}
+                <AnimatePresence>
+                    {showShareModal && (
+                        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-brand-dark/60 backdrop-blur-sm px-4">
+                            <motion.div
+                                initial={{ scale: 0.9, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0.9, opacity: 0 }}
+                                className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl text-right"
+                            >
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-black text-brand-dark">مشاركة رابط التوقيع</h3>
+                                    <button onClick={() => setShowShareModal(false)} className="text-slate-400 hover:text-red-500 transition">
+                                        <i className="fa-solid fa-times text-xl"></i>
+                                    </button>
+                                </div>
+
+                                <p className="text-sm font-bold text-slate-500 mb-6 leading-relaxed">
+                                    انسخ الرابط أدناه وأرسله للمشتري. سيتمكن من فتح العقد وتوقيعه من جهازه الخاص، وسيتم تحديث الحالة لديك فوراً.
+                                </p>
+
+                                <div className="bg-slate-50 border border-slate-200 p-4 rounded-2xl flex items-center gap-3 mb-6 group">
+                                    <button
+                                        onClick={() => {
+                                            navigator.clipboard.writeText(shareLink);
+                                            setContractError('تم نسخ الرابط!');
+                                            setTimeout(() => setContractError(''), 3000);
+                                        }}
+                                        className="h-10 w-10 shrink-0 rounded-xl bg-white border border-slate-100 text-brand-navy shadow-sm hover:bg-brand-navy hover:text-white transition-all active:scale-95"
+                                        title="نسخ الرابط"
+                                    >
+                                        <i className="fa-regular fa-copy"></i>
+                                    </button>
+                                    <input
+                                        type="text"
+                                        readOnly
+                                        value={shareLink}
+                                        className="bg-transparent flex-1 text-[11px] font-mono text-slate-500 outline-none text-left"
+                                        dir="ltr"
+                                    />
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => {
+                                            const text = `مرحباً ${formData.buyerName}، يرجى التوقيع على عقد البيع الخاص بالمركبة (${formData.carModel}) عبر هذا الرابط الآمن: ${shareLink}`;
+                                            window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank');
+                                        }}
+                                        className="py-3.5 rounded-2xl bg-[#25D366] text-white font-black text-xs shadow-lg shadow-emerald-500/20 hover:bg-[#20ba5c] transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <i className="fa-brands fa-whatsapp text-lg"></i>
+                                        إرسال WhatsApp
+                                    </button>
+                                    <ActionButton onClick={() => setShowShareModal(false)} variant="secondary" className="py-3.5">إغلاق</ActionButton>
+                                </div>
+                            </motion.div>
+                        </div>
+                    )}
+                </AnimatePresence>
+
+                {/* Stepper end */}
 
                 {step > 0 && (
                     <AnimatePresence mode="wait">
@@ -897,63 +1058,70 @@ export default function ContractWizard() {
                         >
                             {step === 1 && (
                                 <div className="space-y-6">
+                                    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-4 text-right text-xs font-bold text-slate-500">
+                                        <p>قم بإدخال أسماء الطرفين وأرقام الجوال العراقية بدون رمز الدولة. هذه المعلومات تُستخدم في نص العقد ورسائل التذكير.</p>
+                                    </div>
                                     <div className="space-y-4">
-                                        <h3 className="font-black text-slate-700 text-sm flex items-center justify-center gap-2 border-r-4 border-brand-gold pr-3">بيانات البائع</h3>
-                                        <input
-                                            placeholder="اسم البائع الكامل"
-                                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
-                                            onChange={e => setFormData({ ...formData, sellerName: e.target.value })}
-                                            value={formData.sellerName}
-                                        />
-                                        <div className="flex items-center gap-3">
-                                            <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-400">+964</span>
+                                        <div className="p-6 rounded-[2.5rem] border border-slate-100 bg-white shadow-sm">
+                                            <FormSectionTitle title="بيانات البائع" icon="fa-user-tie" colorClass="text-brand-navy" />
                                             <input
-                                                type="tel"
-                                                placeholder="7700000000"
-                                                maxLength={10}
-                                                className={`min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border outline-none text-right font-bold text-slate-700 focus:bg-white transition-all ${phoneErrors.seller ? 'border-rose-300' : 'border-slate-200 focus:border-brand-navy'}`}
-                                                onChange={e => setFormData({ ...formData, sellerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                                                onBlur={() => {
-                                                    const isValid = validatePhone(formData.sellerPhone);
-                                                    setPhoneErrors(prev => ({
-                                                        ...prev,
-                                                        seller: isValid || !formData.sellerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
-                                                    }));
-                                                }}
-                                                value={formData.sellerPhone}
+                                                placeholder="اسم البائع الكامل"
+                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                onChange={e => setFormData({ ...formData, sellerName: e.target.value })}
+                                                value={formData.sellerName}
                                             />
+                                            <div className="flex items-center gap-3 mt-4">
+                                                <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-400">+964</span>
+                                                <input
+                                                    type="tel"
+                                                    placeholder="7700000000"
+                                                    maxLength={10}
+                                                    className={`min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border outline-none text-right font-bold text-slate-700 focus:bg-white transition-all ${phoneErrors.seller ? 'border-rose-300' : 'border-slate-200 focus:border-brand-navy'}`}
+                                                    onChange={e => setFormData({ ...formData, sellerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                                    onBlur={() => {
+                                                        const isValid = validatePhone(formData.sellerPhone);
+                                                        setPhoneErrors(prev => ({
+                                                            ...prev,
+                                                            seller: isValid || !formData.sellerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
+                                                        }));
+                                                    }}
+                                                    value={formData.sellerPhone}
+                                                />
+                                            </div>
+                                            {phoneErrors.seller && <p className="text-rose-500 text-[10px] font-black mt-2 mr-2 animate-pulse">{phoneErrors.seller}</p>}
                                         </div>
-                                        {phoneErrors.seller && <p className="text-rose-500 text-[10px] font-black mr-2 animate-pulse">{phoneErrors.seller}</p>}
+
+                                        <div className="p-6 rounded-[2.5rem] border border-slate-100 bg-white shadow-sm">
+                                            <FormSectionTitle title="بيانات المشتري" icon="fa-user-tag" colorClass="text-brand-gold" />
+                                            <input
+                                                placeholder="اسم المشتري الكامل"
+                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                onChange={e => setFormData({ ...formData, buyerName: e.target.value })}
+                                                value={formData.buyerName}
+                                            />
+                                            <div className="flex items-center gap-3 mt-4">
+                                                <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-400">+964</span>
+                                                <input
+                                                    type="tel"
+                                                    placeholder="7800000000"
+                                                    maxLength={10}
+                                                    className={`min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border outline-none text-right font-bold text-slate-700 focus:bg-white transition-all ${phoneErrors.buyer ? 'border-rose-300' : 'border-slate-200 focus:border-brand-navy'}`}
+                                                    onChange={e => setFormData({ ...formData, buyerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                                    onBlur={() => {
+                                                        const isValid = validatePhone(formData.buyerPhone);
+                                                        setPhoneErrors(prev => ({
+                                                            ...prev,
+                                                            buyer: isValid || !formData.buyerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
+                                                        }));
+                                                    }}
+                                                    value={formData.buyerPhone}
+                                                />
+                                            </div>
+                                            {phoneErrors.buyer && <p className="text-rose-500 text-[10px] font-black mt-2 mr-2 animate-pulse">{phoneErrors.buyer}</p>}
+                                        </div>
                                     </div>
 
-                                    <div className="space-y-4 pt-4">
-                                        <h3 className="font-black text-slate-700 text-sm flex items-center justify-center gap-2 border-r-4 border-brand-navy pr-3">بيانات المشتري</h3>
-                                        <input
-                                            placeholder="اسم المشتري الكامل"
-                                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
-                                            onChange={e => setFormData({ ...formData, buyerName: e.target.value })}
-                                            value={formData.buyerName}
-                                        />
-                                        <div className="flex items-center gap-3">
-                                            <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-400">+964</span>
-                                            <input
-                                                type="tel"
-                                                placeholder="7800000000"
-                                                maxLength={10}
-                                                className={`min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border outline-none text-right font-bold text-slate-700 focus:bg-white transition-all ${phoneErrors.buyer ? 'border-rose-300' : 'border-slate-200 focus:border-brand-navy'}`}
-                                                onChange={e => setFormData({ ...formData, buyerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                                                onBlur={() => {
-                                                    const isValid = validatePhone(formData.buyerPhone);
-                                                    setPhoneErrors(prev => ({
-                                                        ...prev,
-                                                        buyer: isValid || !formData.buyerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
-                                                    }));
-                                                }}
-                                                value={formData.buyerPhone}
-                                            />
-                                        </div>
-                                        {phoneErrors.buyer && <p className="text-rose-500 text-[10px] font-black mr-2 animate-pulse">{phoneErrors.buyer}</p>}
-                                    </div>
+                                    <p className={`text-[10px] font-black ${isStep1Valid ? 'text-emerald-600' : 'text-rose-500'}`}>{isStep1Valid ? 'جميع البيانات الأساسية للمتابعة صحيحة.' : 'يرجى التأكد من تعبئة البيانات وإدخال أرقام جوال صحيحة.'}</p>
 
                                     <ActionButton
                                         onClick={nextStep}
@@ -968,7 +1136,10 @@ export default function ContractWizard() {
 
                             {step === 2 && (
                                 <div className="space-y-4">
-                                    <h3 className="font-black text-slate-700 text-sm border-r-4 border-brand-gold pr-3 mb-4 text-center">بيانات المركبة والثمن</h3>
+                                    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-4 text-right text-xs font-bold text-slate-500">
+                                        <p>تأكد من الدقة في بيانات المركبة ورقم الشاصي. أي خطأ في VIN يمنع التوثيق القانوني الصحيح.</p>
+                                    </div>
+                                    <FormSectionTitle title="بيانات المركبة والثمن" icon="fa-car-burst" />
                                     <div className="space-y-4">
                                         <div className="relative">
                                             <input
@@ -1032,6 +1203,7 @@ export default function ContractWizard() {
                                             </div>
                                         </div>
                                     </div>
+                                    <p className={`text-[10px] font-black ${isStep2Valid ? 'text-emerald-600' : 'text-rose-500'}`}>{isStep2Valid ? 'المعلومات جاهزة لإصدار مسودة العقد.' : 'يرجى التأكد من تعبئة موديل السيارة، رقم الشاصي، والسعر.'}</p>
                                     <div className="space-y-3 mt-6 pt-4 border-t border-slate-100">
                                         <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest text-right">إضافة بنود اختيارية</h4>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -1074,8 +1246,8 @@ export default function ContractWizard() {
                                                                 setFormData({ ...formData, selectedSavedClauses: next } as any);
                                                             }}
                                                             className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${((formData as any).selectedSavedClauses || []).includes(clause)
-                                                                    ? 'bg-brand-navy text-white border-brand-navy shadow-md'
-                                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-brand-navy/30'
+                                                                ? 'bg-brand-navy text-white border-brand-navy shadow-md'
+                                                                : 'bg-white text-slate-600 border-slate-200 hover:border-brand-navy/30'
                                                                 }`}
                                                         >
                                                             {clause.substring(0, 30)}...
@@ -1127,8 +1299,10 @@ export default function ContractWizard() {
                             {step === 3 && (
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center mb-4">
-                                        <h3 className="font-black text-slate-700 text-sm">مراجعة مسودة العقد</h3>
-                                        <div className="flex items-center gap-3">
+                                        <div className="text-right">
+                                            <FormSectionTitle title="مراجعة مسودة العقد" icon="fa-file-lines" />
+                                        </div>
+                                        <div className="flex items-center gap-2">
                                             <div className="flex gap-1 items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
                                                 <button onClick={() => setPreviewFontSize(p => Math.min(p + 2, 32))} className="h-7 w-7 rounded-lg bg-white text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm flex items-center justify-center" title="تكبير الخط"><i className="fa-solid fa-plus text-[10px]"></i></button>
                                                 <button onClick={() => setPreviewFontSize(p => Math.max(p - 2, 10))} className="h-7 w-7 rounded-lg bg-white text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm flex items-center justify-center" title="تصغير الخط"><i className="fa-solid fa-minus text-[10px]"></i></button>
@@ -1142,6 +1316,28 @@ export default function ContractWizard() {
                                     </div>
                                     {generatedContractText ? (
                                         <div className="space-y-4">
+                                            <div className="grid gap-4 md:grid-cols-3 text-right">
+                                                <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">البائع والمشتري</p>
+                                                    <p className="mt-3 text-sm font-black text-slate-700">{formData.sellerName || 'غير محدد'}</p>
+                                                    <p className="text-[10px] text-slate-500">جوال {formData.sellerPhone ? `+964${formData.sellerPhone}` : 'غير محدد'}</p>
+                                                    <p className="mt-3 text-sm font-black text-slate-700">{formData.buyerName || 'غير محدد'}</p>
+                                                    <p className="text-[10px] text-slate-500">جوال {formData.buyerPhone ? `+964${formData.buyerPhone}` : 'غير محدد'}</p>
+                                                </div>
+                                                <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">معلومات المركبة</p>
+                                                    <p className="mt-3 text-sm font-black text-slate-700">{formData.carModel || 'غير محدد'}</p>
+                                                    <p className="text-[10px] text-slate-500">VIN: {formData.vinNumber || 'غير محدد'}</p>
+                                                </div>
+                                                <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">السعر</p>
+                                                    <p className="mt-3 text-xl font-black text-brand-navy">{contractPriceValue.toLocaleString()} {formData.currency === 'IQD' ? 'د.ع' : '$'}</p>
+                                                    <p className="text-[10px] text-slate-500 mt-2">{selectedClauses.length} بنود اختيارية مضافة</p>
+                                                </div>
+                                            </div>
+                                            <div className="rounded-[2rem] border border-brand-gold/10 bg-brand-gold/5 p-4 text-right text-sm font-black text-brand-dark">
+                                                راجع بنود العقد بعناية قبل المتابعة. يمكنك تعديل أي سطر داخل النص مباشرةً.
+                                            </div>
                                             <div className="relative group">
                                                 <textarea
                                                     value={generatedContractText}
@@ -1216,7 +1412,7 @@ export default function ContractWizard() {
                                         >
                                             {isSavingDraft ? 'جاري الحفظ...' : 'حفظ كمسودة للمراجعة'}
                                         </ActionButton>
-                                        <ActionButton onClick={nextStep} variant="primary" className="flex-[1.2] py-4 shadow-lg shadow-brand-navy/20" disabled={!generatedContractText}>الموافقة والدفع</ActionButton>
+                                        <ActionButton onClick={() => setShowPdfPreviewModal(true)} variant="primary" className="flex-[1.2] py-4 shadow-lg shadow-brand-navy/20" disabled={!generatedContractText}>الموافقة والدفع</ActionButton>
                                     </div>
                                 </div>
                             )}
@@ -1306,44 +1502,56 @@ export default function ContractWizard() {
 
                             {step === 5 && (
                                 <div className="space-y-6">
-                                    <h3 className="font-black text-slate-700 text-sm border-r-4 border-brand-navy pr-3">التوقيع الإلكتروني والمصادقة</h3>
-                                    <div className="space-y-6 p-6 rounded-[2rem] border border-slate-200 bg-slate-50/50 shadow-inner">
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between px-1">
+                                    <FormSectionTitle title="التوقيع الإلكتروني والمصادقة" icon="fa-pen-nib" colorClass="text-brand-navy" />
+                                    <div className="space-y-8 p-6 rounded-[2rem] border border-slate-200 bg-slate-50/50 shadow-inner">
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between px-1 mb-2">
                                                 {sellerSignature && (
                                                     <button
                                                         onClick={() => setSellerSignature('')}
-                                                        className="text-[9px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
+                                                        className="text-[10px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
                                                     >
                                                         <i className="fa-solid fa-rotate-left"></i> مسح وإعادة البدء
                                                     </button>
                                                 )}
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mr-auto">توقيع البائع</label>
+                                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mr-auto flex items-center gap-2"><i className="fa-solid fa-user-tie text-brand-navy"></i> توقيع الطرف الأول (البائع)</label>
                                             </div>
                                             <SignaturePad
                                                 placeholder={formData.sellerName}
                                                 value={sellerSignature}
                                                 onSave={setSellerSignature}
                                                 onClear={() => setSellerSignature('')}
+                                                nameValue={formData.sellerName}
                                             />
                                         </div>
-                                        <div className="space-y-3">
-                                            <div className="flex items-center justify-between px-1">
-                                                {buyerSignature && (
+
+                                        <div className="space-y-4">
+                                            <div className="flex items-center justify-between px-1 mb-2">
+                                                {buyerSignature ? (
                                                     <button
                                                         onClick={() => setBuyerSignature('')}
-                                                        className="text-[9px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
+                                                        className="text-[10px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
                                                     >
                                                         <i className="fa-solid fa-rotate-left"></i> مسح وإعادة البدء
                                                     </button>
+                                                ) : (
+                                                    <button
+                                                        onClick={handleShareSignatureLink}
+                                                        disabled={isSharingLink}
+                                                        className="text-[10px] font-black text-brand-navy hover:text-brand-gold transition flex items-center gap-1 disabled:opacity-50"
+                                                    >
+                                                        <i className={`fa-solid ${isSharingLink ? 'fa-spinner fa-spin' : 'fa-share-nodes'}`}></i>
+                                                        مشاركة رابط توقيع للمشتري
+                                                    </button>
                                                 )}
-                                                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mr-auto">توقيع المشتري</label>
+                                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mr-auto flex items-center gap-2"><i className="fa-solid fa-user-tag text-brand-gold"></i> توقيع الطرف الثاني (المشتري)</label>
                                             </div>
                                             <SignaturePad
                                                 placeholder={formData.buyerName}
                                                 value={buyerSignature}
                                                 onSave={setBuyerSignature}
                                                 onClear={() => setBuyerSignature('')}
+                                                nameValue={formData.buyerName}
                                             />
                                         </div>
                                         <label className="flex items-start justify-end gap-3 cursor-pointer group bg-white p-4 rounded-2xl border border-slate-100">
@@ -1358,6 +1566,15 @@ export default function ContractWizard() {
                                                 className="h-5 w-5 rounded-lg accent-brand-navy mt-1"
                                             />
                                         </label>
+
+                                        <div className={`rounded-[2rem] border p-4 ${isSignatureReady ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'} text-right text-[10px] font-black text-slate-700`}>
+                                            <p className="mb-3">قبل المتابعة، تحقق من:</p>
+                                            <ul className="space-y-2 list-disc list-inside text-slate-600">
+                                                <li className={sellerSignature ? 'text-emerald-700' : 'text-rose-500'}>توقيع البائع مكتمل</li>
+                                                <li className={buyerSignature ? 'text-emerald-700' : 'text-rose-500'}>توقيع المشتري مكتمل</li>
+                                                <li className={agreedToTerms ? 'text-emerald-700' : 'text-rose-500'}>الموافقة على الشروط مفعلة</li>
+                                            </ul>
+                                        </div>
 
                                         <div className="space-y-3 pt-4 border-t border-slate-100">
                                             <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">تنبيه التذكير التلقائي (WhatsApp)</label>
@@ -1484,7 +1701,7 @@ export default function ContractWizard() {
                                                 setStep(1);
                                                 clearDraft();
                                                 setIsDraftSaved(false);
-                                                setFormData({ sellerName: '', sellerPhone: '', buyerName: '', buyerPhone: '', carModel: '', vinNumber: '', price: '', reminderDuration: 24 });
+                                                setFormData({ sellerName: '', sellerPhone: '', buyerName: '', buyerPhone: '', carModel: '', vinNumber: '', price: '', currency: 'IQD', customClauses: '', reminderDuration: 24 });
                                             }}
                                             variant="secondary"
                                             className="flex-1 py-4"

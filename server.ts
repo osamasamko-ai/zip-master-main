@@ -65,6 +65,7 @@ import {
   unfollowLawyer,
   updateCurrentUserPreferences,
   updateCurrentUserProfile,
+  deductFromWalletForService,
 } from './src/server/appData';
 import {
   addCaseCollaborator,
@@ -1597,6 +1598,61 @@ ${additionalConditions}
 
     console.log(`Save contract request: seller=${sellerName}, buyer=${buyerName}, status=${status || 'final'}`);
     res.json({ data: { success: true, message: 'تم حفظ العقد في المحفظة بنجاح.' } });
+  });
+
+  // --- Draft Contract & External Signature Routes ---
+
+  app.post('/api/legal/save-draft-contract', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const draft = await prisma.case.create({
+        data: {
+          title: `مسودة عقد: ${req.body.carModel}`,
+          matter: 'عقد بيع مركبة',
+          clientId: currentUser.userId, // Creator is the "owner"
+          lawyerId: currentUser.userId, // Placeholder
+          status: 'pending',
+          privateNote: JSON.stringify(req.body), // Store full form data
+          progress: 0,
+        }
+      });
+      res.json({ data: { id: draft.id } });
+    } catch (error) {
+      res.status(500).json({ error: 'فشل حفظ المسودة' });
+    }
+  });
+
+  app.get('/api/legal/draft-contract/:id', async (req, res) => {
+    try {
+      const draft = await prisma.case.findUnique({ where: { id: req.params.id } });
+      if (!draft) return res.status(404).json({ error: 'المسودة غير موجودة' });
+      res.json({ data: JSON.parse(draft.privateNote || '{}') });
+    } catch (error) {
+      res.status(500).json({ error: 'فشل جلب المسودة' });
+    }
+  });
+
+  app.post('/api/legal/sign-draft-contract/:id', async (req, res) => {
+    try {
+      const { id } = req.params;
+      const { signature, name } = req.body;
+
+      const draft = await prisma.case.findUnique({ where: { id } });
+      if (!draft) return res.status(404).json({ error: 'المسودة غير موجودة' });
+
+      // Notify the creator (Seller) via WebSocket
+      io.to(draft.clientId).emit('buyer_signed', {
+        draftId: id,
+        signature,
+        buyerName: name,
+        time: new Date().toLocaleTimeString('ar-IQ')
+      });
+
+      res.json({ success: true, message: 'تم التوقيع بنجاح وإبلاغ الطرف الأول.' });
+    } catch (error) {
+      console.error('Signing error:', error);
+      res.status(500).json({ error: 'فشل إتمام عملية التوقيع' });
+    }
   });
 
   // --- Contract Template Sync Routes ---
