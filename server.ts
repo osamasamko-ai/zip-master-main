@@ -1651,6 +1651,55 @@ ${additionalConditions}
     }
   });
 
+  // --- Contract Clause Library Routes ---
+  app.get('/api/app/contract-clauses', authenticateToken, async (req, res) => {
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: (req as any).user.userId }
+      });
+      res.json({ data: (user as any)?.savedClauses || [] });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to fetch clauses' });
+    }
+  });
+
+  app.post('/api/app/contract-clauses', authenticateToken, async (req, res) => {
+    try {
+      const { text } = req.body;
+      const userId = (req as any).user.userId;
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const clauses = (user as any).savedClauses || [];
+
+      const updated = [text, ...clauses.filter((c: string) => c !== text)].slice(0, 20);
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { savedClauses: updated } as any
+      });
+      res.json({ data: updated });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to save clause' });
+    }
+  });
+
+  app.delete('/api/app/contract-clauses', authenticateToken, async (req, res) => {
+    try {
+      const { index } = req.body;
+      const userId = (req as any).user.userId;
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      const clauses = (user as any).savedClauses || [];
+      const updated = clauses.filter((_: any, i: number) => i !== index);
+
+      await prisma.user.update({
+        where: { id: userId },
+        data: { savedClauses: updated } as any
+      });
+      res.json({ data: updated });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete clause' });
+    }
+  });
+
   app.post('/api/legal/request-review', authenticateToken, async (req, res) => {
     const currentUser = (req as any).user;
     const { lawyerId, notes, payFromWallet } = req.body;

@@ -200,6 +200,8 @@ export default function ContractWizard() {
     const [isApplyingPromo, setIsApplyingPromo] = useState(false);
     const [availableLawyers, setAvailableLawyers] = useState<any[]>([]);
     const [userCustomTemplates, setUserCustomTemplates] = useState<any[]>([]);
+    const [userSavedClauses, setUserSavedClauses] = useState<string[]>([]);
+    const [isSavingClause, setIsSavingClause] = useState(false);
     const [isSavingTemplate, setIsSavingTemplate] = useState(false);
     const [customTemplateSearch, setCustomTemplateSearch] = useState('');
     const [isNamingTemplate, setIsNamingTemplate] = useState(false);
@@ -214,6 +216,7 @@ export default function ContractWizard() {
     const [vinError, setVinError] = useState('');
     const [isPaying, setIsPaying] = useState(false);
     const [isPaid, setIsPaid] = useState(false);
+    const [isFastMode, setIsFastMode] = useState(user ? user.accountBalance < 25000 : false);
 
     const totalSteps = 7; // Increased for template selection step
 
@@ -250,9 +253,38 @@ export default function ContractWizard() {
         }
     };
 
+    const fetchSavedClauses = useCallback(async () => {
+        try {
+            const res = await apiClient.getContractClauses();
+            setUserSavedClauses(res.data || []);
+        } catch (err) {
+            console.error('Failed to fetch clauses', err);
+        }
+    }, []);
+
+    const handleSaveClause = async () => {
+        if (!formData.customClauses.trim()) return;
+        setIsSavingClause(true);
+        try {
+            const res = await apiClient.saveContractClause(formData.customClauses.trim());
+            setUserSavedClauses(res.data || []);
+            setContractError('تم حفظ البند في مكتبتك');
+            setTimeout(() => setContractError(''), 3000);
+        } catch (err) {
+            console.error('Failed to save clause', err);
+        } finally {
+            setIsSavingClause(false);
+        }
+    };
+
+    const handleDeleteClause = async (index: number) => {
+        const res = await apiClient.deleteContractClause(index);
+        setUserSavedClauses(res.data || []);
+    };
+
     // --- Client-side Contract Generator (Fallback) ---
     const generateContractTextLocally = useCallback(() => {
-        const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price, currency, customClauses } = formData;
+        const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price, currency, customClauses, selectedSavedClauses = [] } = formData as any;
         const dateStr = new Date().toLocaleDateString('ar-IQ');
         const clauseMap: Record<string, string> = {
             'engine_warranty': 'يضمن البائع سلامة المحرك والجير لمدة 3 أيام من تاريخ الاستلام، وفي حال ظهور خلل فني جوهري يحق للمشتري إعادة المركبة.',
@@ -267,7 +299,12 @@ export default function ContractWizard() {
                 .map((id, index) => `${index + 6}. ${clauseMap[id] || id}`)
                 .join('\n');
         }
-        if (customClauses) additionalConditions += `\n\nبند مضاف من الأطراف:\n- ${customClauses}`;
+
+        const allCustom = [
+            ...(customClauses ? [customClauses] : []),
+            ...(selectedSavedClauses || [])
+        ].join('\n- ');
+        if (allCustom) additionalConditions += `\n\nبند مضاف من الأطراف:\n- ${allCustom}`;
 
         return `عقد بيع وشراء مركبة\n\nأنه في يوم ${dateStr}، تم الاتفاق والتراضي بين كل من:\n\nالطرف الأول (البائع): السيد/ة ${sellerName} (رقم الهاتف: +964${sellerPhone})\nالطرف الثاني (المشتري): السيد/ة ${buyerName} (رقم الهاتف: +964${buyerPhone})\n\nباع الطرف الأول للطرف الثاني المركبة الموصوفة أدناه:\n- نوع المركبة وموديلها: ${carModel}\n- رقم الشاصي (VIN): ${vinNumber}\n\nالثمن: تم هذا البيع نظير ثمن إجمالي قدره ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'}.\n\nشروط العقد:\n1. يقر الطرف الأول (البائع) بأن المركبة المباعة خالية من أي ديون أو حجوزات قانونية حتى تاريخ هذا العقد.\n2. يقر الطرف الثاني (المشتري) بأنه قد عاين المركبة معاينة تامة وقبل شراءها بحالتها الراهنة.\n3. يتعهد الطرف الأول بتسليم المركبة وكافة وثائقها القانونية للطرف الثاني فور استلام الثمن المذكور.\n4. تنتقل كافة المسؤوليات القانونية والمخالفات المترتبة على المركبة إلى عهدة الطرف الثاني من لحظة استلامه لها.\n5. يخضع هذا العقد لأحكام القوانين العراقية النافذة.${additionalConditions}\n\nالتوقيعات:\nتوقيع الطرف الأول (البائع): ............................\nتوقيع الطرف الثاني (المشتري): ............................`;
     }, [formData, selectedClauses]);
@@ -338,6 +375,7 @@ export default function ContractWizard() {
         const savedStep = localStorage.getItem(DRAFT_STEP_KEY);
 
         fetchCustomTemplates();
+        fetchSavedClauses();
 
         if (savedFormData) {
             const parsedData = JSON.parse(savedFormData);
@@ -414,6 +452,18 @@ export default function ContractWizard() {
         setIsLoadingContract(true);
         setContractError('');
         setGeneratedContractText('');
+
+        if (isFastMode) {
+            const localText = generateContractTextLocally();
+            if (localText) {
+                setGeneratedContractText(localText);
+                nextStep();
+            } else {
+                setContractError('تعذر توليد العقد محلياً. يرجى التأكد من ملء جميع البيانات.');
+            }
+            setIsLoadingContract(false);
+            return;
+        }
 
         try {
             // Request standard contract template from server
@@ -642,6 +692,29 @@ export default function ContractWizard() {
                         className="space-y-6"
                     >
                         <h3 className="font-black text-slate-700 text-sm border-r-4 border-brand-gold pr-3 mb-4 text-center">اختر نوع العقد</h3>
+
+                        {/* Fast Mode Toggle */}
+                        <div className="flex items-center justify-between gap-4 p-5 mb-6 rounded-[2rem] border border-brand-gold/20 bg-brand-gold/5 shadow-sm">
+                            <div className="text-right">
+                                <p className="text-sm font-black text-brand-dark flex items-center gap-2">
+                                    <i className="fa-solid fa-bolt-lightning text-brand-gold text-xs"></i>
+                                    نمط التوليد السريع (بدون AI)
+                                </p>
+                                <p className="text-[10px] font-bold text-slate-500 mt-1 leading-relaxed">
+                                    {user && user.accountBalance < 25000
+                                        ? "رصيدك منخفض. تم تفعيل التوليد السريع تلقائياً لتوفير الوقت وتقليل التكاليف."
+                                        : "تخطي معالجة الذكاء الاصطناعي واستخدام القالب المحلي المباشر لتوفير الوقت."}
+                                </p>
+                            </div>
+                            <button
+                                type="button"
+                                onClick={() => setIsFastMode(!isFastMode)}
+                                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${isFastMode ? 'bg-brand-navy' : 'bg-slate-300'}`}
+                            >
+                                <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isFastMode ? '-translate-x-5' : 'translate-x-0'}`} />
+                            </button>
+                        </div>
+
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             {CONTRACT_TEMPLATES.map(template => (
                                 <button
@@ -981,16 +1054,66 @@ export default function ContractWizard() {
                                             ))}
                                         </div>
                                     </div>
-                                    <div className="space-y-3 mt-4">
-                                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest text-right">شروط مخصصة إضافية</h4>
-                                        <textarea
-                                            value={formData.customClauses}
-                                            onChange={e => setFormData({ ...formData, customClauses: e.target.value })}
-                                            placeholder="اكتب أي شروط خاصة أو اتفاقات إضافية بين البائع والمشتري هنا..."
-                                            className="w-full h-28 p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right text-xs font-bold focus:bg-white focus:border-brand-navy transition-all resize-none shadow-inner"
-                                        />
-                                        <p className="text-[10px] text-slate-400 font-bold text-right pr-2">هذا النص سيظهر في نهاية بنود العقد.</p>
+
+                                    {/* Clause Library Section */}
+                                    <div className="space-y-4 mt-6 pt-4 border-t border-slate-100">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">مكتبة بنودي الخاصة</h4>
+                                            <span className="text-[10px] font-bold text-slate-400">اختر من البنود التي حفظتها سابقاً</span>
+                                        </div>
+                                        {userSavedClauses.length > 0 ? (
+                                            <div className="flex flex-wrap gap-2 justify-end">
+                                                {userSavedClauses.map((clause, idx) => (
+                                                    <div key={idx} className="group relative">
+                                                        <button
+                                                            onClick={() => {
+                                                                const current = (formData as any).selectedSavedClauses || [];
+                                                                const next = current.includes(clause)
+                                                                    ? current.filter((c: string) => c !== clause)
+                                                                    : [...current, clause];
+                                                                setFormData({ ...formData, selectedSavedClauses: next } as any);
+                                                            }}
+                                                            className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${((formData as any).selectedSavedClauses || []).includes(clause)
+                                                                    ? 'bg-brand-navy text-white border-brand-navy shadow-md'
+                                                                    : 'bg-white text-slate-600 border-slate-200 hover:border-brand-navy/30'
+                                                                }`}
+                                                        >
+                                                            {clause.substring(0, 30)}...
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDeleteClause(idx)}
+                                                            className="absolute -top-1 -left-1 h-4 w-4 bg-rose-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
+                                                        >
+                                                            <i className="fa-solid fa-times"></i>
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : (
+                                            <p className="text-[10px] text-slate-400 italic text-right">لا توجد بنود محفوظة حالياً. اكتب بنداً بالأسفل واحفظه.</p>
+                                        )}
+
+                                        <div className="space-y-3 mt-4">
+                                            <div className="flex justify-between items-center">
+                                                <button
+                                                    onClick={handleSaveClause}
+                                                    disabled={isSavingClause || !formData.customClauses.trim()}
+                                                    className="text-[10px] font-black text-brand-navy hover:text-brand-gold disabled:opacity-30 transition-colors flex items-center gap-1"
+                                                >
+                                                    <i className={`fa-solid ${isSavingClause ? 'fa-spinner fa-spin' : 'fa-plus-circle'}`}></i>
+                                                    حفظ هذا البند في مكتبتي
+                                                </button>
+                                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest text-right">إضافة بند جديد</h4>
+                                            </div>
+                                            <textarea
+                                                value={formData.customClauses}
+                                                onChange={e => setFormData({ ...formData, customClauses: e.target.value })}
+                                                placeholder="اكتب أي شروط خاصة أو اتفاقات إضافية هنا..."
+                                                className="w-full h-24 p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right text-xs font-bold focus:bg-white focus:border-brand-navy transition-all resize-none shadow-inner"
+                                            />
+                                        </div>
                                     </div>
+
                                     <div className="flex gap-3 mt-6">
                                         <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
                                         <ActionButton onClick={handleGenerateContract} variant="primary" className="flex-[2] py-4" disabled={isLoadingContract || !formData.carModel || formData.vinNumber.length !== 17 || !formData.price}>
@@ -1055,6 +1178,13 @@ export default function ContractWizard() {
                                         </div>
                                     ) : (
                                         <div className="p-10 bg-red-50 rounded-[2rem] text-red-600 text-center border border-red-100">
+                                            {isFastMode && (
+                                                <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold">
+                                                    <i className="fa-solid fa-triangle-exclamation ml-1"></i>
+                                                    تنبيه: أنت تستخدم نمط التوليد السريع. يرجى مراجعة البنود يدوياً بعناية فائقة.
+                                                </div>
+                                            )}
+
                                             <i className="fa-solid fa-triangle-exclamation text-5xl mb-4 opacity-50"></i>
                                             <p className="font-black text-lg">فشل توليد النص</p>
                                             <p className="text-sm font-bold opacity-70 mt-1">يرجى العودة والتحقق من البيانات المدخلة.</p>
@@ -1062,6 +1192,13 @@ export default function ContractWizard() {
                                     )}
                                     <div className="flex gap-3 pt-4">
                                         <ActionButton onClick={prevStep} variant="secondary" className="flex-1">تعديل</ActionButton>
+                                        {isFastMode && (
+                                            <div className="flex-1 p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold text-center">
+                                                <i className="fa-solid fa-info-circle ml-1"></i>
+                                                نمط سريع: راجع يدوياً
+                                            </div>
+                                        )}
+
                                         <ActionButton
                                             onClick={handleSaveAsTemplate}
                                             variant="secondary"
