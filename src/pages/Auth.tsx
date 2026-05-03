@@ -61,6 +61,7 @@ export default function Auth() {
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
+  const [documentIdInput, setDocumentIdInput] = useState('');
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const { login, register } = useAuth();
   const navigate = useNavigate();
@@ -497,8 +498,8 @@ export default function Auth() {
                             onBlur={() => markFieldTouched('name')}
                             required
                             className={`w-full rounded-[1.2rem] border px-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('name')
-                                ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
-                                : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
+                              ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
+                              : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
                               }`}
                           />
                           <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-300">
@@ -521,8 +522,8 @@ export default function Auth() {
                             required
                             dir="ltr"
                             className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('email')
-                                ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
-                                : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
+                              ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
+                              : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
                               }`}
                           />
                           <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-300">
@@ -549,8 +550,8 @@ export default function Auth() {
                             onBlur={() => markFieldTouched('password')}
                             required
                             className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('password')
-                                ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
-                                : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
+                              ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
+                              : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
                               }`}
                           />
                           <button
@@ -611,10 +612,10 @@ export default function Auth() {
                             onBlur={() => markFieldTouched('confirmPassword')}
                             required
                             className={`w-full rounded-[1.2rem] border pl-24 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('confirmPassword') || passwordsMismatch
-                                ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
-                                : passwordsMatch
-                                  ? 'border-emerald-300 bg-emerald-50/70 focus:border-emerald-500 focus:ring-emerald-500/10'
-                                  : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
+                              ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
+                              : passwordsMatch
+                                ? 'border-emerald-300 bg-emerald-50/70 focus:border-emerald-500 focus:ring-emerald-500/10'
+                                : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
                               }`}
                           />
                           <div className="absolute inset-y-0 left-3 flex items-center gap-2">
@@ -648,8 +649,8 @@ export default function Auth() {
                           type="button"
                           onClick={() => setSelectedRole('user')}
                           className={`rounded-[1.4rem] border px-4 py-4 text-right transition ${selectedRole === 'user'
-                              ? 'border-brand-navy bg-brand-navy/5 shadow-[0_14px_30px_-24px_rgba(26,35,126,0.75)]'
-                              : 'border-slate-200 bg-slate-50/70 hover:border-brand-navy/30 hover:bg-white'
+                            ? 'border-brand-navy bg-brand-navy/5 shadow-[0_14px_30px_-24px_rgba(26,35,126,0.75)]'
+                            : 'border-slate-200 bg-slate-50/70 hover:border-brand-navy/30 hover:bg-white'
                             }`}
                         >
                           <div className="flex flex-row-reverse items-start gap-3">
@@ -667,8 +668,8 @@ export default function Auth() {
                           type="button"
                           onClick={() => setSelectedRole('pro')}
                           className={`rounded-[1.4rem] border px-4 py-4 text-right transition ${selectedRole === 'pro'
-                              ? 'border-brand-navy bg-brand-navy/5 shadow-[0_14px_30px_-24px_rgba(26,35,126,0.75)]'
-                              : 'border-slate-200 bg-slate-50/70 hover:border-brand-navy/30 hover:bg-white'
+                            ? 'border-brand-navy bg-brand-navy/5 shadow-[0_14px_30px_-24px_rgba(26,35,126,0.75)]'
+                            : 'border-slate-200 bg-slate-50/70 hover:border-brand-navy/30 hover:bg-white'
                             }`}
                         >
                           <div className="flex flex-row-reverse items-start gap-3">
@@ -734,8 +735,8 @@ export default function Auth() {
                           required
                           dir="ltr"
                           className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('email')
-                              ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
-                              : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
+                            ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
+                            : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
                             }`}
                         />
                         <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-300">
@@ -762,8 +763,8 @@ export default function Auth() {
                           onBlur={() => markFieldTouched('password')}
                           required
                           className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('password')
-                              ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
-                              : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
+                            ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
+                            : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
                             }`}
                         />
                         <button
@@ -810,6 +811,33 @@ export default function Auth() {
                   </motion.form>
                 )}
               </AnimatePresence>
+
+              {/* Verification Section for both Login and Register */}
+              <motion.div key="verify-section" variants={authPanelVariants} initial="hidden" animate="visible" exit="exit" className="mt-6 pt-6 border-t border-slate-100 text-center">
+                <label className="mb-3 block text-right text-[11px] font-black tracking-widest text-slate-500">
+                  التحقق من مستند رقمي
+                </label>
+                <div className="relative mb-4">
+                  <input
+                    type="text"
+                    placeholder="أدخل رقم المستند (ID)"
+                    value={documentIdInput}
+                    onChange={(e) => setDocumentIdInput(e.target.value)}
+                    className="w-full rounded-[1.2rem] border px-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:border-brand-navy focus:ring-4 focus:ring-brand-navy/10"
+                  />
+                  <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-300">
+                    <i className="fa-solid fa-qrcode" />
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/verify/${documentIdInput}`)}
+                  disabled={!documentIdInput.trim()}
+                  className="text-xs font-black text-brand-navy transition hover:text-brand-dark hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  التحقق من مستند رقمي (بدون تسجيل دخول)
+                </button>
+              </motion.div>
             </div>
           </motion.div>
         </section>
@@ -859,8 +887,8 @@ export default function Auth() {
                     animate="visible"
                     exit="exit"
                     className={`mt-5 rounded-[1.2rem] border px-4 py-3 ${forgotPasswordMessage.type === 'success'
-                        ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                        : 'border-rose-200 bg-rose-50 text-rose-700'
+                      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                      : 'border-rose-200 bg-rose-50 text-rose-700'
                       }`}
                   >
                     <div className="flex flex-row-reverse items-start gap-3">
