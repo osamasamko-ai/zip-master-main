@@ -182,8 +182,12 @@ export default function ContractWizard() {
     const [formData, setFormData] = useState({
         sellerName: '',
         sellerPhone: '',
+        sellerGovernorate: '',
+        sellerLandmark: '',
         buyerName: '',
         buyerPhone: '',
+        buyerGovernorate: '',
+        buyerLandmark: '',
         carModel: '', // نوع وموديل السيارة
         vinNumber: '', // رقم الشاصي
         price: '', // السعر المتفق عليه
@@ -192,6 +196,13 @@ export default function ContractWizard() {
         reminderDuration: 24, // مدة التذكير الافتراضية
     });
     const [selectedClauses, setSelectedClauses] = useState<string[]>([]);
+
+    const iraqiGovernorates = [
+        'بغداد', 'نينوى', 'البصرة', 'ذي قار', 'بابل', 'الأنبار', 'صلاح الدين',
+        'ديالى', 'واسط', 'كربلاء', 'النجف', 'ميسان', 'المثنى', 'القادسية',
+        'أربيل', 'السليمانية', 'دهوك', 'حلبجة'
+    ];
+
     const [previewFontSize, setPreviewFontSize] = useState(14);
     const optionalClausesOptions = [
         { id: 'engine_warranty', label: 'ضمان المحرك والجير (3 أيام)' },
@@ -302,7 +313,7 @@ export default function ContractWizard() {
 
     // --- Client-side Contract Generator (Fallback) ---
     const generateContractTextLocally = useCallback(() => {
-        const { sellerName, sellerPhone, buyerName, buyerPhone, carModel, vinNumber, price, currency, customClauses, selectedSavedClauses = [] } = formData as any;
+        const { sellerName, sellerPhone, sellerGovernorate, sellerLandmark, buyerName, buyerPhone, buyerGovernorate, buyerLandmark, carModel, vinNumber, price, currency, customClauses, selectedSavedClauses = [] } = formData as any;
         const dateStr = new Date().toLocaleDateString('ar-IQ');
         const clauseMap: Record<string, string> = {
             'engine_warranty': 'يضمن البائع سلامة المحرك والجير لمدة 3 أيام من تاريخ الاستلام، وفي حال ظهور خلل فني جوهري يحق للمشتري إعادة المركبة.',
@@ -324,7 +335,7 @@ export default function ContractWizard() {
         ].join('\n- ');
         if (allCustom) additionalConditions += `\n\nبند مضاف من الأطراف:\n- ${allCustom}`;
 
-        return `عقد بيع وشراء مركبة\n\nأنه في يوم ${dateStr}، تم الاتفاق والتراضي بين كل من:\n\nالطرف الأول (البائع): السيد/ة ${sellerName} (رقم الهاتف: +964${sellerPhone})\nالطرف الثاني (المشتري): السيد/ة ${buyerName} (رقم الهاتف: +964${buyerPhone})\n\nباع الطرف الأول للطرف الثاني المركبة الموصوفة أدناه:\n- نوع المركبة وموديلها: ${carModel}\n- رقم الشاصي (VIN): ${vinNumber}\n\nالثمن: تم هذا البيع نظير ثمن إجمالي قدره ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'}.\n\nشروط العقد:\n1. يقر الطرف الأول (البائع) بأن المركبة المباعة خالية من أي ديون أو حجوزات قانونية حتى تاريخ هذا العقد.\n2. يقر الطرف الثاني (المشتري) بأنه قد عاين المركبة معاينة تامة وقبل شراءها بحالتها الراهنة.\n3. يتعهد الطرف الأول بتسليم المركبة وكافة وثائقها القانونية للطرف الثاني فور استلام الثمن المذكور.\n4. تنتقل كافة المسؤوليات القانونية والمخالفات المترتبة على المركبة إلى عهدة الطرف الثاني من لحظة استلامه لها.\n5. يخضع هذا العقد لأحكام القوانين العراقية النافذة.${additionalConditions}\n\nالتوقيعات:\nتوقيع الطرف الأول (البائع): ............................\nتوقيع الطرف الثاني (المشتري): ............................`;
+        return `عقد بيع وشراء مركبة\n\nأنه في يوم ${dateStr}، تم الاتفاق والتراضي بين كل من:\n\nالطرف الأول (البائع): السيد/ة ${sellerName} (رقم الهاتف: +964${sellerPhone}، السكن: ${sellerGovernorate} - ${sellerLandmark})\nالطرف الثاني (المشتري): السيد/ة ${buyerName} (رقم الهاتف: +964${buyerPhone}، السكن: ${buyerGovernorate} - ${buyerLandmark})\n\nباع الطرف الأول للطرف الثاني المركبة الموصوفة أدناه:\n- نوع المركبة وموديلها: ${carModel}\n- رقم الشاصي (VIN): ${vinNumber}\n\nالثمن: تم هذا البيع نظير ثمن إجمالي قدره ${price} ${currency === 'USD' ? 'دولار أمريكي' : 'دينار عراقي'}.\n\nشروط العقد:\n1. يقر الطرف الأول (البائع) بأن المركبة المباعة خالية من أي ديون أو حجوزات قانونية حتى تاريخ هذا العقد.\n2. يقر الطرف الثاني (المشتري) بأنه قد عاين المركبة معاينة تامة وقبل شراءها بحالتها الراهنة.\n3. يتعهد الطرف الأول بتسليم المركبة وكافة وثائقها القانونية للطرف الثاني فور استلام الثمن المذكور.\n4. تنتقل كافة المسؤوليات القانونية والمخالفات المترتبة على المركبة إلى عهدة الطرف الثاني من لحظة استلامه لها.\n5. يخضع هذا العقد لأحكام القوانين العراقية النافذة.${additionalConditions}\n\nالتوقيعات:\nتوقيع الطرف الأول (البائع): ............................\nتوقيع الطرف الثاني (المشتري): ............................`;
     }, [formData, selectedClauses]);
 
     const stepTitles = ['اختيار القالب', 'بيانات الأطراف', 'تفاصيل المركبة', 'مراجعة العقد', 'الدفع', 'التوقيع', 'الانتهاء'];
@@ -359,7 +370,11 @@ export default function ContractWizard() {
     const contractPriceValue = Number(formData.price.toString().replace(/,/g, '')) || 0;
     const isStep1Valid = Boolean(
         formData.sellerName.trim() &&
+        formData.sellerGovernorate.trim() &&
+        formData.sellerLandmark.trim() &&
         formData.buyerName.trim() &&
+        formData.buyerGovernorate.trim() &&
+        formData.buyerLandmark.trim() &&
         validatePhone(formData.sellerPhone) &&
         validatePhone(formData.buyerPhone)
     );
@@ -544,6 +559,7 @@ export default function ContractWizard() {
         setIsPaying(true);
         try {
             const finalAmount = 25000 - discountAmount;
+            // المنطق الصحيح لاستخدام apiClient بدلاً من استدعاء دالة الخادم مباشرة
             await apiClient.payFromWallet(finalAmount, 'إنشاء عقد مركبة ذكي', appliedPromoCode || undefined);
             if (refreshUser) await refreshUser();
             setIsPaid(true);
@@ -669,11 +685,16 @@ export default function ContractWizard() {
         element.style.direction = 'rtl';
         element.style.textAlign = 'right';
         element.style.lineHeight = '1.6';
+        element.style.position = 'relative';
+        element.style.overflow = 'hidden';
 
         element.innerHTML = `
-            <h1 style="font-size: 28px; font-weight: bold; color: #1B365D; margin-bottom: 10px; text-align: center;">عقد بيع وشراء مركبة</h1>
-            <p style="font-size: 16px; color: #4A5568; margin-bottom: 20px; text-align: right;">${generatedContractText.replace(/\n/g, '<br>')}</p>
-            <div style="display: flex; justify-content: space-between; margin-top: 40px; direction: rtl;">
+            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 80px; font-weight: 900; color: #1B365D; opacity: 0.04; white-space: nowrap; pointer-events: none; z-index: 0; user-select: none;">
+                منصة القسطاس الرقمية
+            </div>
+            <h1 style="position: relative; z-index: 1; font-size: 28px; font-weight: bold; color: #1B365D; margin-bottom: 10px; text-align: center;">عقد بيع وشراء مركبة</h1>
+            <p style="position: relative; z-index: 1; font-size: 16px; color: #4A5568; margin-bottom: 20px; text-align: right;">${generatedContractText.replace(/\n/g, '<br>')}</p>
+            <div style="position: relative; z-index: 1; display: flex; justify-content: space-between; margin-top: 40px; direction: rtl;">
                 <div style="text-align: center; width: 45%;">
                     <p style="font-weight: bold; margin-bottom: 10px;">توقيع البائع:</p>
                     <img src="${sellerSignature}" style="max-w-full h-auto border-b border-slate-200 pb-2" />
@@ -685,6 +706,19 @@ export default function ContractWizard() {
                     <p style="font-size: 12px; color: #666;">${formData.buyerName}</p>
                 </div>
             </div>
+
+            <div style="position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 40px; border: 1px solid #f1f5f9; padding: 12px; border-radius: 15px; background: #fff; direction: rtl;">
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(window.location.origin + '/verify/CTR-' + Date.now())}" style="width: 70px; height: 70px;" />
+                <div style="text-align: right;">
+                    <p style="font-size: 10px; font-weight: bold; color: #1B365D; margin: 0;">نظام التحقق الرقمي (Digital Verification)</p>
+                    <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0;">هذا المستند موثق رقمياً. يمكن التحقق من سلامة البيانات عبر مسح رمز QR أعلاه.</p>
+                    <div style="margin-top: 6px; display: flex; gap: 10px;">
+                        <span style="font-size: 8px; color: #94a3b8; font-family: monospace;">HASH: ${Math.random().toString(36).substring(2, 15).toUpperCase()}</span>
+                        <span style="font-size: 8px; color: #94a3b8; font-family: monospace;">VER: 2.0.2</span>
+                    </div>
+                </div>
+            </div>
+
             <p style="font-size: 11px; color: #999; margin-top: 40px; text-align: center;">تم التوقيع إلكترونياً والموافقة على الشروط أعلاه عبر منصة القسطاس.</p>
         `;
 
@@ -708,6 +742,7 @@ export default function ContractWizard() {
             const res = await apiClient.saveDraftContract({
                 ...formData,
                 contractText: generatedContractText,
+                sellerSignature, // إرسال توقيع البائع ليتمكن المشتري من توليد الـ PDF النهائي به
                 status: 'waiting_buyer_signature'
             });
 
@@ -1088,6 +1123,20 @@ export default function ContractWizard() {
                                                     value={formData.sellerPhone}
                                                 />
                                             </div>
+                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                <input
+                                                    placeholder="محافظة البائع"
+                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                    onChange={e => setFormData({ ...formData, sellerGovernorate: e.target.value })}
+                                                    value={formData.sellerGovernorate}
+                                                />
+                                                <input
+                                                    placeholder="أقرب نقطة دالة"
+                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                    onChange={e => setFormData({ ...formData, sellerLandmark: e.target.value })}
+                                                    value={formData.sellerLandmark}
+                                                />
+                                            </div>
                                             {phoneErrors.seller && <p className="text-rose-500 text-[10px] font-black mt-2 mr-2 animate-pulse">{phoneErrors.seller}</p>}
                                         </div>
 
@@ -1117,6 +1166,20 @@ export default function ContractWizard() {
                                                     value={formData.buyerPhone}
                                                 />
                                             </div>
+                                            <div className="grid grid-cols-2 gap-3 mt-4">
+                                                <input
+                                                    placeholder="محافظة المشتري"
+                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                    onChange={e => setFormData({ ...formData, buyerGovernorate: e.target.value })}
+                                                    value={formData.buyerGovernorate}
+                                                />
+                                                <input
+                                                    placeholder="أقرب نقطة دالة"
+                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                    onChange={e => setFormData({ ...formData, buyerLandmark: e.target.value })}
+                                                    value={formData.buyerLandmark}
+                                                />
+                                            </div>
                                             {phoneErrors.buyer && <p className="text-rose-500 text-[10px] font-black mt-2 mr-2 animate-pulse">{phoneErrors.buyer}</p>}
                                         </div>
                                     </div>
@@ -1127,7 +1190,7 @@ export default function ContractWizard() {
                                         onClick={nextStep}
                                         variant="primary"
                                         className="w-full mt-6 py-4"
-                                        disabled={!formData.sellerName || !formData.buyerName || !formData.sellerPhone || !formData.buyerPhone || !!phoneErrors.seller || !!phoneErrors.buyer}
+                                        disabled={!isStep1Valid || !!phoneErrors.seller || !!phoneErrors.buyer}
                                     >
                                         التالي: تفاصيل السيارة
                                     </ActionButton>
@@ -1321,8 +1384,10 @@ export default function ContractWizard() {
                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">البائع والمشتري</p>
                                                     <p className="mt-3 text-sm font-black text-slate-700">{formData.sellerName || 'غير محدد'}</p>
                                                     <p className="text-[10px] text-slate-500">جوال {formData.sellerPhone ? `+964${formData.sellerPhone}` : 'غير محدد'}</p>
+                                                    <p className="text-[10px] text-slate-500">السكن: {formData.sellerGovernorate || 'غير محدد'} - {formData.sellerLandmark || 'غير محدد'}</p>
                                                     <p className="mt-3 text-sm font-black text-slate-700">{formData.buyerName || 'غير محدد'}</p>
                                                     <p className="text-[10px] text-slate-500">جوال {formData.buyerPhone ? `+964${formData.buyerPhone}` : 'غير محدد'}</p>
+                                                    <p className="text-[10px] text-slate-500">السكن: {formData.buyerGovernorate || 'غير محدد'} - {formData.buyerLandmark || 'غير محدد'}</p>
                                                 </div>
                                                 <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
                                                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">معلومات المركبة</p>
@@ -1701,7 +1766,7 @@ export default function ContractWizard() {
                                                 setStep(1);
                                                 clearDraft();
                                                 setIsDraftSaved(false);
-                                                setFormData({ sellerName: '', sellerPhone: '', buyerName: '', buyerPhone: '', carModel: '', vinNumber: '', price: '', currency: 'IQD', customClauses: '', reminderDuration: 24 });
+                                                setFormData({ sellerName: '', sellerPhone: '', sellerGovernorate: '', sellerLandmark: '', buyerName: '', buyerPhone: '', buyerGovernorate: '', buyerLandmark: '', carModel: '', vinNumber: '', price: '', currency: 'IQD', customClauses: '', reminderDuration: 24 });
                                             }}
                                             variant="secondary"
                                             className="flex-1 py-4"

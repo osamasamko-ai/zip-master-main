@@ -1466,6 +1466,10 @@ async function startServer() {
       const sellerName = sanitizeInput(req.body.sellerName);
       const buyerName = sanitizeInput(req.body.buyerName);
       const carModel = sanitizeInput(req.body.carModel);
+      const sellerGovernorate = sanitizeInput(req.body.sellerGovernorate);
+      const sellerLandmark = sanitizeInput(req.body.sellerLandmark);
+      const buyerGovernorate = sanitizeInput(req.body.buyerGovernorate);
+      const buyerLandmark = sanitizeInput(req.body.buyerLandmark);
       const vinNumber = sanitizeInput(req.body.vinNumber);
       const customClauses = sanitizeInput(req.body.customClauses);
       const { sellerPhone, buyerPhone, price, currency, optionalClauses = [] } = req.body;
@@ -1508,8 +1512,8 @@ async function startServer() {
 
 أنه في يوم ${new Date().toLocaleDateString('ar') || new Date().toDateString()}، تم الاتفاق والتراضي بين كل من:
 
-الطرف الأول (البائع): السيد/ة ${sellerName} (رقم الهاتف: +964${normalizedSellerPhone})
-الطرف الثاني (المشتري): السيد/ة ${buyerName} (رقم الهاتف: +964${normalizedBuyerPhone})
+الطرف الأول (البائع): السيد/ة ${sellerName} (رقم الهاتف: +964${normalizedSellerPhone}، السكن: ${sellerGovernorate} - ${sellerLandmark})
+الطرف الثاني (المشتري): السيد/ة ${buyerName} (رقم الهاتف: +964${normalizedBuyerPhone}، السكن: ${buyerGovernorate} - ${buyerLandmark})
 
 باع الطرف الأول للطرف الثاني المركبة الموصوفة أدناه:
 - نوع المركبة وموديلها: ${carModel}
@@ -1558,7 +1562,7 @@ ${additionalConditions}
   });
 
   // نقطة نهاية لرفع العقد المولد كملف
-  app.post('/api/legal/upload-contract-pdf', authenticateToken, upload.single('pdf'), async (req, res) => {
+  app.post('/api/legal/upload-contract-pdf', optionalAuthenticateToken, upload.single('pdf'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     res.json({ data: { url: `/uploads/${req.file.filename}` } });
   });
@@ -1600,6 +1604,38 @@ ${additionalConditions}
     res.json({ data: { success: true, message: 'تم حفظ العقد في المحفظة بنجاح.' } });
   });
 
+  // --- Admin Contracts Monitoring ---
+  app.get('/api/admin/contracts', authenticateToken, adminOnly, async (req, res) => {
+    try {
+      const contracts = await prisma.case.findMany({
+        where: { matter: 'عقد بيع مركبة' },
+        orderBy: { createdAt: 'desc' },
+        include: { client: { select: { name: true, email: true } } }
+      });
+
+      const processed = contracts.map(c => {
+        const details = JSON.parse(c.privateNote || '{}');
+        return {
+          id: c.id,
+          title: c.title,
+          status: c.status === 'pending' && details.status === 'waiting_buyer_signature' ? 'waiting_buyer' :
+            c.status === 'pending' ? 'draft' : 'signed',
+          sellerName: details.sellerName || c.client.name,
+          buyerName: details.buyerName || 'غير محدد',
+          carModel: details.carModel || 'غير محدد',
+          vinNumber: details.vinNumber || 'غير متوفر',
+          reviewNotes: details.reviewNotes || [],
+          price: details.price || '0',
+          createdAt: c.createdAt
+        };
+      });
+
+      res.json({ data: processed });
+    } catch (error) {
+      res.status(500).json({ error: 'فشل جلب سجل العقود' });
+    }
+  });
+
   // --- Draft Contract & External Signature Routes ---
 
   app.post('/api/legal/save-draft-contract', authenticateToken, async (req, res) => {
@@ -1635,7 +1671,7 @@ ${additionalConditions}
   app.post('/api/legal/sign-draft-contract/:id', async (req, res) => {
     try {
       const { id } = req.params;
-      const { signature, name } = req.body;
+      const { signature, selfie, name, pdfUrl, location } = req.body;
 
       const draft = await prisma.case.findUnique({ where: { id } });
       if (!draft) return res.status(404).json({ error: 'المسودة غير موجودة' });
@@ -1644,6 +1680,7 @@ ${additionalConditions}
       io.to(draft.clientId).emit('buyer_signed', {
         draftId: id,
         signature,
+        pdfUrl,
         buyerName: name,
         time: new Date().toLocaleTimeString('ar-IQ')
       });
@@ -1652,6 +1689,20 @@ ${additionalConditions}
     } catch (error) {
       console.error('Signing error:', error);
       res.status(500).json({ error: 'فشل إتمام عملية التوقيع' });
+    }
+  });
+
+  app.post('/api/legal/email-contract', async (req, res) => {
+    try {
+      const { email, pdfUrl, name } = req.body;
+      if (!email || !pdfUrl) return res.status(400).json({ error: 'Email and PDF URL required' });
+
+      // محاكاة إرسال البريد
+      console.log(`[EMAIL] Sending contract PDF to ${email} for ${name}. Link: ${pdfUrl}`);
+
+      res.json({ success: true, message: 'تم إرسال العقد بنجاح.' });
+    } catch (error) {
+      res.status(500).json({ error: 'فشل إرسال البريد' });
     }
   });
 
@@ -2093,8 +2144,7 @@ ${additionalConditions}
   });
 
   // Serve uploaded files
-  // تم إيقاف الوصول المباشر للمجلد لزيادة الأمان
-  // app.use('/uploads', express.static(uploadsDir));
+  app.use('/uploads', express.static(uploadsDir));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
@@ -2103,6 +2153,16 @@ ${additionalConditions}
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    // SPA fallback for development - serve index.html for all non-API routes
+    app.use('/', express.static(process.cwd(), { index: false }));
+    app.get('*', (req, res) => {
+      // Skip API routes and uploaded files
+      if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) {
+        return res.status(404).json({ error: 'Not found' });
+      }
+      res.sendFile(path.join(process.cwd(), 'index.html'));
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));

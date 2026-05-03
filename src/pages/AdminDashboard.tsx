@@ -5,6 +5,7 @@ import { Chart } from 'chart.js/auto';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
 import NoticePanel from '../components/ui/NoticePanel';
+import { motion, AnimatePresence } from 'framer-motion';
 
 type KycStatus = 'pending' | 'approved' | 'rejected';
 
@@ -148,6 +149,19 @@ type LegalDoc = {
   source: string;
 };
 
+type DigitalContract = {
+  id: string;
+  title: string;
+  status: 'draft' | 'waiting_buyer' | 'signed' | 'verified';
+  sellerName: string;
+  buyerName: string;
+  carModel: string;
+  vinNumber: string;
+  reviewNotes?: Array<{ author: string; text: string; date: string }>;
+  price: string;
+  createdAt: string;
+};
+
 type AdminMetrics = {
   activeUsers: number;
   dailyVolume: number;
@@ -159,7 +173,7 @@ type AdminMetrics = {
   complianceFlags: number;
 };
 
-type AdminTab = 'overview' | 'users' | 'financials' | 'kyc' | 'support' | 'settings' | 'compliance' | 'system';
+type AdminTab = 'overview' | 'users' | 'financials' | 'contracts' | 'kyc' | 'support' | 'settings' | 'compliance' | 'system';
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('ar-IQ').format(value) + ' د.ع';
 
@@ -232,6 +246,7 @@ export default function AdminDashboard() {
   const [notificationTemplates, setNotificationTemplates] = useState<NotificationTemplate[]>([]);
   const [moderationRules, setModerationRules] = useState<ModerationRule[]>([]);
   const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
+  const [digitalContracts, setDigitalContracts] = useState<DigitalContract[]>([]);
   const [newDoc, setNewDoc] = useState<Partial<LegalDoc>>({ title: '', law: '', article: '', category: '', summary: '', source: '' });
   const [newBannedWord, setNewBannedWord] = useState('');
   const [newModerationType, setNewModerationType] = useState<'bannedWord' | 'sensitiveTopic'>('bannedWord');
@@ -239,6 +254,7 @@ export default function AdminDashboard() {
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedReviewContract, setSelectedReviewContract] = useState<DigitalContract | null>(null);
   const [userSaveStatus, setUserSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [ticketFilter, setTicketFilter] = useState<'all' | 'open' | 'pending' | 'resolved' | 'escalated'>('all');
   const [supportSearch, setSupportSearch] = useState('');
@@ -466,7 +482,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function loadData() {
-      const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes] = await Promise.all([
+      const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, contractRes] = await Promise.all([
         fetch('/api/admin/metrics'),
         fetch('/api/admin/kyc'),
         fetch('/api/admin/users'),
@@ -483,6 +499,7 @@ export default function AdminDashboard() {
         fetch('/api/admin/notification-templates'),
         fetch('/api/admin/moderation-rules'),
         fetch('/api/admin/legal-docs'),
+        fetch('/api/admin/contracts'),
       ]);
 
       if (metricRes.ok) setMetrics(await metricRes.json());
@@ -501,6 +518,10 @@ export default function AdminDashboard() {
       if (notificationRes.ok) setNotificationTemplates(await notificationRes.json());
       if (moderationRes.ok) setModerationRules(await moderationRes.json());
       if (docsRes.ok) setLegalDocs(await docsRes.json());
+      if (contractRes.ok) {
+        const res = await contractRes.json();
+        setDigitalContracts(res.data || []);
+      }
     }
 
     loadData();
@@ -856,6 +877,7 @@ export default function AdminDashboard() {
       { id: 'overview', label: 'نظرة عامة', icon: 'fa-grid-2', description: 'صحة المنصة، التنبيهات، والقياسات', count: metrics?.openEscalations },
       { id: 'users', label: 'المستخدمون', icon: 'fa-users', description: 'الحسابات، الأدوار، والرخص', count: users.length },
       { id: 'financials', label: 'المالية', icon: 'fa-money-bill-transfer', description: 'سجل المعاملات والسيولة', adminOnly: true },
+      { id: 'contracts', label: 'العقود الرقمية', icon: 'fa-file-contract', description: 'مراقبة عقود البيع والتوثيق', count: digitalContracts.length },
       { id: 'kyc', label: 'اعتماد المحامين', icon: 'fa-id-card', description: 'طلبات KYC والمراجعات', count: pendingCount },
       { id: 'support', label: 'الدعم والسجلات', icon: 'fa-life-ring', description: 'التذاكر، الأثر التشغيلي، والتدقيق', count: filteredTickets.length },
       { id: 'settings', label: 'الإعدادات', icon: 'fa-sliders', description: 'AI، المدفوعات، وسياسات النظام', adminOnly: true },
@@ -874,6 +896,109 @@ export default function AdminDashboard() {
       window.location.assign('/user');
     }
   }, [user, isAdmin]);
+
+  const decodeVin = (vin: string) => {
+    if (!vin || vin.length !== 17) return { origin: 'غير صالح', year: '-' };
+    const countryMap: Record<string, string> = {
+      'J': 'اليابان', '1': 'أمريكا', '2': 'كندا', '3': 'المكسيك',
+      'K': 'كوريا', 'W': 'ألمانيا', 'S': 'بريطانيا', 'L': 'الصين'
+    };
+    const yearMap: Record<string, string> = {
+      'M': '2021', 'N': '2022', 'P': '2023', 'R': '2024', 'S': '2025'
+    };
+    return { origin: countryMap[vin[0]] || 'دولي', year: yearMap[vin[9]] || 'غير محدد' };
+  };
+
+  const renderContractsTab = () => (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="rounded-3xl bg-brand-navy p-5 text-white">
+          <p className="text-[10px] font-black uppercase text-blue-200/60">إجمالي العقود</p>
+          <p className="mt-2 text-2xl font-black">{digitalContracts.length}</p>
+        </div>
+        <div className="rounded-3xl bg-white p-5 border border-slate-200">
+          <p className="text-[10px] font-black uppercase text-slate-400">موقعة ومكتملة</p>
+          <p className="mt-2 text-2xl font-black text-emerald-600">{digitalContracts.filter(c => c.status === 'signed').length}</p>
+        </div>
+        <div className="rounded-3xl bg-white p-5 border border-slate-200">
+          <p className="text-[10px] font-black uppercase text-slate-400">بانتظار المشتري</p>
+          <p className="mt-2 text-2xl font-black text-amber-600">{digitalContracts.filter(c => c.status === 'waiting_buyer').length}</p>
+        </div>
+        <div className="rounded-3xl bg-white p-5 border border-slate-200">
+          <p className="text-[10px] font-black uppercase text-slate-400">مسودات</p>
+          <p className="mt-2 text-2xl font-black text-slate-500">{digitalContracts.filter(c => c.status === 'draft').length}</p>
+        </div>
+      </div>
+
+      <section className="rounded-[2.5rem] border border-slate-200 bg-white overflow-hidden shadow-sm">
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
+          <h4 className="font-black text-brand-dark">سجل العقود الرقمية</h4>
+          <div className="flex gap-2">
+            <button className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[10px] font-black hover:bg-slate-50">تصدير CSV</button>
+          </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-right text-sm">
+            <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              <tr>
+                <th className="px-6 py-4">المركبة والمعرّف</th>
+                <th className="px-6 py-4">الأطراف (بائع/مشتري)</th>
+                <th className="px-6 py-4">القيمة</th>
+                <th className="px-6 py-4">الحالة</th>
+                <th className="px-6 py-4">تاريخ الإصدار</th>
+                <th className="px-6 py-4"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {digitalContracts.map(contract => (
+                <tr key={contract.id} className="hover:bg-slate-50/80 transition-colors">
+                  <td className="px-6 py-4">
+                    <p className="font-black text-brand-dark">{contract.carModel}</p>
+                    <div className="mt-1 flex items-center gap-2">
+                      <p className="text-[10px] font-mono text-slate-400 uppercase tracking-tighter">VIN: {contract.vinNumber}</p>
+                      {contract.vinNumber && contract.vinNumber !== 'غير متوفر' && (
+                        <div className="flex items-center gap-1 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100 group/vin relative cursor-help">
+                          <i className="fa-solid fa-microchip text-[8px] text-emerald-500"></i>
+                          <span className="text-[8px] font-black text-emerald-600 uppercase">Automated Check</span>
+                          <div className="absolute bottom-full right-0 mb-2 w-40 p-3 bg-brand-dark text-white text-[10px] rounded-2xl opacity-0 group-hover/vin:opacity-100 transition-all z-50 shadow-2xl pointer-events-none text-right border border-white/10">
+                            <p className="font-black border-b border-white/10 pb-1.5 mb-2 text-brand-gold">تحليل الشاصي آلياً:</p>
+                            <p className="mb-1">المنشأ: <span className="text-blue-300">{decodeVin(contract.vinNumber).origin}</span></p>
+                            <p>سنة الصنع: <span className="text-blue-300">{decodeVin(contract.vinNumber).year}</span></p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[10px] font-mono text-slate-400 mt-1 uppercase">ID: {contract.id.substring(0, 8)}</p>
+                  </td>
+                  <td className="px-6 py-4">
+                    <p className="text-xs font-bold text-slate-600">ب: {contract.sellerName}</p>
+                    <p className="text-xs font-bold text-slate-600 mt-1">م: {contract.buyerName}</p>
+                  </td>
+                  <td className="px-6 py-4 font-black text-brand-navy">{contract.price} د.ع</td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${contract.status === 'signed' ? 'bg-emerald-50 text-emerald-600' : contract.status === 'waiting_buyer' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>
+                      {contract.status === 'signed' ? 'موقع نهائياً' : contract.status === 'waiting_buyer' ? 'بانتظار المشتري' : 'مسودة قيد الإعداد'}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-xs font-bold text-slate-400">{new Date(contract.createdAt).toLocaleDateString('ar-IQ')}</td>
+                  <td className="px-6 py-4 text-left">
+                    <div className="flex justify-end gap-2">
+                      {(contract.reviewNotes?.length ?? 0) > 0 && (
+                        <button onClick={() => setSelectedReviewContract(contract)} className="h-8 w-8 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-500 hover:text-white transition shadow-sm" title="عرض سجل المراجعة">
+                          <i className="fa-solid fa-clipboard-check text-xs"></i>
+                        </button>
+                      )}
+                      <button onClick={() => navigate(`/verify/${contract.id}`)} className="h-8 w-8 rounded-lg bg-slate-100 text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm" title="معاينة العقد"><i className="fa-solid fa-eye text-xs"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
 
   if (!user || !isAdmin) {
     return null;
@@ -1073,12 +1198,12 @@ export default function AdminDashboard() {
                           <p className="mt-2 text-xs font-bold leading-6 text-slate-500">{queue.detail}</p>
                         </div>
                         <span className={`rounded-full px-3 py-1 text-xs font-black ${queue.tone === 'danger'
-                            ? 'bg-red-50 text-red-700'
-                            : queue.tone === 'warning'
-                              ? 'bg-amber-50 text-amber-700'
-                              : queue.tone === 'success'
-                                ? 'bg-emerald-50 text-emerald-700'
-                                : 'bg-blue-50 text-blue-700'
+                          ? 'bg-red-50 text-red-700'
+                          : queue.tone === 'warning'
+                            ? 'bg-amber-50 text-amber-700'
+                            : queue.tone === 'success'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : 'bg-blue-50 text-blue-700'
                           }`}>
                           {queue.count}
                         </span>
@@ -1144,8 +1269,8 @@ export default function AdminDashboard() {
                         <button
                           onClick={() => handleActorClick(entry.actor)}
                           className={`mt-2 text-[11px] font-bold text-right transition-colors ${users.some((u) => u.name === entry.actor)
-                              ? 'text-brand-navy hover:underline cursor-pointer'
-                              : 'text-slate-400 cursor-default'
+                            ? 'text-brand-navy hover:underline cursor-pointer'
+                            : 'text-slate-400 cursor-default'
                             }`}
                         >
                           {entry.actor}
@@ -1362,8 +1487,8 @@ export default function AdminDashboard() {
                               <button
                                 onClick={() => handleActorClick(entry.actor)}
                                 className={`mt-2 text-[11px] font-bold text-right transition-colors ${users.some((u) => u.name === entry.actor)
-                                    ? 'text-brand-navy hover:underline cursor-pointer'
-                                    : 'text-slate-400 cursor-default'
+                                  ? 'text-brand-navy hover:underline cursor-pointer'
+                                  : 'text-slate-400 cursor-default'
                                   }`}
                               >
                                 {entry.actor}
@@ -1786,8 +1911,8 @@ export default function AdminDashboard() {
                       <button
                         onClick={() => handleActorClick(entry.actor)}
                         className={`mt-2 text-[11px] font-bold text-right transition-colors ${users.some((u) => u.name === entry.actor)
-                            ? 'text-brand-navy hover:underline cursor-pointer'
-                            : 'text-slate-400 cursor-default'
+                          ? 'text-brand-navy hover:underline cursor-pointer'
+                          : 'text-slate-400 cursor-default'
                           }`}
                       >
                         {entry.actor}
@@ -2003,8 +2128,8 @@ export default function AdminDashboard() {
                         <button
                           onClick={() => handleActorClick(entry.actor)}
                           className={`mt-2 text-[11px] font-bold text-right transition-colors ${users.some((u) => u.name === entry.actor)
-                              ? 'text-brand-navy hover:underline cursor-pointer'
-                              : 'text-gray-400 cursor-default'
+                            ? 'text-brand-navy hover:underline cursor-pointer'
+                            : 'text-gray-400 cursor-default'
                             }`}
                         >
                           {entry.actor}
@@ -2441,8 +2566,8 @@ export default function AdminDashboard() {
                           <button
                             onClick={() => handleActorClick(entry.actor)}
                             className={`mt-2 text-[11px] font-bold text-right transition-colors ${users.some((u) => u.name === entry.actor)
-                                ? 'text-brand-navy hover:underline cursor-pointer'
-                                : 'text-slate-400 cursor-default'
+                              ? 'text-brand-navy hover:underline cursor-pointer'
+                              : 'text-slate-400 cursor-default'
                               }`}
                           >
                             {entry.actor}
@@ -2536,6 +2661,44 @@ export default function AdminDashboard() {
             </div>
           </div>
         )}
+
+        {/* Legal Review Log Modal */}
+        <AnimatePresence>
+          {selectedReviewContract && (
+            <div className="fixed inset-0 z-[400] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl text-right"
+              >
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-xl font-black text-brand-dark">سجل المراجعة القانونية</h3>
+                  <button onClick={() => setSelectedReviewContract(null)} className="text-slate-400 hover:text-red-500 transition">
+                    <i className="fa-solid fa-times text-xl"></i>
+                  </button>
+                </div>
+
+                <p className="text-sm font-bold text-slate-500 mb-6 leading-relaxed">
+                  ملاحظات المحامين المسجلة على عقد: <span className="text-brand-navy">{selectedReviewContract.carModel}</span>
+                </p>
+
+                <div className="space-y-4 max-h-96 overflow-y-auto custom-scrollbar pr-1">
+                  {selectedReviewContract.reviewNotes?.map((note, index) => (
+                    <div key={index} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="text-[10px] font-black text-brand-navy uppercase">{note.author}</span>
+                        <span className="text-[10px] font-bold text-slate-400">{note.date}</span>
+                      </div>
+                      <p className="text-xs font-bold text-slate-600 leading-relaxed italic">"{note.text}"</p>
+                    </div>
+                  ))}
+                </div>
+                <ActionButton onClick={() => setSelectedReviewContract(null)} variant="secondary" className="w-full mt-6 py-3">إغلاق</ActionButton>
+              </motion.div>
+            </div>
+          )}
+        </AnimatePresence>
       </section>
     </div>
   );
