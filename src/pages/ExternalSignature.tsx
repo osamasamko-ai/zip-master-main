@@ -286,7 +286,7 @@ export default function ExternalSignature() {
                     <div style="text-align: center; width: 45%;">
                         <p style="font-weight: bold; font-size: 13px; margin-bottom: 10px; color: #1e293b;">توقيع الطرف الأول (البائع):</p>
                         ${draftData.sellerSignature ? `<img src="${draftData.sellerSignature}" style="max-width: 140px; height: auto; border-bottom: 1px solid #e2e8f0;" />` : '<div style="height: 50px; border-bottom: 1px solid #eee;"></div>'}
-                        <p style="font-size: 11px; color: #64748b; margin-top: 5px;">${draftData.sellerName}</p>
+                        <p style="font-size: 11px; color: #64748b; margin-top: 5px;">${draftData.sellerName || 'غير محدد'}</p>
                         <p style="font-size: 9px; color: #94a3b8;">${draftData.sellerAddress}</p>
                     </div>
                     <div style="text-align: center; width: 45%;">
@@ -294,7 +294,7 @@ export default function ExternalSignature() {
                         <img src="${signature}" style="max-width: 140px; height: auto; border-bottom: 1px solid #e2e8f0;" />
                         <p style="font-size: 11px; color: #64748b; margin-top: 5px;">${draftData.buyerName}</p>
                         <p style="font-size: 9px; color: #94a3b8;">${draftData.buyerAddress}</p>
-                    </div>
+                    </div> 
                 </div>
                 ${selfie ? `
                 <div style="position: relative; z-index: 1; margin-top: 30px; text-align: center; border: 1px solid #f1f5f9; padding: 15px; border-radius: 15px; background-color: #f8fafc;">

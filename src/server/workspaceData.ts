@@ -390,6 +390,91 @@ export async function createClientCase(userId: string, payload: { title: string;
   return getCaseWorkspace(created.id);
 }
 
+export async function saveDraftContract(
+  userId: string,
+  payload: {
+    contractText: string;
+    sellerName: string;
+    buyerName: string;
+    carModel: string;
+    vinNumber: string;
+    price: string;
+    currency: string;
+    sellerSignature?: string;
+    buyerSignature?: string;
+    status?: string;
+  },
+  draftId?: string, // To update an existing draft
+) {
+  const data = {
+    title: `مسودة عقد: ${payload.carModel}`,
+    matter: 'عقد بيع مركبة',
+    clientId: userId,
+    lawyerId: userId, // Placeholder, can be updated later
+    status: payload.status || 'pending', // 'pending' for draft
+    privateNote: JSON.stringify(payload),
+    progress: 0,
+  };
+
+  if (draftId) {
+    return prisma.case.update({
+      where: { id: draftId },
+      data: data,
+    });
+  } else {
+    return prisma.case.create({ data: data });
+  }
+}
+
+/**
+ * Finalizes a contract by updating metadata and creating a formal document entry
+ */
+export async function finalizeContract(
+  contractId: string,
+  payload: {
+    pdfUrl: string;
+    sellerSignature: string;
+    buyerSignature: string;
+    location?: { lat: number; lng: number } | null;
+    selfie?: string | null;
+  },
+) {
+  const contract = await prisma.case.findUnique({ where: { id: contractId } });
+  if (!contract) throw new Error('Contract not found');
+
+  const privateNote = JSON.parse(contract.privateNote || '{}');
+  const updatedPrivateNote = {
+    ...privateNote,
+    pdfUrl: payload.pdfUrl,
+    sellerSignature: payload.sellerSignature,
+    buyerSignature: payload.buyerSignature,
+    finalizedAt: new Date().toISOString(),
+    finalizedLocation: payload.location,
+    buyerSelfie: payload.selfie,
+    status: 'signed'
+  };
+
+  return prisma.case.update({
+    where: { id: contractId },
+    data: {
+      status: 'active',
+      privateNote: JSON.stringify(updatedPrivateNote),
+      progress: 100,
+      documents: {
+        create: {
+          name: `عقد_موقع_${updatedPrivateNote.carModel || 'مركبة'}.pdf`,
+          fileUrl: payload.pdfUrl,
+          type: 'pdf',
+          size: '1.5 MB',
+          status: 'Signed',
+          isSigned: true,
+          tags: JSON.stringify(['contract', 'auto_sale'])
+        }
+      }
+    }
+  });
+}
+
 export async function startLawyerConsultation(
   userId: string,
   payload: {

@@ -11,8 +11,8 @@ export default function Verify() {
 
     useEffect(() => {
         const verifyDoc = async () => {
-            try {
-                const res = await fetch(`/api/legal/draft-contract/${id}`);
+            try { // Changed endpoint to generic /api/legal/contract/:id
+                const res = await fetch(`/api/legal/contract/${id}`);
                 const json = await res.json();
                 if (json.data) {
                     setData(json.data);
@@ -75,28 +75,48 @@ export default function Verify() {
                     <div className="bg-slate-50 rounded-2xl p-6 mb-8 border border-slate-100 space-y-4">
                         <div className="grid grid-cols-2 gap-6">
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">الطرف الأول (البائع)</p>
-                                <p className="text-sm font-black text-brand-dark">{data.sellerName}</p>
-                                <p className="text-[10px] text-slate-500">{data.sellerGovernorate}</p>
-                                <p className="text-[10px] text-slate-400">{data.sellerLandmark}</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">الطرف الأول (البائع)</p> {/* Display seller signature */}
+                                <p className="text-sm font-black text-brand-dark">{data.sellerName || 'غير محدد'}</p>
+                                {data.sellerSignature && (
+                                    <img src={data.sellerSignature} alt="Seller Signature" className="max-w-[120px] h-auto mx-auto border-b border-slate-200 pb-2 mt-2" />
+                                )}
+                                <p className="text-[10px] text-slate-500 mt-2">{data.sellerGovernorate || 'غير محدد'}</p>
+                                <p className="text-[10px] text-slate-400">{data.sellerLandmark || 'غير محدد'}</p>
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">الطرف الثاني (المشتري)</p>
-                                <p className="text-sm font-black text-brand-dark">{data.buyerName}</p>
-                                <p className="text-[10px] text-slate-500">{data.buyerGovernorate}</p>
-                                <p className="text-[10px] text-slate-400">{data.buyerLandmark}</p>
+                                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">الطرف الثاني (المشتري)</p> {/* Display buyer signature */}
+                                <p className="text-sm font-black text-brand-dark">{data.buyerName || 'غير محدد'}</p>
+                                {data.buyerSignature && (
+                                    <img src={data.buyerSignature} alt="Buyer Signature" className="max-w-[120px] h-auto mx-auto border-b border-slate-200 pb-2 mt-2" />
+                                )}
+                                <p className="text-[10px] text-slate-500 mt-2">{data.buyerGovernorate || 'غير محدد'}</p>
+                                <p className="text-[10px] text-slate-400">{data.buyerLandmark || 'غير محدد'}</p>
                             </div>
                         </div>
                         <div className="pt-4 border-t border-slate-200 grid grid-cols-2 gap-6">
                             <div>
                                 <p className="text-[10px] font-black text-slate-400 uppercase mb-1">المركبة</p>
-                                <p className="text-sm font-black text-brand-dark">{data.carModel}</p>
+                                <p className="text-sm font-black text-brand-dark">{data.carModel || 'غير محدد'}</p>
                             </div>
                             <div>
                                 <p className="text-[10px] font-black text-slate-400 uppercase mb-1">رقم الشاصي (VIN)</p>
-                                <p className="text-sm font-mono font-bold text-brand-navy uppercase">{data.vinNumber}</p>
+                                <p className="text-sm font-mono font-bold text-brand-navy uppercase">{data.vinNumber || 'غير متوفر'}</p>
                             </div>
                         </div>
+                        {data.buyerSelfie && (
+                            <div className="pt-4 border-t border-slate-200 text-center">
+                                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">صورة التحقق (المشتري)</p>
+                                <img src={data.buyerSelfie} alt="Buyer Selfie" className="w-24 h-24 rounded-full object-cover mx-auto border-2 border-white shadow-md" />
+                            </div>
+                        )}
+                        {data.finalizedLocation && (
+                            <div className="pt-4 border-t border-slate-200">
+                                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">موقع التوقيع</p>
+                                <p className="text-sm font-black text-brand-dark">
+                                    خط عرض: {data.finalizedLocation.lat.toFixed(4)}, خط طول: {data.finalizedLocation.lng.toFixed(4)}
+                                </p>
+                            </div>
+                        )}
                         <div className="pt-4 border-t border-slate-200">
                             <p className="text-[10px] font-black text-slate-400 uppercase mb-1">تاريخ الإصدار</p>
                             <p className="text-sm font-black text-brand-dark">{new Date().toLocaleDateString('ar-IQ')}</p>

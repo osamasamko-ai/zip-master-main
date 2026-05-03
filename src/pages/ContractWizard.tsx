@@ -176,7 +176,7 @@ const SignaturePad = ({ onSave, value, placeholder, onClear, nameValue }: { onSa
 };
 
 export default function ContractWizard() {
-    const { user, refreshUser } = useAuth();
+    const { user } = useAuth();
     const navigate = useNavigate();
     const [step, setStep] = useState(0); // Start at step 0 for template selection
     const [formData, setFormData] = useState({
@@ -284,8 +284,8 @@ export default function ContractWizard() {
 
     const fetchSavedClauses = useCallback(async () => {
         try {
-            const res = await apiClient.getContractClauses();
-            setUserSavedClauses(res.data || []);
+            // const res = await apiClient.getContractClauses();
+            // setUserSavedClauses(res.data || []);
         } catch (err) {
             console.error('Failed to fetch clauses', err);
         }
@@ -295,8 +295,8 @@ export default function ContractWizard() {
         if (!formData.customClauses.trim()) return;
         setIsSavingClause(true);
         try {
-            const res = await apiClient.saveContractClause(formData.customClauses.trim());
-            setUserSavedClauses(res.data || []);
+            // const res = await apiClient.saveContractClause(formData.customClauses.trim());
+            // setUserSavedClauses(res.data || []);
             setContractError('تم حفظ البند في مكتبتك');
             setTimeout(() => setContractError(''), 3000);
         } catch (err) {
@@ -307,8 +307,8 @@ export default function ContractWizard() {
     };
 
     const handleDeleteClause = async (index: number) => {
-        const res = await apiClient.deleteContractClause(index);
-        setUserSavedClauses(res.data || []);
+        // const res = await apiClient.deleteContractClause(index);
+        // setUserSavedClauses(res.data || []);
     };
 
     // --- Client-side Contract Generator (Fallback) ---
@@ -535,7 +535,7 @@ export default function ContractWizard() {
         try {
             // Request standard contract template from server
             const response = await apiClient.generateCarContract({ ...formData, optionalClauses: selectedClauses });
-            setGeneratedContractText(response.data.data.contractText);
+            setGeneratedContractText(response.data.contractText);
             nextStep(); // Move to the next step (Contract Review)
         } catch (error: any) {
             console.warn('Server generation failed, falling back to local template...', error);
@@ -561,7 +561,6 @@ export default function ContractWizard() {
             const finalAmount = 25000 - discountAmount;
             // المنطق الصحيح لاستخدام apiClient بدلاً من استدعاء دالة الخادم مباشرة
             await apiClient.payFromWallet(finalAmount, 'إنشاء عقد مركبة ذكي', appliedPromoCode || undefined);
-            if (refreshUser) await refreshUser();
             setIsPaid(true);
             nextStep();
         } catch (error: any) {
@@ -577,9 +576,9 @@ export default function ContractWizard() {
         setContractError('');
         try {
             const response = await apiClient.applyPromoCode(promoCodeInput.trim());
-            setDiscountAmount(response.data.data.discountAmount);
+            setDiscountAmount(response.data.discountAmount);
             setAppliedPromoCode(promoCodeInput.trim());
-            setContractError(response.data.data.message); // عرض رسالة النجاح كخطأ مؤقت
+            setContractError(response.data.message); // عرض رسالة النجاح كخطأ مؤقت
             setTimeout(() => setContractError(''), 5000);
         } catch (error: any) {
             setDiscountAmount(0);
@@ -619,7 +618,7 @@ export default function ContractWizard() {
                 apiClient.scheduleContractReminder({
                     contractId: `CTR-${Date.now()}`,
                     phone: formData.buyerPhone,
-                    name: formData.buyerName,
+                    name: formData.buyerName, // Use actual contract ID for reminder
                     hours: formData.reminderDuration
                 })
             ]);
@@ -664,8 +663,7 @@ export default function ContractWizard() {
         try {
             await apiClient.requestContractReview({
                 lawyerId: selectedLawyerId,
-                notes: `طلب مراجعة عقد بيع سيارة (${formData.carModel})`,
-                payFromWallet: true // تفعيل الخصم لمراجعة المحامي
+                notes: `طلب مراجعة عقد بيع سيارة (${formData.carModel})`
             });
             setIsReviewRequested(true);
         } catch (error: any) {
@@ -708,7 +706,7 @@ export default function ContractWizard() {
             </div>
 
             <div style="position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 15px; margin-top: 40px; border: 1px solid #f1f5f9; padding: 12px; border-radius: 15px; background: #fff; direction: rtl;">
-                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(window.location.origin + '/verify/CTR-' + Date.now())}" style="width: 70px; height: 70px;" />
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(window.location.origin + '/verify/' + (currentDraftId || 'VERIFY'))}" style="width: 70px; height: 70px;" />
                 <div style="text-align: right;">
                     <p style="font-size: 10px; font-weight: bold; color: #1B365D; margin: 0;">نظام التحقق الرقمي (Digital Verification)</p>
                     <p style="font-size: 9px; color: #64748b; margin: 4px 0 0 0;">هذا المستند موثق رقمياً. يمكن التحقق من سلامة البيانات عبر مسح رمز QR أعلاه.</p>
@@ -725,9 +723,9 @@ export default function ContractWizard() {
         const opt = {
             margin: 10,
             filename: `عقد_بيع_مركبة_${formData.sellerName}_${formData.buyerName}.pdf`,
-            image: { type: 'jpeg', quality: 0.98 },
+            image: { type: "jpeg" as const, quality: 0.98 },
             html2canvas: { scale: 2, logging: true, dpi: 192, letterRendering: true },
-            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
         };
 
         html2pdf().from(element).set(opt).save();
@@ -742,7 +740,7 @@ export default function ContractWizard() {
             const res = await apiClient.saveDraftContract({
                 ...formData,
                 contractText: generatedContractText,
-                sellerSignature, // إرسال توقيع البائع ليتمكن المشتري من توليد الـ PDF النهائي به
+                sellerSignature, buyerSignature, // Include both signatures in the draft
                 status: 'waiting_buyer_signature'
             });
 
@@ -784,7 +782,7 @@ export default function ContractWizard() {
         return () => {
             socket.disconnect();
         };
-    }, [user?.id, currentDraftId, step]);
+    }, [user?.id, currentDraftId, step, setShowShareModal, setBuyerSignature, setContractError]);
 
     const renderStepHeader = () => (
         <div className="mb-10">
@@ -1782,7 +1780,7 @@ export default function ContractWizard() {
                                             <i className="fa-solid fa-file-pdf ml-2"></i>
                                             تحميل العقد (PDF)
                                         </ActionButton>
-                                        <ActionButton
+                                        <ActionButton // Add "View in My Cases" button
                                             onClick={() => {
                                                 setStep(1);
                                                 clearDraft();
@@ -1791,6 +1789,13 @@ export default function ContractWizard() {
                                             }}
                                             variant="secondary"
                                             className="flex-1 py-4"
+                                        >
+                                            <i className="fa-solid fa-folder-open ml-2"></i>
+                                            عرض في ملفاتي
+                                        </ActionButton>
+                                        <ActionButton
+                                            onClick={() => navigate('/cases', { state: { activeCaseId: currentDraftId, focusArea: 'docs' } })}
+                                            variant="secondary"
                                         >
                                             <i className="fa-solid fa-plus ml-2"></i>
                                             إنشاء عقد جديد

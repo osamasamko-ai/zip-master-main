@@ -86,6 +86,7 @@ import {
   signCaseDocument,
   reviewCaseDocument,
   clearDocumentAction,
+  finalizeContract,
   startLawyerConsultation,
   toggleCaseArchive,
   updateCaseProgress,
@@ -1637,7 +1638,7 @@ ${additionalConditions}
   });
 
   // --- Draft Contract & External Signature Routes ---
-
+  // Endpoint to save or update a contract draft
   app.post('/api/legal/save-draft-contract', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
@@ -1648,23 +1649,77 @@ ${additionalConditions}
           clientId: currentUser.userId, // Creator is the "owner"
           lawyerId: currentUser.userId, // Placeholder
           status: 'pending',
-          privateNote: JSON.stringify(req.body), // Store full form data
+          privateNote: JSON.stringify({
+            ...req.body,
+            sellerSignature: req.body.sellerSignature || null,
+            buyerSignature: req.body.buyerSignature || null,
+          }), // Store full form data including signatures
           progress: 0,
         }
       });
       res.json({ data: { id: draft.id } });
     } catch (error) {
+      console.error('Save draft contract error:', error);
       res.status(500).json({ error: 'فشل حفظ المسودة' });
     }
   });
 
-  app.get('/api/legal/draft-contract/:id', async (req, res) => {
+  // Generic endpoint to fetch contract details (draft or finalized)
+  app.get('/api/legal/contract/:id', async (req, res) => {
     try {
-      const draft = await prisma.case.findUnique({ where: { id: req.params.id } });
-      if (!draft) return res.status(404).json({ error: 'المسودة غير موجودة' });
-      res.json({ data: JSON.parse(draft.privateNote || '{}') });
+      const contract = await prisma.case.findUnique({ where: { id: req.params.id } });
+      if (!contract) return res.status(404).json({ error: 'المسودة غير موجودة' });
+      const contractDetails = JSON.parse(contract.privateNote || '{}');
+      res.json({ data: { ...contractDetails, id: contract.id, status: contract.status, createdAt: contract.createdAt } });
     } catch (error) {
       res.status(500).json({ error: 'فشل جلب المسودة' });
+    }
+  });
+
+  // New endpoint to list all user contracts
+  app.get('/api/legal/contracts', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const contracts = await prisma.case.findMany({
+        where: {
+          OR: [
+            { clientId: currentUser.userId },
+            { lawyerId: currentUser.userId }
+          ],
+          matter: 'عقد بيع مركبة'
+        },
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          title: true,
+          status: true,
+          privateNote: true,
+          createdAt: true,
+          updatedAt: true,
+          client: { select: { name: true } }
+        }
+      });
+
+      const processed = contracts.map(c => {
+        const details = JSON.parse(c.privateNote || '{}');
+        return {
+          id: c.id,
+          title: c.title,
+          status: c.status === 'pending' && details.status === 'waiting_buyer_signature' ? 'waiting_buyer' :
+            c.status === 'pending' ? 'draft' : 'signed',
+          carModel: details.carModel || 'غير محدد',
+          sellerName: details.sellerName,
+          buyerName: details.buyerName,
+          price: details.price,
+          vinNumber: details.vinNumber,
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt
+        };
+      });
+
+      res.json({ data: processed });
+    } catch (error) {
+      res.status(500).json({ error: 'فشل جلب العقود' });
     }
   });
 
@@ -1676,6 +1731,17 @@ ${additionalConditions}
       const draft = await prisma.case.findUnique({ where: { id } });
       if (!draft) return res.status(404).json({ error: 'المسودة غير موجودة' });
 
+      const currentNote = JSON.parse(draft.privateNote || '{}');
+
+      // Use finalizeContract logic to update the database state
+      const updatedContract = await finalizeContract(id, {
+        pdfUrl,
+        sellerSignature: currentNote.sellerSignature || '',
+        buyerSignature: signature,
+        location,
+        selfie
+      });
+
       // Notify the creator (Seller) via WebSocket
       io.to(draft.clientId).emit('buyer_signed', {
         draftId: id,
@@ -1685,7 +1751,7 @@ ${additionalConditions}
         time: new Date().toLocaleTimeString('ar-IQ')
       });
 
-      res.json({ success: true, message: 'تم التوقيع بنجاح وإبلاغ الطرف الأول.' });
+      res.json({ success: true, message: 'تم التوقيع بنجاح وإبلاغ الطرف الأول.', data: updatedContract });
     } catch (error) {
       console.error('Signing error:', error);
       res.status(500).json({ error: 'فشل إتمام عملية التوقيع' });

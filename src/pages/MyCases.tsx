@@ -446,7 +446,7 @@ const DocumentsTab = ({
   setDocSearchQuery: (q: string) => void
 }) => (
   <div className="flex-1 flex flex-col bg-slate-50/30 overflow-hidden">
-    <div className="p-5 border-b border-slate-100 font-black text-sm text-brand-dark flex justify-between items-center bg-white">
+    <div className="p-5 border-b border-slate-100 font-black text-sm text-brand-dark flex flex-row-reverse justify-between items-center bg-white">
       <span className="flex items-center gap-2"><i className="fa-solid fa-folder-tree text-brand-navy"></i> وثائق الملف</span>
       <button onClick={() => setIsNewFolderModalOpen(true)} className="text-slate-400 hover:text-brand-navy transition w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-50"><i className="fa-solid fa-folder-plus"></i></button>
     </div>
@@ -462,8 +462,8 @@ const DocumentsTab = ({
         <i className="fa-solid fa-search absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
       </div>
     </div>
-    <div className="px-5 py-4 border-b border-slate-100 bg-white flex gap-2 overflow-x-auto no-scrollbar">
-      {['all', 'pending', 'signed', 'expired'].map((f) => (
+    <div className="px-5 py-4 border-b border-slate-100 bg-white flex flex-row-reverse gap-2 overflow-x-auto no-scrollbar">
+      {['all', 'pending', 'signed', 'expired', 'contracts'].map((f) => (
         <button key={f} onClick={() => setDocFilter(f as DocFilter)} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${docFilter === f ? 'bg-brand-navy text-white shadow-md' : 'bg-slate-50 text-slate-500 border border-slate-100 hover:bg-white'}`}>{f === 'all' ? 'الكل' : f === 'pending' ? 'للتوقيع' : f === 'signed' ? 'موقعة' : 'منتهية'}</button>
       ))}
     </div>
@@ -1012,6 +1012,8 @@ export default function MyCases() {
           return !!doc.isSigned;
         case 'expired':
           return !!doc.expiresAt && !doc.isSigned;
+        case 'contracts':
+          return doc.tags?.includes('contract') ?? false;
         case 'uploaded':
           return !!doc.uploadedAt && (Date.now() - new Date(doc.uploadedAt).getTime()) < 1000 * 60 * 60 * 24 * 7;
         default:
@@ -1964,13 +1966,14 @@ export default function MyCases() {
                   </AnimatePresence>
 
                   {/* Document Filters */}
-                  <div className="px-4 py-3 bg-white border-b border-slate-100 flex gap-2 overflow-x-auto no-scrollbar">
+                  <div className="px-4 py-3 bg-white border-b border-slate-100 flex flex-row-reverse gap-2 overflow-x-auto no-scrollbar">
                     <button onClick={() => setDocFilter('all')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'all' ? 'bg-brand-navy text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-white hover:shadow-sm'}`}>الكل</button>
                     <button onClick={() => setDocFilter('pending')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-600 hover:bg-white hover:shadow-sm'}`}>للتوقيع</button>
                     <button onClick={() => setDocFilter('signed')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'signed' ? 'bg-emerald-500 text-white shadow-md' : 'bg-emerald-50 text-emerald-600 hover:bg-white hover:shadow-sm'}`}>موقعة</button>
                     <button onClick={() => setDocFilter('expired')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'expired' ? 'bg-red-500 text-white shadow-md' : 'bg-red-50 text-red-600 hover:bg-white hover:shadow-sm'}`}>منتهية</button>
                     <button onClick={() => setDocFilter('uploaded')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'uploaded' ? 'bg-brand-gold text-brand-dark shadow-md' : 'bg-yellow-50 text-yellow-700 hover:bg-white hover:shadow-sm'}`}>مرفوعة</button>
                   </div>
+
 
                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
                     {/* Recent AI Consultation Summary */}
