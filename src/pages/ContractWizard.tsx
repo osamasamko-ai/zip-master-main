@@ -1124,12 +1124,23 @@ export default function ContractWizard() {
                                                 />
                                             </div>
                                             <div className="grid grid-cols-2 gap-3 mt-4">
-                                                <input
-                                                    placeholder="محافظة البائع"
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                <select
+                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all appearance-none"
                                                     onChange={e => setFormData({ ...formData, sellerGovernorate: e.target.value })}
                                                     value={formData.sellerGovernorate}
-                                                />
+                                                >
+                                                    <option value="" disabled>محافظة البائع</option>
+                                                    {iraqiGovernorates.map(gov => (
+                                                        <option key={gov} value={gov}>{gov}</option>
+                                                    ))}
+                                                </select>
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                    </svg>
+                                                </span>
+
+
                                                 <input
                                                     placeholder="أقرب نقطة دالة"
                                                     className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
@@ -1167,12 +1178,22 @@ export default function ContractWizard() {
                                                 />
                                             </div>
                                             <div className="grid grid-cols-2 gap-3 mt-4">
-                                                <input
-                                                    placeholder="محافظة المشتري"
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                <select
+                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all appearance-none"
                                                     onChange={e => setFormData({ ...formData, buyerGovernorate: e.target.value })}
                                                     value={formData.buyerGovernorate}
-                                                />
+                                                >
+                                                    <option value="" disabled>محافظة المشتري</option>
+                                                    {iraqiGovernorates.map(gov => (
+                                                        <option key={gov} value={gov}>{gov}</option>
+                                                    ))}
+                                                </select>
+                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                    </svg>
+                                                </span>
+
                                                 <input
                                                     placeholder="أقرب نقطة دالة"
                                                     className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
