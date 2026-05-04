@@ -11,7 +11,7 @@ type DocumentType = 'pdf' | 'image' | 'other';
 type CaseStatus = 'pending' | 'review' | 'active' | 'closed';
 
 type WorkspaceTab = 'summary' | 'chat' | 'docs' | 'ai' | 'financials';
-type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded';
+type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded' | 'contracts';
 type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed' | 'drafts';
 
 type CaseMessageSender = 'user' | 'lawyer';
@@ -752,7 +752,6 @@ export default function MyCases() {
   const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
-  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
   const [activePreviewDoc, setActivePreviewDoc] = useState<LegalDocument | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -990,6 +989,7 @@ export default function MyCases() {
   const [newFolderName, setNewFolderName] = useState<string>('');
   const [movingDocId, setMovingDocId] = useState<string | null>(null);
   const [docMoveConfirmTo, setDocMoveConfirmTo] = useState<string | null | undefined>(undefined);
+  const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set()); // State for selected documents
   const [docSearchQuery, setDocSearchQuery] = useState('');
 
   // Document Filtering
@@ -1051,14 +1051,8 @@ export default function MyCases() {
           show: true,
           message: `يوجد لديك وثيقة (${expiringDocs[0].name}) تتطلب التوقيع قبل انقضاء الصلاحية.`,
           docId: expiringDocs[0].id,
-          expires: expiringDocs[0].expiresAt
+          expires: expiringDocs[0].expiresAt ?? undefined
         });
-
-        // Auto dismiss after 10 seconds to not be intrusive
-        const timer = setTimeout(() => {
-          setNotification(null);
-        }, 10000);
-        return () => clearTimeout(timer);
       } else {
         setNotification(null);
       }
@@ -1123,7 +1117,7 @@ export default function MyCases() {
     }
   };
 
-  const toggleDocSelection = (id: string) => {
+  const toggleDocSelection = (id: string) => { // Function to toggle document selection
     setSelectedDocs(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -1969,6 +1963,7 @@ export default function MyCases() {
                   <div className="px-4 py-3 bg-white border-b border-slate-100 flex flex-row-reverse gap-2 overflow-x-auto no-scrollbar">
                     <button onClick={() => setDocFilter('all')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'all' ? 'bg-brand-navy text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-white hover:shadow-sm'}`}>الكل</button>
                     <button onClick={() => setDocFilter('pending')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-600 hover:bg-white hover:shadow-sm'}`}>للتوقيع</button>
+                    <button onClick={() => setDocFilter('contracts')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'contracts' ? 'bg-brand-gold text-brand-dark shadow-md' : 'bg-yellow-50 text-yellow-700 hover:bg-white hover:shadow-sm'}`}>العقود</button>
                     <button onClick={() => setDocFilter('signed')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'signed' ? 'bg-emerald-500 text-white shadow-md' : 'bg-emerald-50 text-emerald-600 hover:bg-white hover:shadow-sm'}`}>موقعة</button>
                     <button onClick={() => setDocFilter('expired')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'expired' ? 'bg-red-500 text-white shadow-md' : 'bg-red-50 text-red-600 hover:bg-white hover:shadow-sm'}`}>منتهية</button>
                     <button onClick={() => setDocFilter('uploaded')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'uploaded' ? 'bg-brand-gold text-brand-dark shadow-md' : 'bg-yellow-50 text-yellow-700 hover:bg-white hover:shadow-sm'}`}>مرفوعة</button>
@@ -2015,11 +2010,23 @@ export default function MyCases() {
 
                     {/* Documents List */}
                     {filteredDocuments.map((doc) => (
-                      <div
+                      <div // Changed to a div to allow for checkbox interaction without triggering preview
                         key={doc.id}
-                        onClick={() => !doc.isUploading && setActivePreviewDoc(doc)}
+                        onClick={(e) => {
+                          // Only open preview if the click wasn't on the checkbox itself
+                          if (!(e.target as HTMLElement).closest('input[type="checkbox"]')) {
+                            !doc.isUploading && setActivePreviewDoc(doc);
+                          }
+                        }}
                         className={`border p-4 rounded-2xl hover:border-brand-navy cursor-pointer transition group flex flex-col gap-2 relative bg-white shadow-sm hover:shadow-md ${doc.actionRequired || doc.expiresAt ? 'border-amber-100 bg-amber-50/30' : 'border-slate-100'}`}
                       >
+                        <input
+                          type="checkbox"
+                          checked={selectedDocs.has(doc.id)}
+                          onChange={() => toggleDocSelection(doc.id)}
+                          onClick={(e) => e.stopPropagation()} // Prevent opening preview when clicking checkbox
+                          className="absolute top-4 right-4 h-4 w-4 rounded accent-brand-navy z-10"
+                        />
 
                         {/* Hover Preview Tooltip */}
                         {doc.previewUrl && (

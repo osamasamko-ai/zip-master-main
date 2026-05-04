@@ -1653,6 +1653,7 @@ ${additionalConditions}
             ...req.body,
             sellerSignature: req.body.sellerSignature || null,
             buyerSignature: req.body.buyerSignature || null,
+            status: req.body.status || 'draft'
           }), // Store full form data including signatures
           progress: 0,
         }
