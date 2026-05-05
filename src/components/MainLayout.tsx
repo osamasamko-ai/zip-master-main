@@ -8,7 +8,7 @@ export default function MainLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications } = useNotifications();
+  const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, deleteNotification, clearAllNotifications } = useNotifications();
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
     announcement: string;
@@ -245,7 +245,10 @@ export default function MainLayout() {
                     className="absolute left-0 top-full mt-3 w-80 overflow-hidden rounded-[2rem] border border-slate-200 bg-white text-right shadow-2xl z-50 origin-top-left"
                   >
                     <div className="flex items-center justify-between border-b border-slate-50 bg-slate-50/50 p-4">
-                      <button onClick={clearAllNotifications} className="text-[10px] font-black text-slate-400 hover:text-red-500">مسح الكل</button>
+                      <button onClick={clearAllNotifications} className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 hover:text-red-500 transition-colors">
+                        <i className="fa-solid fa-trash-can text-[9px]"></i>
+                        مسح الكل
+                      </button>
                       <h4 className="text-xs font-black text-brand-dark">التنبيهات</h4>
                     </div>
                     <div className="max-h-96 overflow-y-auto">
@@ -257,7 +260,7 @@ export default function MainLayout() {
                             if (n.link) navigate(n.link);
                             setIsNotificationsOpen(false);
                           }}
-                          className={`cursor-pointer border-b border-slate-50 p-4 transition hover:bg-slate-50 last:border-0 ${!n.read ? 'bg-brand-navy/[0.02]' : ''}`}
+                          className={`group/item cursor-pointer border-b border-slate-50 p-4 transition hover:bg-slate-50 last:border-0 relative ${!n.read ? 'bg-brand-navy/[0.02]' : ''}`}
                         >
                           <div className="mb-1 flex items-center justify-between">
                             <span className="text-[9px] font-bold text-slate-400">
@@ -266,6 +269,14 @@ export default function MainLayout() {
                             <p className={`text-xs font-black ${!n.read ? 'text-brand-navy' : 'text-slate-600'}`}>{n.title}</p>
                           </div>
                           <p className="text-[11px] font-bold leading-relaxed text-slate-500">{n.message}</p>
+
+                          <button
+                            onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
+                            className="absolute left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 h-7 w-7 rounded-lg bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 transition flex items-center justify-center shadow-sm"
+                            title="حذف"
+                          >
+                            <i className="fa-solid fa-trash-can text-[10px]"></i>
+                          </button>
                         </div>
                       )) : (
                         <div className="p-10 text-center text-slate-300">

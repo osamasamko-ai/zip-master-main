@@ -1984,6 +1984,34 @@ ${additionalConditions}
     }
   });
 
+  app.delete('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      await prisma.notification.deleteMany({
+        where: { userId: currentUser.userId }
+      });
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Clear all notifications error:', error);
+      res.status(500).json({ error: 'Failed to clear notifications' });
+    }
+  });
+
+  app.delete('/api/notifications/:id', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      await prisma.notification.deleteMany({
+        where: {
+          id: req.params.id,
+          userId: currentUser.userId
+        }
+      });
+      res.json({ success: true });
+    } catch (error) {
+      res.status(500).json({ error: 'Failed to delete notification' });
+    }
+  });
+
   app.post('/api/notifications/:id/read', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;

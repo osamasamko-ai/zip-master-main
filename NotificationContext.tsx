@@ -21,6 +21,7 @@ interface NotificationContextType {
   isNotificationsOpen: boolean;
   setIsNotificationsOpen: (isOpen: boolean) => void;
   markAsRead: (id: string) => Promise<void>;
+  deleteNotification: (id: string) => Promise<void>;
   clearAllNotifications: () => Promise<void>;
   NotificationBell: React.FC;
 }
@@ -31,7 +32,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 const playNotificationSound = () => {
   const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
   if (!AudioContext) return;
-  
+
   const ctx = new AudioContext();
   const osc = ctx.createOscillator();
   const gain = ctx.createGain();
@@ -106,13 +107,32 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     }
   }, []);
 
+  const deleteNotification = useCallback(async (id: string) => {
+    try {
+      await fetch(`/api/notifications/${id}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('lexigate_token')}` }
+      });
+      setNotifications(prev => prev.filter(n => n.id !== id));
+    } catch (err) {
+      console.error("Failed to delete notification", err);
+    }
+  }, []);
+
   const clearAllNotifications = useCallback(async () => {
-    // In a real app, you'd have an API endpoint to clear all
-    setNotifications([]);
+    try {
+      await fetch('/api/notifications', {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('lexigate_token')}` }
+      });
+      setNotifications([]);
+    } catch (err) {
+      console.error("Failed to clear notifications", err);
+    }
   }, []);
 
   const NotificationBell: React.FC = () => (
-    <button 
+    <button
       onClick={() => setIsNotificationsOpen(!isNotificationsOpen)}
       className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-slate-100 text-slate-400 hover:text-brand-navy hover:shadow-md transition-all relative"
     >
@@ -126,8 +146,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
   );
 
   const value = useMemo(() => ({
-    notifications, unreadCount, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications, NotificationBell
-  }), [notifications, unreadCount, isNotificationsOpen, setIsNotificationsOpen, markAsRead, clearAllNotifications, NotificationBell]);
+    notifications, unreadCount, isNotificationsOpen, setIsNotificationsOpen, markAsRead, deleteNotification, clearAllNotifications, NotificationBell
+  }), [notifications, unreadCount, isNotificationsOpen, setIsNotificationsOpen, markAsRead, deleteNotification, clearAllNotifications, NotificationBell]);
 
   return (
     <NotificationContext.Provider value={value}>
@@ -147,7 +167,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
               <div className="flex-1 min-w-0 text-right">
                 <h4 className="text-sm font-black text-brand-gold mb-1">{activeToast.title}</h4>
                 <p className="text-xs font-bold text-slate-300 leading-relaxed line-clamp-2">{activeToast.message}</p>
-                <button 
+                <button
                   onClick={() => {
                     markAsRead(activeToast.id);
                     if (activeToast.link) navigate(activeToast.link);
