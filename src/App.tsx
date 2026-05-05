@@ -23,6 +23,7 @@ import Messages from './pages/Messages';
 import Billing from './pages/Billing';
 import Support from './pages/Support';
 import ContractWizard from './pages/ContractWizard';
+import NotFound from './pages/NotFound';
 
 function getDefaultRoute(role: 'user' | 'pro' | 'admin' | null) {
   if (role === 'admin') return '/admin';

@@ -76,6 +76,31 @@ export default function MainLayout() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
+  useEffect(() => {
+    const baseTitle = 'القسطاس الذكي';
+    const currentPath = location.pathname;
+
+    // Find the most specific title from the pathMap
+    let pageTitle = '';
+    const segments = currentPath.split('/').filter(Boolean);
+
+    if (segments.length > 0) {
+      const lastSegment = segments[segments.length - 1];
+      const parentSegment = segments.length > 1 ? segments[segments.length - 2] : null;
+
+      if (pathMap[lastSegment]) {
+        pageTitle = pathMap[lastSegment];
+      } else if (parentSegment && (parentSegment === 'cases' || parentSegment === 'pro')) {
+        // Handle dynamic IDs for cases/pro routes
+        pageTitle = 'ملف القضية';
+      } else if (parentSegment === 'profile') {
+        pageTitle = 'الملف الشخصي';
+      }
+    }
+
+    document.title = pageTitle ? `${baseTitle} | ${pageTitle}` : baseTitle;
+  }, [location.pathname, pathMap]);
+
   const commandResults = useMemo(() => {
     const query = commandQuery.trim().toLowerCase();
     if (!query) return [];
