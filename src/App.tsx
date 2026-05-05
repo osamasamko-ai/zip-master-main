@@ -68,7 +68,6 @@ export default function App() {
         <NotificationProvider> {/* NotificationProvider must be inside Router to use useNavigate */}
           <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route path="/profile/:id" element={<Profile />} />
             <Route
               path="/"
               element={
@@ -89,6 +88,7 @@ export default function App() {
               <Route path="aichat" element={<AiChat />} />
               <Route path="legal" element={<LegalDocs />} />
               <Route path="following" element={<Following />} />
+              <Route path="profile/:id" element={<Profile />} />
               <Route
                 path="pro"
                 element={
@@ -107,6 +107,7 @@ export default function App() {
               />
               <Route path="profile" element={<Navigate to="/settings" replace />} />
               <Route path="settings" element={<Settings />} />
+              <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
         </NotificationProvider>
