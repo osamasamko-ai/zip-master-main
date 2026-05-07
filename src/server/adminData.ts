@@ -32,6 +32,11 @@ function invalidateCache(...keys: string[]) {
     keys.forEach((key) => cacheStore.delete(key));
 }
 
+export function clearAdminCache() {
+    cacheStore.clear();
+    return true;
+}
+
 export type KycStatus = 'pending' | 'approved' | 'rejected';
 
 export interface KycApplication {
@@ -261,6 +266,9 @@ export async function getUsers(): Promise<UserRecord[]> {
         blocked: u.blocked,
         verified: u.verified,
         licenseNumber: u.lawyerProfile?.licenseNumber || undefined,
+        specialty: u.lawyerProfile?.specialty || undefined,
+        rating: u.lawyerProfile?.rating,
+        openCases: u.lawyerProfile?.openCases,
         subscriptionTier: u.subscriptionTier as any,
         accountBalance: u.accountBalance,
         notes: u.notes || '',
@@ -304,33 +312,43 @@ export async function updateUserProfile(id: string, updates: Partial<UserRecord>
             where: { id },
             data: {
                 name: updates.name,
+                email: updates.email,
+                role: updates.role,
                 location: updates.location,
+                blocked: updates.blocked,
+                verified: updates.verified,
+                subscriptionTier: updates.subscriptionTier,
+                accountBalance: updates.accountBalance,
                 notificationsEnabled: updates.notificationsEnabled,
                 notes: updates.notes,
             },
             include: { lawyerProfile: true }
         });
 
-        return {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            role: user.role as any,
-            location: user.location || '',
-            blocked: user.blocked,
-            verified: user.verified,
-            licenseNumber: user.lawyerProfile?.licenseNumber,
-            specialty: user.lawyerProfile?.specialty,
-            rating: user.lawyerProfile?.rating,
-            openCases: user.lawyerProfile?.openCases,
-            freeConsultsRemaining: undefined,
-            subscriptionTier: user.subscriptionTier as any,
-            accountBalance: user.accountBalance,
-            notes: user.notes || '',
-            notificationsEnabled: user.notificationsEnabled,
-            licenseStatus: (user.lawyerProfile?.licenseStatus as any) || 'pending',
-            contractTemplates: (user as any).contractTemplates || []
-        };
+        if (updates.role === 'pro' || updates.role === 'admin' || user.lawyerProfile) {
+            await prisma.lawyerProfile.upsert({
+                where: { userId: id },
+                create: {
+                    userId: id,
+                    licenseNumber: updates.licenseNumber || undefined,
+                    specialty: updates.specialty || 'عام',
+                    rating: updates.rating ?? 0,
+                    openCases: updates.openCases ?? 0,
+                    licenseStatus: updates.licenseStatus || 'pending',
+                    submittedAt: 'اليوم',
+                    profileScore: 25,
+                },
+                update: {
+                    licenseNumber: updates.licenseNumber || undefined,
+                    specialty: updates.specialty,
+                    rating: updates.rating,
+                    openCases: updates.openCases,
+                    licenseStatus: updates.licenseStatus,
+                },
+            });
+        }
+
+        return getUserById(id);
     } catch (error) {
         console.error('Error updating user profile:', error);
         return null;
@@ -342,6 +360,21 @@ export async function updateUserRole(id: string, role: string) {
         where: { id },
         data: { role: role as any }
     });
+
+    if (role === 'pro' || role === 'admin') {
+        await prisma.lawyerProfile.upsert({
+            where: { userId: id },
+            create: {
+                userId: id,
+                specialty: 'عام',
+                licenseStatus: 'pending',
+                submittedAt: 'اليوم',
+                profileScore: 20,
+            },
+            update: {},
+        });
+    }
+
     return getUserById(updated.id);
 }
 
@@ -407,9 +440,10 @@ export async function getTransactionRecords(): Promise<TransactionRecord[]> {
     return prisma.transaction.findMany({ orderBy: { createdAt: 'desc' } }) as any;
 }
 
-export function getExportCsv(type: 'kyc' | 'transactions'): string {
+export async function getExportCsv(type: 'kyc' | 'transactions'): Promise<string> {
     if (type === 'transactions') {
         const header = 'رقم العملية,الوصف,المصدر,المبلغ,النوع,الحالة\n';
+        const transactionRecords = await getTransactionRecords();
         const rows = transactionRecords
             .map((transaction) => `${transaction.id},${transaction.label},${transaction.source},${transaction.amount},${transaction.type},${transaction.status}`)
             .join('\n');
@@ -417,6 +451,7 @@ export function getExportCsv(type: 'kyc' | 'transactions'): string {
     }
 
     const header = 'رقم النقابة,اسم المحامي,المدينة,المستندات,الحالة\n';
+    const kycApplications = await getKycApplications();
     const rows = kycApplications
         .map((application: KycApplication) =>
             `${application.id},${application.name},${application.city},"${application.attachments.join(' | ')}",${application.status}`
@@ -725,7 +760,6 @@ export async function createUser(userData: { email: string; passwordHash: string
             marketingEmails: false,
             language: 'ar', // Default language
             subscriptionTier: 'basic', // Default subscription tier
-            contractTemplates: [], // Initialize empty templates array
         },
         include: { lawyerProfile: true }
     });

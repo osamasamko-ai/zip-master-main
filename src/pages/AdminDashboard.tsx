@@ -300,6 +300,14 @@ export default function AdminDashboard() {
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 
+  const adminFetch = (url: string, init: RequestInit = {}) => {
+    const headers = {
+      ...getAuthHeaders(),
+      ...(init.headers || {}),
+    };
+    return fetch(url, { ...init, headers });
+  };
+
   const confirmDeleteDoc = async () => {
     if (!docToDelete) return;
     await deleteLegalDocument(docToDelete);
@@ -525,24 +533,24 @@ export default function AdminDashboard() {
   useEffect(() => {
     async function loadData() {
       const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, servicesRes, contractRes] = await Promise.all([
-        fetch('/api/admin/metrics'),
-        fetch('/api/admin/kyc'),
-        fetch('/api/admin/users'),
-        fetch('/api/admin/feature-flags'),
-        fetch('/api/admin/support-tickets'),
-        fetch('/api/admin/alerts'),
-        fetch('/api/admin/audit-logs'),
-        fetch('/api/admin/transactions'),
-        fetch('/api/admin/policies'),
-        fetch('/api/admin/system-settings'),
-        fetch('/api/admin/ai-settings'),
-        fetch('/api/admin/payment-gateways'),
-        fetch('/api/admin/workflow-settings'),
-        fetch('/api/admin/notification-templates'),
-        fetch('/api/admin/moderation-rules'),
-        fetch('/api/admin/legal-docs'),
-        fetch('/api/admin/legal-services', { headers: getAuthHeaders() }),
-        fetch('/api/admin/contracts'),
+        adminFetch('/api/admin/metrics'),
+        adminFetch('/api/admin/kyc'),
+        adminFetch('/api/admin/users'),
+        adminFetch('/api/admin/feature-flags'),
+        adminFetch('/api/admin/support-tickets'),
+        adminFetch('/api/admin/alerts'),
+        adminFetch('/api/admin/audit-logs'),
+        adminFetch('/api/admin/transactions'),
+        adminFetch('/api/admin/policies'),
+        adminFetch('/api/admin/system-settings'),
+        adminFetch('/api/admin/ai-settings'),
+        adminFetch('/api/admin/payment-gateways'),
+        adminFetch('/api/admin/workflow-settings'),
+        adminFetch('/api/admin/notification-templates'),
+        adminFetch('/api/admin/moderation-rules'),
+        adminFetch('/api/admin/legal-docs'),
+        adminFetch('/api/admin/legal-services'),
+        adminFetch('/api/admin/contracts'),
       ]);
 
       if (metricRes.ok) setMetrics(await metricRes.json());
@@ -629,7 +637,7 @@ export default function AdminDashboard() {
 
   const updateApplicationStatus = async (id: string, status: KycStatus) => {
     setStatusLabel('processing');
-    const response = await fetch(`/api/admin/kyc/${id}`, {
+    const response = await adminFetch(`/api/admin/kyc/${id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -680,7 +688,7 @@ export default function AdminDashboard() {
       return;
     }
 
-    const response = await fetch(`/api/admin/export?type=${type}`);
+    const response = await adminFetch(`/api/admin/export?type=${type}`);
     if (!response.ok) return;
     const blob = await response.blob();
     const url = URL.createObjectURL(blob);
@@ -693,8 +701,33 @@ export default function AdminDashboard() {
     URL.revokeObjectURL(url);
   };
 
+  const downloadContractsExport = () => {
+    const rows = [
+      'العقد,البائع,المشتري,المركبة,VIN,السعر,الحالة,تاريخ الإنشاء',
+      ...digitalContracts.map((contract) => [
+        contract.id,
+        contract.sellerName,
+        contract.buyerName,
+        contract.carModel,
+        contract.vinNumber,
+        contract.price,
+        contract.status,
+        contract.createdAt,
+      ].map((value) => `"${String(value || '').replace(/"/g, '""')}"`).join(',')),
+    ];
+    const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'digital-contracts-export.csv';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const toggleFlag = async (key: string, enabled: boolean) => {
-    const response = await fetch(`/api/admin/feature-flags/${key}`, {
+    const response = await adminFetch(`/api/admin/feature-flags/${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
@@ -713,7 +746,7 @@ export default function AdminDashboard() {
     if (!selectedUser) return;
     setUserSaveStatus('saving');
 
-    const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
+    const response = await adminFetch(`/api/admin/users/${selectedUser.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(selectedUser),
@@ -737,7 +770,7 @@ export default function AdminDashboard() {
     setUserSaveStatus('saving');
     const nextRole = userItem.role === 'user' ? 'pro' : userItem.role === 'pro' ? 'admin' : 'user';
     try {
-      const response = await fetch(`/api/admin/users/${id}/role`, {
+      const response = await adminFetch(`/api/admin/users/${id}/role`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ role: nextRole }),
@@ -757,7 +790,7 @@ export default function AdminDashboard() {
   const toggleUserBlock = async (id: string) => {
     setUserSaveStatus('saving');
     try {
-      const response = await fetch(`/api/admin/users/${id}/block`, { method: 'POST' });
+      const response = await adminFetch(`/api/admin/users/${id}/block`, { method: 'POST' });
       if (!response.ok) throw new Error('Failed to toggle block status');
       const updated = await response.json();
       setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
@@ -767,6 +800,56 @@ export default function AdminDashboard() {
     } finally {
       setTimeout(() => setUserSaveStatus('idle'), 2000);
     }
+  };
+
+  const cycleSelectedUserRoles = async () => {
+    const ids = Array.from(selectedUserIds);
+    for (const id of ids) {
+      await cycleUserRole(id);
+    }
+    setSelectedUserIds(new Set());
+  };
+
+  const blockSelectedUsers = async () => {
+    const ids = Array.from(selectedUserIds);
+    for (const id of ids) {
+      const userItem = users.find((item) => item.id === id);
+      if (userItem && !userItem.blocked) {
+        await toggleUserBlock(id);
+      }
+    }
+    setSelectedUserIds(new Set());
+  };
+
+  const showKycDocuments = (application: KycApplication) => {
+    if (application.attachments.length === 0) {
+      setStatusLabel('error');
+      window.setTimeout(() => setStatusLabel('idle'), 1400);
+      return;
+    }
+
+    application.attachments.forEach((attachment) => {
+      window.open(attachment, '_blank', 'noopener,noreferrer');
+    });
+  };
+
+  const clearSystemCache = async () => {
+    const response = await adminFetch('/api/admin/cache/clear', { method: 'POST' });
+    if (!response.ok) return;
+    setSystemLogs((prev) => [
+      { id: `log-${Date.now()}`, time: new Date().toLocaleTimeString('en-GB'), level: 'info', msg: 'Admin cache cleared successfully.' },
+      ...prev,
+    ]);
+    forceSync();
+  };
+
+  const restartAiServices = async () => {
+    const response = await adminFetch('/api/admin/ai/restart', { method: 'POST' });
+    if (!response.ok) return;
+    setSystemLogs((prev) => [
+      { id: `log-${Date.now()}`, time: new Date().toLocaleTimeString('en-GB'), level: 'warn', msg: 'AI services restart queued by admin.' },
+      ...prev,
+    ]);
   };
 
   const handleActorClick = (actorName: string) => {
@@ -779,7 +862,7 @@ export default function AdminDashboard() {
   };
 
   const updateTicketStatus = async (id: string, status: SupportTicket['status']) => {
-    const response = await fetch(`/api/admin/support-tickets/${id}`, {
+    const response = await adminFetch(`/api/admin/support-tickets/${id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -791,7 +874,7 @@ export default function AdminDashboard() {
 
   const updatePolicy = async (key: string, value: string) => {
     setPolicies((prev) => prev.map((policy) => (policy.key === key ? { ...policy, value } : policy)));
-    await fetch(`/api/admin/policies/${key}`, {
+    await adminFetch(`/api/admin/policies/${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value }),
@@ -799,7 +882,7 @@ export default function AdminDashboard() {
   };
 
   const updateSystemSetting = async (settings: Partial<SystemSettings>) => {
-    const response = await fetch('/api/admin/system-settings', {
+    const response = await adminFetch('/api/admin/system-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
@@ -810,7 +893,7 @@ export default function AdminDashboard() {
   };
 
   const updateAiSetting = async (settings: Partial<AiSettings>) => {
-    const response = await fetch('/api/admin/ai-settings', {
+    const response = await adminFetch('/api/admin/ai-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
@@ -821,7 +904,7 @@ export default function AdminDashboard() {
   };
 
   const updatePaymentGatewayItem = async (key: string, enabled: boolean, feePercent?: number) => {
-    const response = await fetch(`/api/admin/payment-gateways/${key}`, {
+    const response = await adminFetch(`/api/admin/payment-gateways/${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled, feePercent }),
@@ -832,7 +915,7 @@ export default function AdminDashboard() {
   };
 
   const updateWorkflowSettingsHandler = async (settings: Partial<WorkflowSettings>) => {
-    const response = await fetch('/api/admin/workflow-settings', {
+    const response = await adminFetch('/api/admin/workflow-settings', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
@@ -843,7 +926,7 @@ export default function AdminDashboard() {
   };
 
   const updateNotificationTemplate = async (key: string, partial: Partial<NotificationTemplate>) => {
-    const response = await fetch(`/api/admin/notification-templates/${key}`, {
+    const response = await adminFetch(`/api/admin/notification-templates/${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(partial),
@@ -854,7 +937,7 @@ export default function AdminDashboard() {
   };
 
   const toggleModerationRule = async (id: string, active: boolean) => {
-    const response = await fetch(`/api/admin/moderation-rules/${id}`, {
+    const response = await adminFetch(`/api/admin/moderation-rules/${id}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active }),
@@ -867,7 +950,7 @@ export default function AdminDashboard() {
   const addModerationRule = async () => {
     const value = newBannedWord.trim();
     if (!value) return;
-    const response = await fetch('/api/admin/moderation-rules', {
+    const response = await adminFetch('/api/admin/moderation-rules', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: newModerationType, value, active: true }),
@@ -879,7 +962,7 @@ export default function AdminDashboard() {
   };
 
   const deleteModerationRule = async (id: string) => {
-    const response = await fetch(`/api/admin/moderation-rules/${id}`, { method: 'DELETE' });
+    const response = await adminFetch(`/api/admin/moderation-rules/${id}`, { method: 'DELETE' });
     if (!response.ok) return;
     setModerationRules((prev) => prev.filter((rule) => rule.id !== id));
   };
@@ -888,7 +971,7 @@ export default function AdminDashboard() {
     if (!newDoc.title || !newDoc.law || !newDoc.article || !newDoc.category || !newDoc.summary || !newDoc.source) {
       return;
     }
-    const response = await fetch('/api/admin/legal-docs', {
+    const response = await adminFetch('/api/admin/legal-docs', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newDoc),
@@ -900,7 +983,7 @@ export default function AdminDashboard() {
   };
 
   const deleteLegalDocument = async (id: string) => {
-    const response = await fetch(`/api/admin/legal-docs/${id}`, { method: 'DELETE' });
+    const response = await adminFetch(`/api/admin/legal-docs/${id}`, { method: 'DELETE' });
     if (!response.ok) return;
     setLegalDocs((prev) => prev.filter((doc) => doc.id !== id));
   };
@@ -910,7 +993,7 @@ export default function AdminDashboard() {
       return;
     }
 
-    const response = await fetch('/api/admin/legal-services', {
+    const response = await adminFetch('/api/admin/legal-services', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
       body: JSON.stringify(newService),
@@ -932,7 +1015,7 @@ export default function AdminDashboard() {
   };
 
   const deleteLegalService = async (id: string) => {
-    const response = await fetch(`/api/admin/legal-services/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+    const response = await adminFetch(`/api/admin/legal-services/${id}`, { method: 'DELETE' });
     if (!response.ok) return;
     setLegalServices((prev) => prev.filter((service) => service.id !== id));
   };
@@ -1010,7 +1093,7 @@ export default function AdminDashboard() {
         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/30">
           <h4 className="font-black text-brand-dark">سجل العقود الرقمية</h4>
           <div className="flex gap-2">
-            <button className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[10px] font-black hover:bg-slate-50">تصدير CSV</button>
+            <button onClick={downloadContractsExport} className="h-9 px-4 rounded-xl border border-slate-200 bg-white text-[10px] font-black hover:bg-slate-50">تصدير CSV</button>
           </div>
         </div>
         <div className="overflow-x-auto">
@@ -1395,8 +1478,8 @@ export default function AdminDashboard() {
                   <div className="mb-4 flex items-center justify-between rounded-2xl bg-brand-navy p-4 text-white">
                     <p className="text-xs font-black">تم اختيار {selectedUserIds.size} مستخدم</p>
                     <div className="flex gap-2">
-                      <button className="rounded-lg bg-white/10 px-3 py-1.5 text-[10px] font-black hover:bg-white/20 transition">تغيير الدور</button>
-                      <button className="rounded-lg bg-red-500/20 px-3 py-1.5 text-[10px] font-black text-red-200 hover:bg-red-500/40 transition">حظر الكل</button>
+                      <button onClick={cycleSelectedUserRoles} className="rounded-lg bg-white/10 px-3 py-1.5 text-[10px] font-black hover:bg-white/20 transition">تغيير الدور</button>
+                      <button onClick={blockSelectedUsers} className="rounded-lg bg-red-500/20 px-3 py-1.5 text-[10px] font-black text-red-200 hover:bg-red-500/40 transition">حظر الكل</button>
                       <button onClick={() => setSelectedUserIds(new Set())} className="text-[10px] font-bold text-white/60 hover:text-white">إلغاء</button>
                     </div>
                   </div>
@@ -1950,6 +2033,7 @@ export default function AdminDashboard() {
                                 <i className="fa-solid fa-xmark" /> رفض
                               </button>
                               <button
+                                onClick={() => showKycDocuments(application)}
                                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2 text-[11px] font-black text-slate-600 hover:bg-slate-50 transition"
                               >
                                 <i className="fa-solid fa-file-lines" /> عرض الوثائق
@@ -2812,11 +2896,11 @@ export default function AdminDashboard() {
               <section className="rounded-3xl bg-slate-50 p-6 border border-slate-200">
                 <h4 className="text-lg font-black text-brand-dark mb-4">أدوات المطورين</h4>
                 <div className="grid gap-4">
-                  <button className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 hover:border-brand-navy transition">
+                  <button onClick={clearSystemCache} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 hover:border-brand-navy transition">
                     <span className="text-sm font-bold">تفريغ الذاكرة المؤقتة (Cache)</span>
                     <i className="fa-solid fa-broom text-slate-400"></i>
                   </button>
-                  <button className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 hover:border-red-500 transition group">
+                  <button onClick={restartAiServices} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-slate-100 hover:border-red-500 transition group">
                     <span className="text-sm font-bold group-hover:text-red-600">إعادة تشغيل خدمات AI</span>
                     <i className="fa-solid fa-power-off text-slate-400 group-hover:text-red-500"></i>
                   </button>

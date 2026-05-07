@@ -53,6 +53,7 @@ import {
   getLegalServices,
   addLegalService,
   deleteLegalService,
+  clearAdminCache,
 } from './src/server/adminData';
 import {
   changeCurrentUserPassword,
@@ -1085,6 +1086,20 @@ async function startServer() {
     res.json(await getKycApplications(search, status as any));
   });
 
+  app.post('/api/admin/kyc/:id', authenticateToken, adminOnly, async (req, res) => {
+    const { status } = req.body;
+    if (status !== 'approved' && status !== 'rejected') {
+      return res.status(400).json({ error: 'status must be approved or rejected' });
+    }
+
+    const updated = await updateKycApplication(req.params.id, status);
+    if (!updated) {
+      return res.status(404).json({ error: 'application not found' });
+    }
+
+    return res.json({ success: true, application: updated });
+  });
+
   app.get('/api/admin/users', async (req, res) => {
     res.json(await getUsers());
   });
@@ -1386,12 +1401,21 @@ async function startServer() {
     return res.json({ success: true });
   });
 
-  app.get('/api/admin/export', (req, res) => {
+  app.post('/api/admin/cache/clear', authenticateToken, adminOnly, async (req, res) => {
+    clearAdminCache();
+    res.json({ success: true, message: 'cache cleared' });
+  });
+
+  app.post('/api/admin/ai/restart', authenticateToken, adminOnly, async (req, res) => {
+    res.json({ success: true, message: 'AI services restart queued' });
+  });
+
+  app.get('/api/admin/export', async (req, res) => {
     const type = typeof req.query.type === 'string' ? req.query.type : 'kyc';
     if (type !== 'kyc' && type !== 'transactions') {
       return res.status(400).json({ error: 'type must be kyc or transactions' });
     }
-    const csv = getExportCsv(type);
+    const csv = await getExportCsv(type);
     res.header('Content-Type', 'text/csv');
     res.header('Content-Disposition', `attachment; filename="${type}-export.csv"`);
     return res.send(csv);
