@@ -291,6 +291,11 @@ class ApiClient {
         return response.data;
     }
 
+    async getUserContracts(): Promise<ApiResponse<any[]>> {
+        const response = await this.client.get('/api/legal/contracts');
+        return response.data;
+    }
+
     async requestContractReview(data: { lawyerId: string; contractId?: string; notes?: string }): Promise<ApiResponse<any>> {
         const response = await this.client.post('/api/legal/request-review', data);
         return response.data;

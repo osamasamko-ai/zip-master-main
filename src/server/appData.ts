@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { hashPassword, verifyPassword } from './auth';
+import { getLegalServices } from './adminData';
 
 const USER_DASHBOARD_SERVICES = [
   {
@@ -11,6 +12,9 @@ const USER_DASHBOARD_SERVICES = [
     time: '14 - 21 يوم',
     color: 'indigo',
     category: 'تجاري',
+    lawyerId: null,
+    lawyerName: 'فريق القسطاس',
+    lawyerSpecialty: 'خدمات شركات',
   },
   {
     id: 'srv-2',
@@ -21,6 +25,9 @@ const USER_DASHBOARD_SERVICES = [
     time: '30 - 60 يوم',
     color: 'rose',
     category: 'ملكية فكرية',
+    lawyerId: null,
+    lawyerName: 'فريق القسطاس',
+    lawyerSpecialty: 'ملكية فكرية',
   },
   {
     id: 'srv-3',
@@ -31,6 +38,9 @@ const USER_DASHBOARD_SERVICES = [
     time: '3 - 5 أيام',
     color: 'amber',
     category: 'عقارات',
+    lawyerId: null,
+    lawyerName: 'فريق القسطاس',
+    lawyerSpecialty: 'عقارات',
   },
   {
     id: 'srv-4',
@@ -41,6 +51,9 @@ const USER_DASHBOARD_SERVICES = [
     time: '48 ساعة',
     color: 'blue',
     category: 'استشارات',
+    lawyerId: null,
+    lawyerName: 'فريق القسطاس',
+    lawyerSpecialty: 'مراجعة عقود',
   },
   {
     id: 'srv-5',
@@ -51,6 +64,9 @@ const USER_DASHBOARD_SERVICES = [
     time: 'فوري (AI)',
     color: 'emerald',
     category: 'عقود',
+    lawyerId: null,
+    lawyerName: 'فريق القسطاس',
+    lawyerSpecialty: 'توليد عقود',
   },
 ];
 const CONTRACT_CREATION_FEE = 25000; // رسوم ثابتة لإنشاء العقد
@@ -542,7 +558,7 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
 }
 
 export async function getUserDashboard(userId: string) {
-  const [currentUser, cases, follows, lawyers, invoices, transactions] = await Promise.all([
+  const [currentUser, cases, follows, lawyers, invoices, transactions, legalServices] = await Promise.all([
     prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -609,6 +625,7 @@ export async function getUserDashboard(userId: string) {
     }),
     prisma.invoice.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 8 }),
     prisma.transaction.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 8 }),
+    getLegalServices(true),
   ]);
 
   const caseItems = cases.map((item) => ({
@@ -701,7 +718,7 @@ export async function getUserDashboard(userId: string) {
     schedule: scheduleItems,
     payments: paymentItems,
     lawyers: lawyerItems,
-    services: USER_DASHBOARD_SERVICES,
+    services: legalServices.length > 0 ? legalServices : USER_DASHBOARD_SERVICES,
   };
 }
 

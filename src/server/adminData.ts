@@ -1,5 +1,6 @@
 import dotenv from 'dotenv';
 dotenv.config();
+import crypto from 'crypto';
 import { prisma } from './prisma';
 function parseAttachments(value: string | string[] | null | undefined): string[] {
     if (Array.isArray(value)) return value;
@@ -136,6 +137,22 @@ export interface LegalDoc {
     category: string;
     summary: string;
     source: string;
+}
+
+export interface LegalService {
+    id: string;
+    title: string;
+    description: string;
+    icon: string;
+    price: string;
+    time: string;
+    color: string;
+    category: string;
+    lawyerId?: string | null;
+    lawyerName?: string | null;
+    lawyerSpecialty?: string | null;
+    lawyerAvatar?: string | null;
+    active: boolean;
 }
 
 export interface SecurityAlert {
@@ -609,6 +626,82 @@ export async function updateLegalDoc(id: string, settings: Partial<Omit<LegalDoc
 export async function deleteLegalDoc(id: string) {
     await prisma.legalDoc.delete({ where: { id } });
     invalidateCache('legal-docs');
+    return true;
+}
+
+async function ensureLegalServicesTable() {
+    await prisma.$executeRaw`
+        CREATE TABLE IF NOT EXISTS "LegalService" (
+            "id" TEXT NOT NULL PRIMARY KEY,
+            "title" TEXT NOT NULL,
+            "description" TEXT NOT NULL,
+            "icon" TEXT NOT NULL DEFAULT 'fa-solid fa-scale-balanced',
+            "price" TEXT NOT NULL,
+            "time" TEXT NOT NULL,
+            "color" TEXT NOT NULL DEFAULT 'blue',
+            "category" TEXT NOT NULL,
+            "lawyerId" TEXT,
+            "active" BOOLEAN NOT NULL DEFAULT true,
+            "sortOrder" INTEGER NOT NULL DEFAULT 0,
+            "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            "updatedAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            CONSTRAINT "LegalService_lawyerId_fkey" FOREIGN KEY ("lawyerId") REFERENCES "User" ("id") ON DELETE SET NULL ON UPDATE CASCADE
+        )
+    `;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "LegalService_active_sortOrder_createdAt_idx" ON "LegalService"("active", "sortOrder", "createdAt")`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "LegalService_category_idx" ON "LegalService"("category")`;
+    await prisma.$executeRaw`CREATE INDEX IF NOT EXISTS "LegalService_lawyerId_idx" ON "LegalService"("lawyerId")`;
+}
+
+function mapLegalService(row: any): LegalService {
+    return {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        icon: row.icon || 'fa-solid fa-scale-balanced',
+        price: row.price,
+        time: row.time,
+        color: row.color || 'blue',
+        category: row.category,
+        lawyerId: row.lawyerId || null,
+        lawyerName: row.lawyerName || null,
+        lawyerSpecialty: row.lawyerSpecialty || null,
+        lawyerAvatar: row.lawyerAvatar || null,
+        active: row.active !== false && row.active !== 0,
+    };
+}
+
+export async function getLegalServices(activeOnly = false): Promise<LegalService[]> {
+    await ensureLegalServicesTable();
+    const rows = await prisma.$queryRaw<any[]>`
+        SELECT
+            service.*,
+            lawyer.name AS lawyerName,
+            profile.specialty AS lawyerSpecialty,
+            COALESCE(profile.avatar, lawyer.img) AS lawyerAvatar
+        FROM "LegalService" service
+        LEFT JOIN "User" lawyer ON lawyer.id = service.lawyerId
+        LEFT JOIN "LawyerProfile" profile ON profile.userId = lawyer.id
+        WHERE (${activeOnly} = false OR service.active = true)
+        ORDER BY service.sortOrder ASC, service.createdAt DESC
+    `;
+    return rows.map(mapLegalService);
+}
+
+export async function addLegalService(service: Omit<LegalService, 'id' | 'lawyerName' | 'lawyerSpecialty' | 'lawyerAvatar' | 'active'> & { active?: boolean }) {
+    await ensureLegalServicesTable();
+    const id = crypto.randomUUID();
+    await prisma.$executeRaw`
+        INSERT INTO "LegalService" ("id", "title", "description", "icon", "price", "time", "color", "category", "lawyerId", "active", "updatedAt")
+        VALUES (${id}, ${service.title}, ${service.description}, ${service.icon}, ${service.price}, ${service.time}, ${service.color}, ${service.category}, ${service.lawyerId || null}, ${service.active !== false}, CURRENT_TIMESTAMP)
+    `;
+    const created = (await getLegalServices()).find((item) => item.id === id);
+    return created;
+}
+
+export async function deleteLegalService(id: string) {
+    await ensureLegalServicesTable();
+    await prisma.$executeRaw`DELETE FROM "LegalService" WHERE "id" = ${id}`;
     return true;
 }
 

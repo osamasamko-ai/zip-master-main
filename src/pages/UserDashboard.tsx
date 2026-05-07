@@ -69,6 +69,10 @@ interface LegalService {
   time: string;
   color: string;
   category: string;
+  lawyerId?: string | null;
+  lawyerName?: string | null;
+  lawyerSpecialty?: string | null;
+  lawyerAvatar?: string | null;
 }
 
 interface LawyerItem {
@@ -1610,13 +1614,31 @@ export default function UserDashboard() {
           {filteredServices.map((service) => (
             <button
               key={service.id}
+              type="button"
+              onClick={() => navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: service.lawyerId || undefined } })}
               className="group flex flex-col rounded-[2.5rem] border border-slate-200 bg-white p-6 text-right transition-all hover:border-brand-gold hover:shadow-premium"
             >
-              <div className={`mb-6 flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-50 text-brand-navy shadow-sm transition-all group-hover:bg-brand-navy group-hover:text-white group-hover:scale-110`}>
-                <i className={`${service.icon} text-2xl`}></i>
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <span className="rounded-full bg-brand-gold/10 px-3 py-1 text-[10px] font-black text-brand-dark">{service.category}</span>
+                <div className="flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-50 text-brand-navy shadow-sm transition-all group-hover:bg-brand-navy group-hover:text-white group-hover:scale-110">
+                  <i className={`${service.icon} text-2xl`}></i>
+                </div>
               </div>
               <h4 className="text-lg font-black text-brand-dark group-hover:text-brand-navy">{service.title}</h4>
               <p className="mt-2 flex-1 text-xs font-bold leading-6 text-slate-500">{service.description}</p>
+              <div className="mt-5 flex items-center justify-end gap-3 rounded-2xl bg-slate-50 p-3">
+                <div className="min-w-0 text-right">
+                  <p className="truncate text-xs font-black text-brand-dark">{service.lawyerName || 'محامي الخدمة'}</p>
+                  <p className="mt-0.5 truncate text-[10px] font-bold text-slate-400">{service.lawyerSpecialty || 'التخصص المناسب'}</p>
+                </div>
+                {service.lawyerAvatar ? (
+                  <img src={service.lawyerAvatar} alt={service.lawyerName || ''} className="h-10 w-10 rounded-2xl object-cover" />
+                ) : (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-brand-navy">
+                    <i className="fa-solid fa-user-tie" />
+                  </span>
+                )}
+              </div>
               <div className="mt-6 flex flex-col gap-2 border-t border-slate-100 pt-4">
                 <div className="flex flex-row-reverse items-center justify-between text-[11px] font-black">
                   <span className="text-slate-400">التكلفة:</span>
@@ -1625,6 +1647,10 @@ export default function UserDashboard() {
                 <div className="flex flex-row-reverse items-center justify-between text-[11px] font-black">
                   <span className="text-slate-400">المدة:</span>
                   <span className="text-slate-600">{service.time}</span>
+                </div>
+                <div className="mt-2 flex items-center justify-between rounded-2xl bg-brand-navy px-3 py-2 text-[11px] font-black text-white">
+                  <i className="fa-solid fa-arrow-left" />
+                  <span>بدء الطلب</span>
                 </div>
               </div>
             </button>

@@ -149,6 +149,22 @@ type LegalDoc = {
   source: string;
 };
 
+type LegalService = {
+  id: string;
+  title: string;
+  description: string;
+  icon: string;
+  price: string;
+  time: string;
+  color: string;
+  category: string;
+  lawyerId?: string | null;
+  lawyerName?: string | null;
+  lawyerSpecialty?: string | null;
+  lawyerAvatar?: string | null;
+  active: boolean;
+};
+
 type DigitalContract = {
   id: string;
   title: string;
@@ -246,8 +262,19 @@ export default function AdminDashboard() {
   const [notificationTemplates, setNotificationTemplates] = useState<NotificationTemplate[]>([]);
   const [moderationRules, setModerationRules] = useState<ModerationRule[]>([]);
   const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
+  const [legalServices, setLegalServices] = useState<LegalService[]>([]);
   const [digitalContracts, setDigitalContracts] = useState<DigitalContract[]>([]);
   const [newDoc, setNewDoc] = useState<Partial<LegalDoc>>({ title: '', law: '', article: '', category: '', summary: '', source: '' });
+  const [newService, setNewService] = useState<Partial<LegalService>>({
+    title: '',
+    description: '',
+    price: '',
+    time: '',
+    category: '',
+    lawyerId: '',
+    icon: 'fa-solid fa-scale-balanced',
+    color: 'blue',
+  });
   const [newBannedWord, setNewBannedWord] = useState('');
   const [newModerationType, setNewModerationType] = useState<'bannedWord' | 'sensitiveTopic'>('bannedWord');
   const [moderationSearch, setModerationSearch] = useState('');
@@ -267,6 +294,11 @@ export default function AdminDashboard() {
   const [broadcastMessage, setBroadcastMessage] = useState('');
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
+
+  const getAuthHeaders = () => {
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   const confirmDeleteDoc = async () => {
     if (!docToDelete) return;
@@ -313,6 +345,16 @@ export default function AdminDashboard() {
   const activeModerationCount = useMemo(
     () => moderationRules.filter((rule) => rule.active).length,
     [moderationRules]
+  );
+
+  const availableLawyers = useMemo(
+    () => users.filter((item) => item.role === 'pro' || item.role === 'admin'),
+    [users]
+  );
+
+  const serviceCategories = useMemo(
+    () => Array.from(new Set([...legalServices.map((service) => service.category), ...legalDocs.map((doc) => doc.category)].filter(Boolean))),
+    [legalDocs, legalServices]
   );
 
   const filteredKycApplications = useMemo(
@@ -482,7 +524,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function loadData() {
-      const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, contractRes] = await Promise.all([
+      const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, servicesRes, contractRes] = await Promise.all([
         fetch('/api/admin/metrics'),
         fetch('/api/admin/kyc'),
         fetch('/api/admin/users'),
@@ -499,6 +541,7 @@ export default function AdminDashboard() {
         fetch('/api/admin/notification-templates'),
         fetch('/api/admin/moderation-rules'),
         fetch('/api/admin/legal-docs'),
+        fetch('/api/admin/legal-services', { headers: getAuthHeaders() }),
         fetch('/api/admin/contracts'),
       ]);
 
@@ -518,6 +561,7 @@ export default function AdminDashboard() {
       if (notificationRes.ok) setNotificationTemplates(await notificationRes.json());
       if (moderationRes.ok) setModerationRules(await moderationRes.json());
       if (docsRes.ok) setLegalDocs(await docsRes.json());
+      if (servicesRes.ok) setLegalServices(await servicesRes.json());
       if (contractRes.ok) {
         const res = await contractRes.json();
         setDigitalContracts(res.data || []);
@@ -859,6 +903,38 @@ export default function AdminDashboard() {
     const response = await fetch(`/api/admin/legal-docs/${id}`, { method: 'DELETE' });
     if (!response.ok) return;
     setLegalDocs((prev) => prev.filter((doc) => doc.id !== id));
+  };
+
+  const addLegalService = async () => {
+    if (!newService.title || !newService.description || !newService.price || !newService.time || !newService.category || !newService.lawyerId) {
+      return;
+    }
+
+    const response = await fetch('/api/admin/legal-services', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
+      body: JSON.stringify(newService),
+    });
+
+    if (!response.ok) return;
+    const created = await response.json();
+    setLegalServices((prev) => [created, ...prev]);
+    setNewService({
+      title: '',
+      description: '',
+      price: '',
+      time: '',
+      category: '',
+      lawyerId: '',
+      icon: 'fa-solid fa-scale-balanced',
+      color: 'blue',
+    });
+  };
+
+  const deleteLegalService = async (id: string) => {
+    const response = await fetch(`/api/admin/legal-services/${id}`, { method: 'DELETE', headers: getAuthHeaders() });
+    if (!response.ok) return;
+    setLegalServices((prev) => prev.filter((service) => service.id !== id));
   };
 
   const forceSync = () => {
@@ -2339,7 +2415,140 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'compliance' && (
-            <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
+            <div className="space-y-6">
+              <section className="rounded-3xl border border-slate-200 bg-slate-50/70 p-6">
+                <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                  <div>
+                    <h4 className="text-lg font-black text-brand-dark">الخدمات القانونية المتاحة</h4>
+                    <p className="text-sm font-bold text-slate-500">أنشئ الخدمة من لوحة الإدارة وحدد التصنيف والمحامي في خطوتين فقط.</p>
+                  </div>
+                  <span className="rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-dark">
+                    {legalServices.length} خدمة منشورة
+                  </span>
+                </div>
+
+                <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-black text-brand-dark">1. تفاصيل الخدمة</p>
+                        <p className="text-xs font-bold text-slate-500">اسم واضح، سعر، ومدة متوقعة.</p>
+                      </div>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-brand-navy text-sm font-black text-white">1</span>
+                    </div>
+                    <div className="grid gap-3">
+                      <input
+                        type="text"
+                        placeholder="اسم الخدمة"
+                        value={newService.title || ''}
+                        onChange={(event) => setNewService((prev) => ({ ...prev, title: event.target.value }))}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm font-bold text-slate-700 outline-none focus:border-brand-navy"
+                      />
+                      <textarea
+                        rows={3}
+                        placeholder="وصف مختصر لما يحصل عليه العميل"
+                        value={newService.description || ''}
+                        onChange={(event) => setNewService((prev) => ({ ...prev, description: event.target.value }))}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm font-bold text-slate-700 outline-none focus:border-brand-navy"
+                      />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <input
+                          type="text"
+                          placeholder="السعر مثل 75,000 د.ع"
+                          value={newService.price || ''}
+                          onChange={(event) => setNewService((prev) => ({ ...prev, price: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm font-bold text-slate-700 outline-none focus:border-brand-navy"
+                        />
+                        <input
+                          type="text"
+                          placeholder="المدة مثل 48 ساعة"
+                          value={newService.time || ''}
+                          onChange={(event) => setNewService((prev) => ({ ...prev, time: event.target.value }))}
+                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm font-bold text-slate-700 outline-none focus:border-brand-navy"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div className="text-right">
+                        <p className="text-sm font-black text-brand-dark">2. التصنيف والمحامي</p>
+                        <p className="text-xs font-bold text-slate-500">اربط الخدمة بمحامٍ ظاهر للعميل.</p>
+                      </div>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-brand-gold text-sm font-black text-brand-dark">2</span>
+                    </div>
+                    <div className="grid gap-3">
+                      <input
+                        type="text"
+                        list="legal-service-categories"
+                        placeholder="التصنيف مثل تجاري أو عقارات"
+                        value={newService.category || ''}
+                        onChange={(event) => setNewService((prev) => ({ ...prev, category: event.target.value }))}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm font-bold text-slate-700 outline-none focus:border-brand-navy"
+                      />
+                      <datalist id="legal-service-categories">
+                        {serviceCategories.map((category) => (
+                          <option key={category} value={category} />
+                        ))}
+                      </datalist>
+                      <select
+                        value={newService.lawyerId || ''}
+                        onChange={(event) => setNewService((prev) => ({ ...prev, lawyerId: event.target.value }))}
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-right text-sm font-bold text-slate-700 outline-none focus:border-brand-navy"
+                      >
+                        <option value="">اختر المحامي المسؤول</option>
+                        {availableLawyers.map((lawyer) => (
+                          <option key={lawyer.id} value={lawyer.id}>
+                            {lawyer.name} {lawyer.specialty ? `- ${lawyer.specialty}` : ''}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={addLegalService}
+                        disabled={!newService.title || !newService.description || !newService.price || !newService.time || !newService.category || !newService.lawyerId}
+                        className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:bg-slate-300"
+                      >
+                        نشر الخدمة في لوحة المستخدم
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-5 grid gap-3 lg:grid-cols-2">
+                  {legalServices.length === 0 ? (
+                    <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm font-bold text-slate-500 lg:col-span-2">
+                      لا توجد خدمات منشورة من الإدارة بعد.
+                    </div>
+                  ) : (
+                    legalServices.map((service) => (
+                      <div key={service.id} className="rounded-3xl border border-slate-200 bg-white p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <button
+                            onClick={() => deleteLegalService(service.id)}
+                            className="rounded-full border border-red-200 bg-red-50 px-3 py-2 text-xs font-black text-red-700 transition hover:bg-red-100"
+                          >
+                            حذف
+                          </button>
+                          <div className="min-w-0 text-right">
+                            <div className="mb-2 flex flex-row-reverse flex-wrap gap-2">
+                              <span className="rounded-full bg-brand-navy/5 px-3 py-1 text-[10px] font-black text-brand-navy">{service.category}</span>
+                              <span className="rounded-full bg-slate-100 px-3 py-1 text-[10px] font-black text-slate-600">{service.price}</span>
+                            </div>
+                            <p className="truncate text-base font-black text-brand-dark">{service.title}</p>
+                            <p className="mt-1 line-clamp-2 text-xs font-bold leading-6 text-slate-500">{service.description}</p>
+                            <p className="mt-3 text-[11px] font-black text-brand-navy">
+                              {service.lawyerName || 'محام غير محدد'} {service.lawyerSpecialty ? `• ${service.lawyerSpecialty}` : ''}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </section>
+
+              <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
               <section className="rounded-3xl bg-gray-50 p-6 border border-gray-200">
                 <div className="flex items-center justify-between gap-3 mb-5">
                   <div>
@@ -2578,6 +2787,7 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </section>
+            </div>
             </div>
           )}
 

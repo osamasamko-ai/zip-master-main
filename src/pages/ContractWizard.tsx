@@ -178,7 +178,10 @@ const SignaturePad = ({ onSave, value, placeholder, onClear, nameValue }: { onSa
 export default function ContractWizard() {
     const { user } = useAuth();
     const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState<'create' | 'contracts'>('create');
     const [step, setStep] = useState(0); // Start at step 0 for template selection
+    const [userContracts, setUserContracts] = useState<any[]>([]);
+    const [isLoadingContracts, setIsLoadingContracts] = useState(false);
     const [formData, setFormData] = useState({
         sellerName: '',
         sellerPhone: '',
@@ -288,6 +291,20 @@ export default function ContractWizard() {
             // setUserSavedClauses(res.data || []);
         } catch (err) {
             console.error('Failed to fetch clauses', err);
+        }
+    }, []);
+
+    const fetchUserContracts = useCallback(async () => {
+        setIsLoadingContracts(true);
+        try {
+            const res = await apiClient.getUserContracts();
+            setUserContracts(res.data || []);
+        } catch (err) {
+            console.error('Failed to fetch contracts', err);
+            setContractError('فشل تحميل العقود');
+            setTimeout(() => setContractError(''), 3000);
+        } finally {
+            setIsLoadingContracts(false);
         }
     }, []);
 
@@ -404,6 +421,13 @@ export default function ContractWizard() {
             loadLawyers();
         }
     }, [isDraftSaved]);
+
+    // Fetch contracts when contracts tab is active
+    useEffect(() => {
+        if (activeTab === 'contracts') {
+            fetchUserContracts();
+        }
+    }, [activeTab, fetchUserContracts]);
 
     const fetchCustomTemplates = useCallback(async () => {
         try {
@@ -811,6 +835,92 @@ export default function ContractWizard() {
         </div>
     );
 
+    const parseContractPrivateNote = (privateNote: any) => {
+        if (!privateNote) return {};
+        if (typeof privateNote === 'string') {
+            try {
+                return JSON.parse(privateNote);
+            } catch {
+                return {};
+            }
+        }
+        return privateNote;
+    };
+
+    const renderContractsTab = () => (
+        <div className="space-y-8 text-right">
+            <div className="flex flex-col gap-3">
+                <h2 className="text-2xl font-black text-brand-dark">العقود المحفوظة والمكتملة</h2>
+                <p className="text-sm font-bold text-slate-500 max-w-3xl mx-auto">هنا تعرض العقود التي قمت بحفظها أو إنهائها، ويمكنك تنزيلها أو العودة إليها في أي وقت.</p>
+            </div>
+
+            {isLoadingContracts ? (
+                <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-10 text-center">
+                    <i className="fa-solid fa-spinner fa-spin text-brand-navy text-4xl mb-4"></i>
+                    <p className="text-sm font-black text-slate-600">جاري تحميل العقود...</p>
+                </div>
+            ) : userContracts.length > 0 ? (
+                <div className="grid gap-4">
+                    {userContracts.map((contract, idx) => {
+                        const note = parseContractPrivateNote(contract.privateNote);
+                        const createdAt = contract.createdAt ? new Date(contract.createdAt).toLocaleDateString('ar-IQ') : null;
+                        const pdfUrl = note.pdfUrl || contract.pdfUrl || contract.fileUrl || null;
+                        const contractStatus = contract.status || note.status || 'pending';
+                        return (
+                            <div key={contract.id || `contract-${idx}`} className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm text-right flex flex-col gap-4">
+                                <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+                                    <div className="space-y-2">
+                                        <p className="text-base font-black text-brand-dark">{contract.title || `عقد ${note.carModel || 'مركبة'}`}</p>
+                                        <p className="text-[11px] text-slate-500">{note.carModel ? `موديل المركبة: ${note.carModel}` : `معرف العقد: ${contract.id || 'غير محدد'}`}</p>
+                                        {createdAt && <p className="text-[10px] font-bold text-slate-400">تاريخ الإنشاء: {createdAt}</p>}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <StatusBadge tone={contractStatus === 'active' ? 'success' : contractStatus === 'draft' ? 'warning' : 'info'}>
+                                            {contractStatus === 'active' ? 'مكتمل' : contractStatus === 'draft' ? 'مسودة' : 'قيد التنفيذ'}
+                                        </StatusBadge>
+                                        <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black text-slate-500">{note.buyerName ? `المشتري: ${note.buyerName}` : 'لا بيانات مشتري'}</span>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-right">
+                                    <div className="rounded-[1.5rem] bg-slate-50 p-4 border border-slate-100">
+                                        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-black">البائع</p>
+                                        <p className="mt-2 text-sm font-black text-slate-700">{note.sellerName || 'غير محدد'}</p>
+                                    </div>
+                                    <div className="rounded-[1.5rem] bg-slate-50 p-4 border border-slate-100">
+                                        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-black">المركبة</p>
+                                        <p className="mt-2 text-sm font-black text-slate-700">{note.carModel || 'غير محدد'}</p>
+                                    </div>
+                                    <div className="rounded-[1.5rem] bg-slate-50 p-4 border border-slate-100">
+                                        <p className="text-[10px] uppercase tracking-[0.2em] text-slate-400 font-black">السعر</p>
+                                        <p className="mt-2 text-sm font-black text-slate-700">{note.price ? `${Number(note.price).toLocaleString()} ${note.currency === 'USD' ? '$' : 'د.ع'}` : 'غير محدد'}</p>
+                                    </div>
+                                </div>
+
+                                <div className="flex flex-col sm:flex-row gap-3 mt-4">
+                                    <ActionButton onClick={() => navigate('/cases')} variant="primary" className="flex-1">
+                                        <i className="fa-solid fa-folder-open ml-2"></i>
+                                        عرض الملف
+                                    </ActionButton>
+                                    <ActionButton onClick={() => { if (pdfUrl) window.open(pdfUrl, '_blank'); }} variant="secondary" className="flex-1" disabled={!pdfUrl}>
+                                        <i className="fa-solid fa-file-pdf ml-2"></i>
+                                        {pdfUrl ? 'تحميل العقد' : 'لا يوجد ملف PDF'}
+                                    </ActionButton>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            ) : (
+                <div className="rounded-[2.5rem] border border-dashed border-slate-200 bg-slate-50 p-12 text-center">
+                    <p className="text-xl font-black text-brand-dark mb-3">لا توجد عقود محفوظة بعد</p>
+                    <p className="text-sm text-slate-500 mb-6">ابدأ بإنشاء عقد جديد وسيظهر هنا بعد حفظه أو توثيقه.</p>
+                    <ActionButton onClick={() => { setActiveTab('create'); setStep(0); }} variant="primary">إنشاء عقد جديد</ActionButton>
+                </div>
+            )}
+        </div>
+    );
+
     const handleCopyToClipboard = () => {
         navigator.clipboard.writeText(generatedContractText);
         setContractError('تم نسخ النص إلى الحافظة');
@@ -832,16 +942,42 @@ export default function ContractWizard() {
                     </div>
                     <div className="flex gap-3">
                         <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm min-w-[140px] text-center mx-auto lg:mx-0">
-                            <p className="text-[11px] font-black uppercase text-slate-400">الخطوات</p>
-                            <p className="mt-1 text-2xl font-black text-brand-navy">{step} / {totalSteps}</p>
+                            <p className="text-[11px] font-black uppercase text-slate-400">العقود</p>
+                            <p className="mt-1 text-2xl font-black text-brand-navy">{userContracts.length}</p>
                         </div>
                     </div>
                 </div>
             </section>
 
-            <div className="max-w-3xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 p-8 md:p-12 shadow-premium relative">
-                {step === 0 ? (
-                    <>
+            {/* Tab Navigation */}
+            <div className="flex justify-center">
+                <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-sm">
+                    <button
+                        onClick={() => setActiveTab('create')}
+                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'create'
+                            ? 'bg-brand-navy text-white shadow-lg'
+                            : 'text-slate-600 hover:text-brand-navy hover:bg-slate-50'
+                            }`}
+                    >
+                        <i className="fa-solid fa-plus ml-2"></i>
+                        إنشاء عقد جديد
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('contracts')}
+                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'contracts'
+                            ? 'bg-brand-navy text-white shadow-lg'
+                            : 'text-slate-600 hover:text-brand-navy hover:bg-slate-50'
+                            }`}
+                    >
+                        <i className="fa-solid fa-folder-open ml-2"></i>
+                        عقودي المحفوظة
+                    </button>
+                </div>
+            </div>
+
+            <div className="max-w-6xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 p-8 md:p-12 shadow-premium relative">
+                {activeTab === 'create' && (
+                    <div>
                         <h2 className="text-2xl font-black text-brand-dark mb-8 flex items-center justify-center gap-3">
                             <i className="fa-solid fa-file-signature text-brand-gold"></i>
                             إصدار عقد مركبة جديد
@@ -935,9 +1071,7 @@ export default function ContractWizard() {
 
                             <ActionButton onClick={() => handleTemplateSelect(null)} variant="secondary" className="w-full mt-6 py-4">البدء من الصفر</ActionButton>
                         </motion.div>
-                    </>
-                ) : (
-                    renderStepHeader()
+                    </div>
                 )}
 
                 {/* Stepper replaced by renderStepHeader() call above when step > 0 */}
@@ -1080,752 +1214,732 @@ export default function ContractWizard() {
 
                 {/* Stepper end */}
 
-                {step > 0 && (
-                    <AnimatePresence mode="wait">
-                        <motion.div
-                            key={step}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: -20 }}
-                            transition={{ duration: 0.3 }}
-                        >
-                            {step === 1 && (
-                                <div className="space-y-6">
-                                    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-4 text-right text-xs font-bold text-slate-500">
-                                        <p>قم بإدخال أسماء الطرفين وأرقام الجوال العراقية بدون رمز الدولة. هذه المعلومات تُستخدم في نص العقد ورسائل التذكير.</p>
-                                    </div>
-                                    <div className="space-y-4">
-                                        <div className="p-6 rounded-[2.5rem] border border-slate-100 bg-white shadow-sm">
-                                            <FormSectionTitle title="بيانات البائع" icon="fa-user-tie" colorClass="text-brand-navy" />
+                {/* {step > 0 && ( */}
+                <AnimatePresence mode="wait">
+                    <motion.div
+                        key={step}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -20 }}
+                        transition={{ duration: 0.3 }}
+                    >
+                        {step === 1 && (
+                            <div className="space-y-6">
+                                <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-4 text-right text-xs font-bold text-slate-500">
+                                    <p>قم بإدخال أسماء الطرفين وأرقام الجوال العراقية بدون رمز الدولة. هذه المعلومات تُستخدم في نص العقد ورسائل التذكير.</p>
+                                </div>
+                                <div className="space-y-4">
+                                    <div className="p-6 rounded-[2.5rem] border border-slate-100 bg-white shadow-sm">
+                                        <FormSectionTitle title="بيانات البائع" icon="fa-user-tie" colorClass="text-brand-navy" />
+                                        <input
+                                            placeholder="اسم البائع الكامل"
+                                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                            onChange={e => setFormData({ ...formData, sellerName: e.target.value })}
+                                            value={formData.sellerName}
+                                        />
+                                        <div className="flex items-center gap-3 mt-4">
+                                            <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-400">+964</span>
                                             <input
-                                                placeholder="اسم البائع الكامل"
-                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
-                                                onChange={e => setFormData({ ...formData, sellerName: e.target.value })}
-                                                value={formData.sellerName}
+                                                type="tel"
+                                                placeholder="7700000000"
+                                                maxLength={10}
+                                                className={`min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border outline-none text-right font-bold text-slate-700 focus:bg-white transition-all ${phoneErrors.seller ? 'border-rose-300' : 'border-slate-200 focus:border-brand-navy'}`}
+                                                onChange={e => setFormData({ ...formData, sellerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                                onBlur={() => {
+                                                    const isValid = validatePhone(formData.sellerPhone);
+                                                    setPhoneErrors(prev => ({
+                                                        ...prev,
+                                                        seller: isValid || !formData.sellerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
+                                                    }));
+                                                }}
+                                                value={formData.sellerPhone}
                                             />
-                                            <div className="flex items-center gap-3 mt-4">
-                                                <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-400">+964</span>
-                                                <input
-                                                    type="tel"
-                                                    placeholder="7700000000"
-                                                    maxLength={10}
-                                                    className={`min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border outline-none text-right font-bold text-slate-700 focus:bg-white transition-all ${phoneErrors.seller ? 'border-rose-300' : 'border-slate-200 focus:border-brand-navy'}`}
-                                                    onChange={e => setFormData({ ...formData, sellerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                                                    onBlur={() => {
-                                                        const isValid = validatePhone(formData.sellerPhone);
-                                                        setPhoneErrors(prev => ({
-                                                            ...prev,
-                                                            seller: isValid || !formData.sellerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
-                                                        }));
-                                                    }}
-                                                    value={formData.sellerPhone}
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3 mt-4">
-                                                <select
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all appearance-none"
-                                                    onChange={e => setFormData({ ...formData, sellerGovernorate: e.target.value })}
-                                                    value={formData.sellerGovernorate}
-                                                >
-                                                    <option value="" disabled>محافظة البائع</option>
-                                                    {iraqiGovernorates.map(gov => (
-                                                        <option key={gov} value={gov}>{gov}</option>
-                                                    ))}
-                                                </select>
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                                                    </svg>
-                                                </span>
-
-
-                                                <input
-                                                    placeholder="أقرب نقطة دالة"
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
-                                                    onChange={e => setFormData({ ...formData, sellerLandmark: e.target.value })}
-                                                    value={formData.sellerLandmark}
-                                                />
-                                            </div>
-                                            {phoneErrors.seller && <p className="text-rose-500 text-[10px] font-black mt-2 mr-2 animate-pulse">{phoneErrors.seller}</p>}
                                         </div>
+                                        <div className="grid grid-cols-2 gap-3 mt-4">
+                                            <select
+                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all appearance-none"
+                                                onChange={e => setFormData({ ...formData, sellerGovernorate: e.target.value })}
+                                                value={formData.sellerGovernorate}
+                                            >
+                                                <option value="" disabled>محافظة البائع</option>
+                                                {iraqiGovernorates.map(gov => (
+                                                    <option key={gov} value={gov}>{gov}</option>
+                                                ))}
+                                            </select>
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                </svg>
+                                            </span>
 
-                                        <div className="p-6 rounded-[2.5rem] border border-slate-100 bg-white shadow-sm">
-                                            <FormSectionTitle title="بيانات المشتري" icon="fa-user-tag" colorClass="text-brand-gold" />
+
                                             <input
-                                                placeholder="اسم المشتري الكامل"
+                                                placeholder="أقرب نقطة دالة"
                                                 className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
-                                                onChange={e => setFormData({ ...formData, buyerName: e.target.value })}
-                                                value={formData.buyerName}
+                                                onChange={e => setFormData({ ...formData, sellerLandmark: e.target.value })}
+                                                value={formData.sellerLandmark}
                                             />
-                                            <div className="flex items-center gap-3 mt-4">
-                                                <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-400">+964</span>
-                                                <input
-                                                    type="tel"
-                                                    placeholder="7800000000"
-                                                    maxLength={10}
-                                                    className={`min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border outline-none text-right font-bold text-slate-700 focus:bg-white transition-all ${phoneErrors.buyer ? 'border-rose-300' : 'border-slate-200 focus:border-brand-navy'}`}
-                                                    onChange={e => setFormData({ ...formData, buyerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
-                                                    onBlur={() => {
-                                                        const isValid = validatePhone(formData.buyerPhone);
-                                                        setPhoneErrors(prev => ({
-                                                            ...prev,
-                                                            buyer: isValid || !formData.buyerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
-                                                        }));
-                                                    }}
-                                                    value={formData.buyerPhone}
-                                                />
-                                            </div>
-                                            <div className="grid grid-cols-2 gap-3 mt-4">
-                                                <select
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all appearance-none"
-                                                    onChange={e => setFormData({ ...formData, buyerGovernorate: e.target.value })}
-                                                    value={formData.buyerGovernorate}
-                                                >
-                                                    <option value="" disabled>محافظة المشتري</option>
-                                                    {iraqiGovernorates.map(gov => (
-                                                        <option key={gov} value={gov}>{gov}</option>
-                                                    ))}
-                                                </select>
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                                        <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-                                                    </svg>
-                                                </span>
-
-                                                <input
-                                                    placeholder="أقرب نقطة دالة"
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
-                                                    onChange={e => setFormData({ ...formData, buyerLandmark: e.target.value })}
-                                                    value={formData.buyerLandmark}
-                                                />
-                                            </div>
-                                            {phoneErrors.buyer && <p className="text-rose-500 text-[10px] font-black mt-2 mr-2 animate-pulse">{phoneErrors.buyer}</p>}
                                         </div>
+                                        {phoneErrors.seller && <p className="text-rose-500 text-[10px] font-black mt-2 mr-2 animate-pulse">{phoneErrors.seller}</p>}
                                     </div>
 
-                                    <p className={`text-[10px] font-black ${isStep1Valid ? 'text-emerald-600' : 'text-rose-500'}`}>{isStep1Valid ? 'جميع البيانات الأساسية للمتابعة صحيحة.' : 'يرجى التأكد من تعبئة البيانات وإدخال أرقام جوال صحيحة.'}</p>
+                                    <div className="p-6 rounded-[2.5rem] border border-slate-100 bg-white shadow-sm">
+                                        <FormSectionTitle title="بيانات المشتري" icon="fa-user-tag" colorClass="text-brand-gold" />
+                                        <input
+                                            placeholder="اسم المشتري الكامل"
+                                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                            onChange={e => setFormData({ ...formData, buyerName: e.target.value })}
+                                            value={formData.buyerName}
+                                        />
+                                        <div className="flex items-center gap-3 mt-4">
+                                            <span className="inline-flex h-14 items-center rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-black text-slate-400">+964</span>
+                                            <input
+                                                type="tel"
+                                                placeholder="7800000000"
+                                                maxLength={10}
+                                                className={`min-w-0 flex-1 p-4 bg-slate-50 rounded-2xl border outline-none text-right font-bold text-slate-700 focus:bg-white transition-all ${phoneErrors.buyer ? 'border-rose-300' : 'border-slate-200 focus:border-brand-navy'}`}
+                                                onChange={e => setFormData({ ...formData, buyerPhone: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                                                onBlur={() => {
+                                                    const isValid = validatePhone(formData.buyerPhone);
+                                                    setPhoneErrors(prev => ({
+                                                        ...prev,
+                                                        buyer: isValid || !formData.buyerPhone ? '' : 'يرجى إدخال رقم جوال عراقي صحيح'
+                                                    }));
+                                                }}
+                                                value={formData.buyerPhone}
+                                            />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3 mt-4">
+                                            <select
+                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all appearance-none"
+                                                onChange={e => setFormData({ ...formData, buyerGovernorate: e.target.value })}
+                                                value={formData.buyerGovernorate}
+                                            >
+                                                <option value="" disabled>محافظة المشتري</option>
+                                                {iraqiGovernorates.map(gov => (
+                                                    <option key={gov} value={gov}>{gov}</option>
+                                                ))}
+                                            </select>
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none">
+                                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                                    <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                                                </svg>
+                                            </span>
 
-                                    <ActionButton
-                                        onClick={nextStep}
-                                        variant="primary"
-                                        className="w-full mt-6 py-4"
-                                        disabled={!isStep1Valid || !!phoneErrors.seller || !!phoneErrors.buyer}
-                                    >
-                                        التالي: تفاصيل السيارة
+                                            <input
+                                                placeholder="أقرب نقطة دالة"
+                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold text-slate-700 focus:bg-white focus:border-brand-navy transition-all"
+                                                onChange={e => setFormData({ ...formData, buyerLandmark: e.target.value })}
+                                                value={formData.buyerLandmark}
+                                            />
+                                        </div>
+                                        {phoneErrors.buyer && <p className="text-rose-500 text-[10px] font-black mt-2 mr-2 animate-pulse">{phoneErrors.buyer}</p>}
+                                    </div>
+                                </div>
+
+                                <p className={`text-[10px] font-black ${isStep1Valid ? 'text-emerald-600' : 'text-rose-500'}`}>{isStep1Valid ? 'جميع البيانات الأساسية للمتابعة صحيحة.' : 'يرجى التأكد من تعبئة البيانات وإدخال أرقام جوال صحيحة.'}</p>
+
+                                <ActionButton
+                                    onClick={nextStep}
+                                    variant="primary"
+                                    className="w-full mt-6 py-4"
+                                    disabled={!isStep1Valid || !!phoneErrors.seller || !!phoneErrors.buyer}
+                                >
+                                    التالي: تفاصيل السيارة
+                                </ActionButton>
+                            </div>
+                        )}
+
+                        {step === 2 && (
+                            <div className="space-y-4">
+                                <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-4 text-right text-xs font-bold text-slate-500">
+                                    <p>تأكد من الدقة في بيانات المركبة ورقم الشاصي. أي خطأ في VIN يمنع التوثيق القانوني الصحيح.</p>
+                                </div>
+                                <FormSectionTitle title="بيانات المركبة والثمن" icon="fa-car-burst" />
+                                <div className="space-y-4">
+                                    <div className="relative">
+                                        <input
+                                            placeholder="نوع وموديل السيارة"
+                                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold focus:bg-white focus:border-brand-navy transition-all"
+                                            onChange={e => setFormData({ ...formData, carModel: e.target.value })}
+                                            value={formData.carModel}
+                                        />
+                                        <i className="fa-solid fa-car absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
+                                    </div>
+                                    <div className="relative">
+                                        <input
+                                            placeholder="رقم الشاصي"
+                                            className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-mono font-bold focus:bg-white focus:border-brand-navy transition-all"
+                                            maxLength={17}
+                                            onChange={e => {
+                                                const val = e.target.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, '');
+                                                setFormData({ ...formData, vinNumber: val });
+                                                if (val.length > 0 && val.length < 17) setVinError('رقم الشاصي يجب أن يكون 17 حرفاً');
+                                                else setVinError('');
+                                            }}
+                                            value={formData.vinNumber}
+                                        />
+                                        <i className="fa-solid fa-hashtag absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
+                                    </div>
+                                    {vinError && <p className="text-rose-500 text-[10px] font-black mr-2">{vinError}</p>}
+
+                                    <div className="space-y-3">
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, currency: 'IQD' })}
+                                                className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.currency === 'IQD' ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+                                            >
+                                                دينار عراقي (د.ع)
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, currency: 'USD' })}
+                                                className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.currency === 'USD' ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
+                                            >
+                                                دولار أمريكي ($)
+                                            </button>
+                                        </div>
+                                        <div className="relative">
+                                            <input
+                                                placeholder="السعر المتفق عليه"
+                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-black text-brand-navy focus:bg-white focus:border-brand-navy transition-all"
+                                                onChange={e => {
+                                                    const val = e.target.value.replace(/,/g, '');
+                                                    if (/^\d*$/.test(val)) {
+                                                        const formatted = val.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                                                        setFormData({ ...formData, price: formatted });
+                                                    }
+                                                }}
+                                                value={formData.price}
+                                            />
+                                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">
+                                                {formData.currency === 'IQD' ? 'د.ع' : '$'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <p className={`text-[10px] font-black ${isStep2Valid ? 'text-emerald-600' : 'text-rose-500'}`}>{isStep2Valid ? 'المعلومات جاهزة لإصدار مسودة العقد.' : 'يرجى التأكد من تعبئة موديل السيارة، رقم الشاصي، والسعر.'}</p>
+                                <div className="space-y-3 mt-6 pt-4 border-t border-slate-100">
+                                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest text-right">إضافة بنود اختيارية</h4>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                        {optionalClausesOptions.map(clause => (
+                                            <label key={clause.id} className={`flex items-center justify-end gap-2 p-3 rounded-xl border transition-all cursor-pointer ${selectedClauses.includes(clause.id) ? 'border-brand-navy bg-brand-navy/[0.03]' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
+                                                <span className={`text-[10px] font-black ${selectedClauses.includes(clause.id) ? 'text-brand-navy' : 'text-slate-500'}`}>{clause.label}</span>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={selectedClauses.includes(clause.id)}
+                                                    onChange={() => {
+                                                        setSelectedClauses(prev =>
+                                                            prev.includes(clause.id)
+                                                                ? prev.filter(id => id !== clause.id)
+                                                                : [...prev, clause.id]
+                                                        );
+                                                    }}
+                                                    className="h-4 w-4 rounded accent-brand-navy"
+                                                />
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Clause Library Section */}
+                                <div className="space-y-4 mt-6 pt-4 border-t border-slate-100">
+                                    <div className="flex justify-between items-center">
+                                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">مكتبة بنودي الخاصة</h4>
+                                        <span className="text-[10px] font-bold text-slate-400">اختر من البنود التي حفظتها سابقاً</span>
+                                    </div>
+                                    {userSavedClauses.length > 0 ? (
+                                        <div className="flex flex-wrap gap-2 justify-end">
+                                            {userSavedClauses.map((clause, idx) => (
+                                                <div key={idx} className="group relative">
+                                                    <button
+                                                        onClick={() => {
+                                                            const current = (formData as any).selectedSavedClauses || [];
+                                                            const next = current.includes(clause)
+                                                                ? current.filter((c: string) => c !== clause)
+                                                                : [...current, clause];
+                                                            setFormData({ ...formData, selectedSavedClauses: next } as any);
+                                                        }}
+                                                        className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${((formData as any).selectedSavedClauses || []).includes(clause)
+                                                            ? 'bg-brand-navy text-white border-brand-navy shadow-md'
+                                                            : 'bg-white text-slate-600 border-slate-200 hover:border-brand-navy/30'
+                                                            }`}
+                                                    >
+                                                        {clause.substring(0, 30)}...
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeleteClause(idx)}
+                                                        className="absolute -top-1 -left-1 h-4 w-4 bg-rose-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
+                                                    >
+                                                        <i className="fa-solid fa-times"></i>
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <p className="text-[10px] text-slate-400 italic text-right">لا توجد بنود محفوظة حالياً. اكتب بنداً بالأسفل واحفظه.</p>
+                                    )}
+
+                                    <div className="space-y-3 mt-4">
+                                        <div className="flex justify-between items-center">
+                                            <button
+                                                onClick={handleSaveClause}
+                                                disabled={isSavingClause || !formData.customClauses.trim()}
+                                                className="text-[10px] font-black text-brand-navy hover:text-brand-gold disabled:opacity-30 transition-colors flex items-center gap-1"
+                                            >
+                                                <i className={`fa-solid ${isSavingClause ? 'fa-spinner fa-spin' : 'fa-plus-circle'}`}></i>
+                                                حفظ هذا البند في مكتبتي
+                                            </button>
+                                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest text-right">إضافة بند جديد</h4>
+                                        </div>
+                                        <textarea
+                                            value={formData.customClauses}
+                                            onChange={e => setFormData({ ...formData, customClauses: e.target.value })}
+                                            placeholder="اكتب أي شروط خاصة أو اتفاقات إضافية هنا..."
+                                            className="w-full h-24 p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right text-xs font-bold focus:bg-white focus:border-brand-navy transition-all resize-none shadow-inner"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="flex gap-3 mt-6">
+                                    <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
+                                    <ActionButton onClick={handleGenerateContract} variant="primary" className="flex-[2] py-4" disabled={isLoadingContract || !formData.carModel || formData.vinNumber.length !== 17 || !formData.price}>
+                                        {isLoadingContract ? <><i className="fa-solid fa-spinner fa-spin ml-2"></i> جاري التحضير...</> : 'إصدار مسودة العقد'}
                                     </ActionButton>
                                 </div>
-                            )}
+                                {contractError && <p className="text-red-500 text-xs font-bold mt-2 text-center">{contractError}</p>}
+                            </div>
+                        )}
 
-                            {step === 2 && (
-                                <div className="space-y-4">
-                                    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-4 text-right text-xs font-bold text-slate-500">
-                                        <p>تأكد من الدقة في بيانات المركبة ورقم الشاصي. أي خطأ في VIN يمنع التوثيق القانوني الصحيح.</p>
+                        {step === 3 && (
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center mb-4">
+                                    <div className="text-right">
+                                        <FormSectionTitle title="مراجعة مسودة العقد" icon="fa-file-lines" />
                                     </div>
-                                    <FormSectionTitle title="بيانات المركبة والثمن" icon="fa-car-burst" />
+                                    <div className="flex items-center gap-2">
+                                        <div className="flex gap-1 items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                            <button onClick={() => setPreviewFontSize(p => Math.min(p + 2, 32))} className="h-7 w-7 rounded-lg bg-white text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm flex items-center justify-center" title="تكبير الخط"><i className="fa-solid fa-plus text-[10px]"></i></button>
+                                            <button onClick={() => setPreviewFontSize(p => Math.max(p - 2, 10))} className="h-7 w-7 rounded-lg bg-white text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm flex items-center justify-center" title="تصغير الخط"><i className="fa-solid fa-minus text-[10px]"></i></button>
+                                            <span className="px-2 text-[9px] font-black text-slate-400 uppercase tracking-tighter">حجم الخط</span>
+                                        </div>
+                                        <div className="flex gap-1 items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                            <button onClick={handleCopyToClipboard} className="h-7 px-2 rounded-lg bg-white text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm flex items-center justify-center gap-1 text-[9px] font-black"><i className="fa-regular fa-copy"></i> نسخ النص</button>
+                                        </div>
+                                        <StatusBadge tone="success">مسودة جاهزة</StatusBadge>
+                                    </div>
+                                </div>
+                                {generatedContractText ? (
                                     <div className="space-y-4">
-                                        <div className="relative">
-                                            <input
-                                                placeholder="نوع وموديل السيارة"
-                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-bold focus:bg-white focus:border-brand-navy transition-all"
-                                                onChange={e => setFormData({ ...formData, carModel: e.target.value })}
-                                                value={formData.carModel}
-                                            />
-                                            <i className="fa-solid fa-car absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
-                                        </div>
-                                        <div className="relative">
-                                            <input
-                                                placeholder="رقم الشاصي"
-                                                className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-mono font-bold focus:bg-white focus:border-brand-navy transition-all"
-                                                maxLength={17}
-                                                onChange={e => {
-                                                    const val = e.target.value.toUpperCase().replace(/[^A-HJ-NPR-Z0-9]/g, '');
-                                                    setFormData({ ...formData, vinNumber: val });
-                                                    if (val.length > 0 && val.length < 17) setVinError('رقم الشاصي يجب أن يكون 17 حرفاً');
-                                                    else setVinError('');
-                                                }}
-                                                value={formData.vinNumber}
-                                            />
-                                            <i className="fa-solid fa-hashtag absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"></i>
-                                        </div>
-                                        {vinError && <p className="text-rose-500 text-[10px] font-black mr-2">{vinError}</p>}
-
-                                        <div className="space-y-3">
-                                            <div className="flex gap-2">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setFormData({ ...formData, currency: 'IQD' })}
-                                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.currency === 'IQD' ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
-                                                >
-                                                    دينار عراقي (د.ع)
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => setFormData({ ...formData, currency: 'USD' })}
-                                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.currency === 'USD' ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100'}`}
-                                                >
-                                                    دولار أمريكي ($)
-                                                </button>
+                                        <div className="grid gap-4 md:grid-cols-3 text-right">
+                                            <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">البائع والمشتري</p>
+                                                <p className="mt-3 text-sm font-black text-slate-700">{formData.sellerName || 'غير محدد'}</p>
+                                                <p className="text-[10px] text-slate-500">جوال {formData.sellerPhone ? `+964${formData.sellerPhone}` : 'غير محدد'}</p>
+                                                <p className="text-[10px] text-slate-500">السكن: {formData.sellerGovernorate || 'غير محدد'} - {formData.sellerLandmark || 'غير محدد'}</p>
+                                                <p className="mt-3 text-sm font-black text-slate-700">{formData.buyerName || 'غير محدد'}</p>
+                                                <p className="text-[10px] text-slate-500">جوال {formData.buyerPhone ? `+964${formData.buyerPhone}` : 'غير محدد'}</p>
+                                                <p className="text-[10px] text-slate-500">السكن: {formData.buyerGovernorate || 'غير محدد'} - {formData.buyerLandmark || 'غير محدد'}</p>
                                             </div>
-                                            <div className="relative">
-                                                <input
-                                                    placeholder="السعر المتفق عليه"
-                                                    className="w-full p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right font-black text-brand-navy focus:bg-white focus:border-brand-navy transition-all"
-                                                    onChange={e => {
-                                                        const val = e.target.value.replace(/,/g, '');
-                                                        if (/^\d*$/.test(val)) {
-                                                            const formatted = val.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-                                                            setFormData({ ...formData, price: formatted });
-                                                        }
-                                                    }}
-                                                    value={formData.price}
-                                                />
-                                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-[10px] font-black text-slate-400">
-                                                    {formData.currency === 'IQD' ? 'د.ع' : '$'}
+                                            <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">معلومات المركبة</p>
+                                                <p className="mt-3 text-sm font-black text-slate-700">{formData.carModel || 'غير محدد'}</p>
+                                                <p className="text-[10px] text-slate-500">VIN: {formData.vinNumber || 'غير محدد'}</p>
+                                            </div>
+                                            <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+                                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">السعر</p>
+                                                <p className="mt-3 text-xl font-black text-brand-navy">{contractPriceValue.toLocaleString()} {formData.currency === 'IQD' ? 'د.ع' : '$'}</p>
+                                                <p className="text-[10px] text-slate-500 mt-2">{selectedClauses.length} بنود اختيارية مضافة</p>
+                                            </div>
+                                        </div>
+                                        <div className="rounded-[2rem] border border-brand-gold/10 bg-brand-gold/5 p-4 text-right text-sm font-black text-brand-dark">
+                                            راجع بنود العقد بعناية قبل المتابعة. يمكنك تعديل أي سطر داخل النص مباشرةً.
+                                        </div>
+                                        <div className="relative group">
+                                            <textarea
+                                                value={generatedContractText}
+                                                onChange={(e) => setGeneratedContractText(e.target.value)}
+                                                style={{ fontSize: `${previewFontSize}px` }}
+                                                className="w-full h-96 p-6 bg-slate-50 rounded-[2rem] border border-slate-200 leading-relaxed text-slate-700 outline-none focus:bg-white focus:border-brand-navy transition-all custom-scrollbar font-medium shadow-inner resize-none text-right"
+                                                placeholder="نص العقد..."
+                                            />
+                                            <div className="absolute top-4 left-4 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                                                <span className="bg-brand-navy text-white text-[9px] font-black px-2 py-1 rounded-full shadow-sm">
+                                                    <i className="fa-solid fa-pen-to-square ml-1"></i> العقد قابل للتعديل يدوياً
                                                 </span>
                                             </div>
                                         </div>
+
+                                        {(sellerSignature || buyerSignature) && (
+                                            <div className="mt-8 pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center text-center gap-4">
+                                                {sellerSignature && (
+                                                    <div className="w-full sm:w-1/2 p-2">
+                                                        <p className="font-bold text-brand-dark mb-2">توقيع البائع:</p>
+                                                        <img src={sellerSignature} alt="Seller Signature" className="max-w-full h-auto mx-auto border-b border-slate-200 pb-2" />
+                                                        <p className="text-xs text-slate-500 mt-1">{formData.sellerName}</p>
+                                                    </div>
+                                                )}
+                                                {buyerSignature && (
+                                                    <div className="w-full sm:w-1/2 p-2">
+                                                        <p className="font-bold text-brand-dark mb-2">توقيع المشتري:</p>
+                                                        <img src={buyerSignature} alt="Buyer Signature" className="max-w-full h-auto mx-auto border-b border-slate-200 pb-2" />
+                                                        <p className="text-xs text-slate-500 mt-1">{formData.buyerName}</p>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
-                                    <p className={`text-[10px] font-black ${isStep2Valid ? 'text-emerald-600' : 'text-rose-500'}`}>{isStep2Valid ? 'المعلومات جاهزة لإصدار مسودة العقد.' : 'يرجى التأكد من تعبئة موديل السيارة، رقم الشاصي، والسعر.'}</p>
-                                    <div className="space-y-3 mt-6 pt-4 border-t border-slate-100">
-                                        <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest text-right">إضافة بنود اختيارية</h4>
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                            {optionalClausesOptions.map(clause => (
-                                                <label key={clause.id} className={`flex items-center justify-end gap-2 p-3 rounded-xl border transition-all cursor-pointer ${selectedClauses.includes(clause.id) ? 'border-brand-navy bg-brand-navy/[0.03]' : 'border-slate-100 bg-white hover:border-slate-200'}`}>
-                                                    <span className={`text-[10px] font-black ${selectedClauses.includes(clause.id) ? 'text-brand-navy' : 'text-slate-500'}`}>{clause.label}</span>
-                                                    <input
-                                                        type="checkbox"
-                                                        checked={selectedClauses.includes(clause.id)}
-                                                        onChange={() => {
-                                                            setSelectedClauses(prev =>
-                                                                prev.includes(clause.id)
-                                                                    ? prev.filter(id => id !== clause.id)
-                                                                    : [...prev, clause.id]
-                                                            );
-                                                        }}
-                                                        className="h-4 w-4 rounded accent-brand-navy"
-                                                    />
-                                                </label>
+                                ) : (
+                                    <div className="p-10 bg-red-50 rounded-[2rem] text-red-600 text-center border border-red-100">
+                                        {isFastMode && (
+                                            <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold">
+                                                <i className="fa-solid fa-triangle-exclamation ml-1"></i>
+                                                تنبيه: أنت تستخدم نمط التوليد السريع. يرجى مراجعة البنود يدوياً بعناية فائقة.
+                                            </div>
+                                        )}
+
+                                        <i className="fa-solid fa-triangle-exclamation text-5xl mb-4 opacity-50"></i>
+                                        <p className="font-black text-lg">فشل توليد النص</p>
+                                        <p className="text-sm font-bold opacity-70 mt-1">يرجى العودة والتحقق من البيانات المدخلة.</p>
+                                    </div>
+                                )}
+                                <div className="flex gap-3 pt-4">
+                                    <ActionButton onClick={prevStep} variant="secondary" className="flex-1">تعديل</ActionButton>
+                                    {isFastMode && (
+                                        <div className="flex-1 p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold text-center">
+                                            <i className="fa-solid fa-info-circle ml-1"></i>
+                                            نمط سريع: راجع يدوياً
+                                        </div>
+                                    )}
+
+                                    <ActionButton
+                                        onClick={handleSaveAsTemplate}
+                                        variant="secondary"
+                                        className="flex-1 border-slate-200 text-slate-600 hover:bg-slate-100"
+                                        disabled={isSavingTemplate || !generatedContractText}
+                                    >
+                                        {isSavingTemplate ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-bookmark ml-1"></i>}
+                                        {isSavingTemplate ? 'جاري الحفظ...' : 'حفظ كقالب'}
+                                    </ActionButton>
+                                    <ActionButton
+                                        onClick={handleSaveDraft}
+                                        variant="secondary"
+                                        className="flex-1 border-brand-gold text-brand-gold hover:bg-brand-gold hover:text-white"
+                                        disabled={isSavingDraft || !generatedContractText}
+                                    >
+                                        {isSavingDraft ? 'جاري الحفظ...' : 'حفظ كمسودة للمراجعة'}
+                                    </ActionButton>
+                                    <ActionButton onClick={() => setShowPdfPreviewModal(true)} variant="primary" className="flex-[1.2] py-4 shadow-lg shadow-brand-navy/20" disabled={!generatedContractText}>الموافقة والدفع</ActionButton>
+                                </div>
+                            </div>
+                        )}
+
+                        {step === 4 && (
+                            <div className="space-y-6">
+                                <div className="text-center space-y-3">
+                                    <div className="w-20 h-20 bg-red-50 rounded-[2rem] flex items-center justify-center mx-auto text-red-500 text-3xl shadow-sm border border-red-100">
+                                        <i className="fa-solid fa-mobile-screen-button"></i>
+                                    </div>
+                                    <h3 className="text-xl font-black text-brand-dark">تأكيد الدفع الرقمي</h3>
+                                    <p className="text-sm font-bold text-slate-500">سيتم توليد العقد وأرشفته فور إتمام العملية.</p>
+                                </div>
+
+                                <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200 space-y-4">
+                                    <div className="flex justify-between items-center flex-row-reverse border-b border-slate-200 pb-3">
+                                        <span className="text-xs font-black text-slate-400">الخدمة:</span>
+                                        <span className="text-sm font-black text-brand-dark">عقد سيارة ذكي</span>
+                                    </div>
+                                    <div className="flex justify-between items-center flex-row-reverse">
+                                        <span className="text-xs font-black text-slate-400">المبلغ المستحق:</span>
+                                        <span className="text-2xl font-black text-emerald-600">{(25000 - discountAmount).toLocaleString()} <span className="text-xs text-slate-400">د.ع</span></span>
+                                    </div>
+                                    <div className="flex justify-between items-center flex-row-reverse pt-2 border-t border-slate-100">
+                                        <span className="text-xs font-black text-slate-400">رصيدك الحالي:</span>
+                                        <span className="text-sm font-black text-brand-navy">{(user?.accountBalance || 0).toLocaleString()} د.ع</span>
+                                    </div>
+                                </div>
+
+                                <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200 space-y-4">
+                                    <div className="flex justify-between items-center flex-row-reverse">
+                                        <span className="text-xs font-black text-slate-400">كود الخصم:</span>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="text"
+                                                placeholder="أدخل الكود"
+                                                value={promoCodeInput}
+                                                onChange={(e) => setPromoCodeInput(e.target.value)}
+                                                className="w-32 p-2 bg-white rounded-lg border border-slate-200 outline-none text-right text-sm font-bold"
+                                                disabled={isApplyingPromo || discountAmount > 0}
+                                            />
+                                            <ActionButton
+                                                onClick={handleApplyPromoCode}
+                                                variant="secondary"
+                                                size="sm"
+                                                disabled={isApplyingPromo || !promoCodeInput.trim() || discountAmount > 0}
+                                            >
+                                                {isApplyingPromo ? 'جاري التطبيق...' : 'تطبيق'}
+                                            </ActionButton>
+                                        </div>
+                                    </div>
+                                    {discountAmount > 0 && (
+                                        <div className="flex justify-between items-center flex-row-reverse pt-2 border-t border-slate-100">
+                                            <span className="text-xs font-black text-emerald-600">الخصم المطبق:</span>
+                                            <span className="text-sm font-black text-emerald-600">{discountAmount.toLocaleString()} د.ع</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex gap-3">
+                                    <ActionButton onClick={prevStep} variant="secondary" className="flex-1" disabled={isPaying}>رجوع</ActionButton>
+                                    {(user?.accountBalance || 0) < 25000 ? (
+                                        <button
+                                            onClick={() => navigate('/billing')}
+                                            className="flex-[2] bg-brand-gold text-brand-dark rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-yellow-500 transition-all shadow-xl shadow-brand-gold/20 active:scale-95"
+                                        >
+                                            <i className="fa-solid fa-circle-plus"></i>
+                                            شحن الرصيد للمتابعة
+                                        </button>
+                                    ) : (
+                                        <button
+                                            onClick={handleWalletPayment} // سيتم تمرير promoCode من خلال formData
+                                            disabled={isPaying}
+                                            className="flex-[2] bg-brand-navy text-white rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-brand-dark transition-all shadow-xl shadow-brand-navy/20 active:scale-95 disabled:opacity-50"
+                                        >
+                                            {isPaying ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-vault"></i>}
+                                            {isPaying ? 'جاري المعالجة...' : 'تأكيد الدفع من المحفظة'}
+                                        </button>
+                                    )}
+                                </div>
+                                {(user?.accountBalance || 0) < 25000 && (
+                                    <p className="text-rose-500 text-[10px] font-black text-center animate-pulse">رصيدك غير كافٍ لإتمام العملية. يرجى الشحن أولاً.</p>
+                                )}
+                                {contractError && <p className="text-rose-500 text-xs font-black mt-2 text-center animate-pulse">{contractError}</p>}
+                            </div>
+                        )}
+
+                        {step === 5 && (
+                            <div className="space-y-6">
+                                <FormSectionTitle title="التوقيع الإلكتروني والمصادقة" icon="fa-pen-nib" colorClass="text-brand-navy" />
+                                <div className="space-y-8 p-6 rounded-[2rem] border border-slate-200 bg-slate-50/50 shadow-inner">
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between px-1 mb-2">
+                                            {sellerSignature && (
+                                                <button
+                                                    onClick={() => setSellerSignature('')}
+                                                    className="text-[10px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
+                                                >
+                                                    <i className="fa-solid fa-rotate-left"></i> مسح وإعادة البدء
+                                                </button>
+                                            )}
+                                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mr-auto flex items-center gap-2"><i className="fa-solid fa-user-tie text-brand-navy"></i> توقيع الطرف الأول (البائع)</label>
+                                        </div>
+                                        <SignaturePad
+                                            placeholder={formData.sellerName}
+                                            value={sellerSignature}
+                                            onSave={setSellerSignature}
+                                            onClear={() => setSellerSignature('')}
+                                            nameValue={formData.sellerName}
+                                        />
+                                    </div>
+
+                                    <div className="space-y-4">
+                                        <div className="flex items-center justify-between px-1 mb-2">
+                                            {buyerSignature ? (
+                                                <button
+                                                    onClick={() => setBuyerSignature('')}
+                                                    className="text-[10px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
+                                                >
+                                                    <i className="fa-solid fa-rotate-left"></i> مسح وإعادة البدء
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={handleShareSignatureLink}
+                                                    disabled={isSharingLink}
+                                                    className="text-[10px] font-black text-brand-navy hover:text-brand-gold transition flex items-center gap-1 disabled:opacity-50"
+                                                >
+                                                    <i className={`fa-solid ${isSharingLink ? 'fa-spinner fa-spin' : 'fa-share-nodes'}`}></i>
+                                                    مشاركة رابط توقيع للمشتري
+                                                </button>
+                                            )}
+                                            <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mr-auto flex items-center gap-2"><i className="fa-solid fa-user-tag text-brand-gold"></i> توقيع الطرف الثاني (المشتري)</label>
+                                        </div>
+                                        <SignaturePad
+                                            placeholder={formData.buyerName}
+                                            value={buyerSignature}
+                                            onSave={setBuyerSignature}
+                                            onClear={() => setBuyerSignature('')}
+                                            nameValue={formData.buyerName}
+                                        />
+                                    </div>
+                                    <label className="flex items-start justify-end gap-3 cursor-pointer group bg-white p-4 rounded-2xl border border-slate-100">
+                                        <div className="text-right">
+                                            <p className="text-xs font-black text-brand-dark group-hover:text-brand-navy transition-colors">أقر بصحة البيانات المذكورة</p>
+                                            <p className="text-[10px] font-bold text-slate-400 mt-1">الموافقة على شروط العقد والتوقيع الإلكتروني الملزم قانونياً.</p>
+                                        </div>
+                                        <input
+                                            type="checkbox"
+                                            checked={agreedToTerms}
+                                            onChange={e => setAgreedToTerms(e.target.checked)}
+                                            className="h-5 w-5 rounded-lg accent-brand-navy mt-1"
+                                        />
+                                    </label>
+
+                                    <div className={`rounded-[2rem] border p-4 ${isSignatureReady ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'} text-right text-[10px] font-black text-slate-700`}>
+                                        <p className="mb-3">قبل المتابعة، تحقق من:</p>
+                                        <ul className="space-y-2 list-disc list-inside text-slate-600">
+                                            <li className={sellerSignature ? 'text-emerald-700' : 'text-rose-500'}>توقيع البائع مكتمل</li>
+                                            <li className={buyerSignature ? 'text-emerald-700' : 'text-rose-500'}>توقيع المشتري مكتمل</li>
+                                            <li className={agreedToTerms ? 'text-emerald-700' : 'text-rose-500'}>الموافقة على الشروط مفعلة</li>
+                                        </ul>
+                                    </div>
+
+                                    <div className="space-y-3 pt-4 border-t border-slate-100">
+                                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">تنبيه التذكير التلقائي (WhatsApp)</label>
+                                        <div className="flex gap-2">
+                                            {[12, 24, 48, 72].map(hours => (
+                                                <button
+                                                    key={hours}
+                                                    type="button"
+                                                    onClick={() => setFormData({ ...formData, reminderDuration: hours })}
+                                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.reminderDuration === hours ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
+                                                >
+                                                    {hours === 24 ? 'يوم واحد' : hours === 48 ? 'يومين' : `${hours} ساعة`}
+                                                </button>
                                             ))}
                                         </div>
                                     </div>
-
-                                    {/* Clause Library Section */}
-                                    <div className="space-y-4 mt-6 pt-4 border-t border-slate-100">
-                                        <div className="flex justify-between items-center">
-                                            <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest">مكتبة بنودي الخاصة</h4>
-                                            <span className="text-[10px] font-bold text-slate-400">اختر من البنود التي حفظتها سابقاً</span>
-                                        </div>
-                                        {userSavedClauses.length > 0 ? (
-                                            <div className="flex flex-wrap gap-2 justify-end">
-                                                {userSavedClauses.map((clause, idx) => (
-                                                    <div key={idx} className="group relative">
-                                                        <button
-                                                            onClick={() => {
-                                                                const current = (formData as any).selectedSavedClauses || [];
-                                                                const next = current.includes(clause)
-                                                                    ? current.filter((c: string) => c !== clause)
-                                                                    : [...current, clause];
-                                                                setFormData({ ...formData, selectedSavedClauses: next } as any);
-                                                            }}
-                                                            className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all border ${((formData as any).selectedSavedClauses || []).includes(clause)
-                                                                ? 'bg-brand-navy text-white border-brand-navy shadow-md'
-                                                                : 'bg-white text-slate-600 border-slate-200 hover:border-brand-navy/30'
-                                                                }`}
-                                                        >
-                                                            {clause.substring(0, 30)}...
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleDeleteClause(idx)}
-                                                            className="absolute -top-1 -left-1 h-4 w-4 bg-rose-500 text-white rounded-full text-[8px] opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center shadow-sm"
-                                                        >
-                                                            <i className="fa-solid fa-times"></i>
-                                                        </button>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        ) : (
-                                            <p className="text-[10px] text-slate-400 italic text-right">لا توجد بنود محفوظة حالياً. اكتب بنداً بالأسفل واحفظه.</p>
-                                        )}
-
-                                        <div className="space-y-3 mt-4">
-                                            <div className="flex justify-between items-center">
-                                                <button
-                                                    onClick={handleSaveClause}
-                                                    disabled={isSavingClause || !formData.customClauses.trim()}
-                                                    className="text-[10px] font-black text-brand-navy hover:text-brand-gold disabled:opacity-30 transition-colors flex items-center gap-1"
-                                                >
-                                                    <i className={`fa-solid ${isSavingClause ? 'fa-spinner fa-spin' : 'fa-plus-circle'}`}></i>
-                                                    حفظ هذا البند في مكتبتي
-                                                </button>
-                                                <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest text-right">إضافة بند جديد</h4>
-                                            </div>
-                                            <textarea
-                                                value={formData.customClauses}
-                                                onChange={e => setFormData({ ...formData, customClauses: e.target.value })}
-                                                placeholder="اكتب أي شروط خاصة أو اتفاقات إضافية هنا..."
-                                                className="w-full h-24 p-4 bg-slate-50 rounded-2xl border border-slate-200 outline-none text-right text-xs font-bold focus:bg-white focus:border-brand-navy transition-all resize-none shadow-inner"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div className="flex gap-3 mt-6">
-                                        <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
-                                        <ActionButton onClick={handleGenerateContract} variant="primary" className="flex-[2] py-4" disabled={isLoadingContract || !formData.carModel || formData.vinNumber.length !== 17 || !formData.price}>
-                                            {isLoadingContract ? <><i className="fa-solid fa-spinner fa-spin ml-2"></i> جاري التحضير...</> : 'إصدار مسودة العقد'}
-                                        </ActionButton>
-                                    </div>
-                                    {contractError && <p className="text-red-500 text-xs font-bold mt-2 text-center">{contractError}</p>}
                                 </div>
-                            )}
+                                <div className="flex gap-3">
+                                    <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
+                                    <ActionButton onClick={handleFinalizeAndNotify} variant="primary" className="flex-[2] py-4 shadow-lg shadow-brand-navy/20" disabled={!sellerSignature || !buyerSignature || !agreedToTerms || isSendingWhatsApp || isSavingToWallet}>
+                                        {isSendingWhatsApp || isSavingToWallet ? <><i className="fa-solid fa-spinner fa-spin ml-2"></i> جاري الإرسال والأرشفة...</> : 'تأكيد وإرسال عبر WhatsApp'}
+                                    </ActionButton>
+                                </div>
+                                {contractError && <p className="text-amber-600 text-[11px] mt-2 text-center font-black">{contractError}</p>}
+                            </div>
+                        )}
 
-                            {step === 3 && (
-                                <div className="space-y-4">
-                                    <div className="flex justify-between items-center mb-4">
+                        {step === 6 && (
+                            <div className="text-center space-y-6 py-4 relative">
+                                <div className="relative">
+                                    <div className={`w-24 h-24 ${isDraftSaved ? 'bg-amber-50 text-amber-500 border-amber-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100'} rounded-[2.5rem] flex items-center justify-center mx-auto text-4xl shadow-sm border`}>
+                                        <i className={`fa-solid ${isDraftSaved ? 'fa-file-pen' : 'fa-file-circle-check'}`}></i>
+                                    </div>
+                                    <motion.div
+                                        initial={{ scale: 0 }}
+                                        animate={{ scale: 1 }}
+                                        className={`absolute -top-2 -right-1/3 translate-x-1/2 w-48 h-48 ${isDraftSaved ? 'bg-amber-500/5' : 'bg-emerald-500/5'} rounded-full -z-10 blur-2xl`}
+                                    ></motion.div>
+
+                                    {!isDraftSaved && (
+                                        <div className="absolute inset-0 pointer-events-none overflow-hidden">
+                                            {[...Array(12)].map((_, i) => (
+                                                <motion.div
+                                                    key={i}
+                                                    initial={{ y: 0, x: 0, opacity: 1, scale: 1 }}
+                                                    animate={{
+                                                        y: [-20, -100],
+                                                        x: [0, (i % 2 === 0 ? 50 : -50)],
+                                                        opacity: 0,
+                                                        scale: 0.5
+                                                    }}
+                                                    transition={{ duration: 1, delay: i * 0.1, repeat: Infinity, repeatDelay: 3 }}
+                                                    className="absolute left-1/2 top-1/2 h-2 w-2 rounded-full bg-emerald-400"
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="space-y-2">
+                                    <h3 className="text-2xl font-black text-brand-dark">
+                                        {isDraftSaved ? 'تم حفظ المسودة بنجاح!' : 'تم التوقيع والأرشفة بنجاح!'}
+                                    </h3>
+                                    <p className="text-sm font-bold text-slate-500 px-10 leading-relaxed">
+                                        {isDraftSaved
+                                            ? isReviewRequested
+                                                ? 'تم إرسال طلب المراجعة للمحامي بنجاح. ستصلك رسالة WhatsApp فور اكتمال التدقيق.'
+                                                : 'تم حفظ العقد كمسودة في محفظتك. يمكنك الآن طلب مراجعة قانونية من محامٍ قبل إرساله للمشتري.'
+                                            : 'تم إرسال نسخة من العقد عبر WhatsApp للأطراف المعنية وتمت أرشفة الوثيقة في محفظتك القانونية.'}
+                                    </p>
+                                </div>
+
+                                {isDraftSaved && !isReviewRequested && (
+                                    <div className="px-8 space-y-4">
                                         <div className="text-right">
-                                            <FormSectionTitle title="مراجعة مسودة العقد" icon="fa-file-lines" />
-                                        </div>
-                                        <div className="flex items-center gap-2">
-                                            <div className="flex gap-1 items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
-                                                <button onClick={() => setPreviewFontSize(p => Math.min(p + 2, 32))} className="h-7 w-7 rounded-lg bg-white text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm flex items-center justify-center" title="تكبير الخط"><i className="fa-solid fa-plus text-[10px]"></i></button>
-                                                <button onClick={() => setPreviewFontSize(p => Math.max(p - 2, 10))} className="h-7 w-7 rounded-lg bg-white text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm flex items-center justify-center" title="تصغير الخط"><i className="fa-solid fa-minus text-[10px]"></i></button>
-                                                <span className="px-2 text-[9px] font-black text-slate-400 uppercase tracking-tighter">حجم الخط</span>
-                                            </div>
-                                            <div className="flex gap-1 items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
-                                                <button onClick={handleCopyToClipboard} className="h-7 px-2 rounded-lg bg-white text-brand-navy hover:bg-brand-navy hover:text-white transition shadow-sm flex items-center justify-center gap-1 text-[9px] font-black"><i className="fa-regular fa-copy"></i> نسخ النص</button>
-                                            </div>
-                                            <StatusBadge tone="success">مسودة جاهزة</StatusBadge>
-                                        </div>
-                                    </div>
-                                    {generatedContractText ? (
-                                        <div className="space-y-4">
-                                            <div className="grid gap-4 md:grid-cols-3 text-right">
-                                                <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">البائع والمشتري</p>
-                                                    <p className="mt-3 text-sm font-black text-slate-700">{formData.sellerName || 'غير محدد'}</p>
-                                                    <p className="text-[10px] text-slate-500">جوال {formData.sellerPhone ? `+964${formData.sellerPhone}` : 'غير محدد'}</p>
-                                                    <p className="text-[10px] text-slate-500">السكن: {formData.sellerGovernorate || 'غير محدد'} - {formData.sellerLandmark || 'غير محدد'}</p>
-                                                    <p className="mt-3 text-sm font-black text-slate-700">{formData.buyerName || 'غير محدد'}</p>
-                                                    <p className="text-[10px] text-slate-500">جوال {formData.buyerPhone ? `+964${formData.buyerPhone}` : 'غير محدد'}</p>
-                                                    <p className="text-[10px] text-slate-500">السكن: {formData.buyerGovernorate || 'غير محدد'} - {formData.buyerLandmark || 'غير محدد'}</p>
-                                                </div>
-                                                <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">معلومات المركبة</p>
-                                                    <p className="mt-3 text-sm font-black text-slate-700">{formData.carModel || 'غير محدد'}</p>
-                                                    <p className="text-[10px] text-slate-500">VIN: {formData.vinNumber || 'غير محدد'}</p>
-                                                </div>
-                                                <div className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
-                                                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">السعر</p>
-                                                    <p className="mt-3 text-xl font-black text-brand-navy">{contractPriceValue.toLocaleString()} {formData.currency === 'IQD' ? 'د.ع' : '$'}</p>
-                                                    <p className="text-[10px] text-slate-500 mt-2">{selectedClauses.length} بنود اختيارية مضافة</p>
-                                                </div>
-                                            </div>
-                                            <div className="rounded-[2rem] border border-brand-gold/10 bg-brand-gold/5 p-4 text-right text-sm font-black text-brand-dark">
-                                                راجع بنود العقد بعناية قبل المتابعة. يمكنك تعديل أي سطر داخل النص مباشرةً.
-                                            </div>
-                                            <div className="relative group">
-                                                <textarea
-                                                    value={generatedContractText}
-                                                    onChange={(e) => setGeneratedContractText(e.target.value)}
-                                                    style={{ fontSize: `${previewFontSize}px` }}
-                                                    className="w-full h-96 p-6 bg-slate-50 rounded-[2rem] border border-slate-200 leading-relaxed text-slate-700 outline-none focus:bg-white focus:border-brand-navy transition-all custom-scrollbar font-medium shadow-inner resize-none text-right"
-                                                    placeholder="نص العقد..."
-                                                />
-                                                <div className="absolute top-4 left-4 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                                                    <span className="bg-brand-navy text-white text-[9px] font-black px-2 py-1 rounded-full shadow-sm">
-                                                        <i className="fa-solid fa-pen-to-square ml-1"></i> العقد قابل للتعديل يدوياً
-                                                    </span>
-                                                </div>
-                                            </div>
-
-                                            {(sellerSignature || buyerSignature) && (
-                                                <div className="mt-8 pt-4 border-t border-slate-100 flex flex-col sm:flex-row justify-between items-center text-center gap-4">
-                                                    {sellerSignature && (
-                                                        <div className="w-full sm:w-1/2 p-2">
-                                                            <p className="font-bold text-brand-dark mb-2">توقيع البائع:</p>
-                                                            <img src={sellerSignature} alt="Seller Signature" className="max-w-full h-auto mx-auto border-b border-slate-200 pb-2" />
-                                                            <p className="text-xs text-slate-500 mt-1">{formData.sellerName}</p>
-                                                        </div>
-                                                    )}
-                                                    {buyerSignature && (
-                                                        <div className="w-full sm:w-1/2 p-2">
-                                                            <p className="font-bold text-brand-dark mb-2">توقيع المشتري:</p>
-                                                            <img src={buyerSignature} alt="Buyer Signature" className="max-w-full h-auto mx-auto border-b border-slate-200 pb-2" />
-                                                            <p className="text-xs text-slate-500 mt-1">{formData.buyerName}</p>
-                                                        </div>
-                                                    )}
-                                                </div>
-                                            )}
-                                        </div>
-                                    ) : (
-                                        <div className="p-10 bg-red-50 rounded-[2rem] text-red-600 text-center border border-red-100">
-                                            {isFastMode && (
-                                                <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold">
-                                                    <i className="fa-solid fa-triangle-exclamation ml-1"></i>
-                                                    تنبيه: أنت تستخدم نمط التوليد السريع. يرجى مراجعة البنود يدوياً بعناية فائقة.
-                                                </div>
-                                            )}
-
-                                            <i className="fa-solid fa-triangle-exclamation text-5xl mb-4 opacity-50"></i>
-                                            <p className="font-black text-lg">فشل توليد النص</p>
-                                            <p className="text-sm font-bold opacity-70 mt-1">يرجى العودة والتحقق من البيانات المدخلة.</p>
-                                        </div>
-                                    )}
-                                    <div className="flex gap-3 pt-4">
-                                        <ActionButton onClick={prevStep} variant="secondary" className="flex-1">تعديل</ActionButton>
-                                        {isFastMode && (
-                                            <div className="flex-1 p-3 rounded-xl bg-amber-50 border border-amber-100 text-amber-700 text-xs font-bold text-center">
-                                                <i className="fa-solid fa-info-circle ml-1"></i>
-                                                نمط سريع: راجع يدوياً
-                                            </div>
-                                        )}
-
-                                        <ActionButton
-                                            onClick={handleSaveAsTemplate}
-                                            variant="secondary"
-                                            className="flex-1 border-slate-200 text-slate-600 hover:bg-slate-100"
-                                            disabled={isSavingTemplate || !generatedContractText}
-                                        >
-                                            {isSavingTemplate ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-bookmark ml-1"></i>}
-                                            {isSavingTemplate ? 'جاري الحفظ...' : 'حفظ كقالب'}
-                                        </ActionButton>
-                                        <ActionButton
-                                            onClick={handleSaveDraft}
-                                            variant="secondary"
-                                            className="flex-1 border-brand-gold text-brand-gold hover:bg-brand-gold hover:text-white"
-                                            disabled={isSavingDraft || !generatedContractText}
-                                        >
-                                            {isSavingDraft ? 'جاري الحفظ...' : 'حفظ كمسودة للمراجعة'}
-                                        </ActionButton>
-                                        <ActionButton onClick={() => setShowPdfPreviewModal(true)} variant="primary" className="flex-[1.2] py-4 shadow-lg shadow-brand-navy/20" disabled={!generatedContractText}>الموافقة والدفع</ActionButton>
-                                    </div>
-                                </div>
-                            )}
-
-                            {step === 4 && (
-                                <div className="space-y-6">
-                                    <div className="text-center space-y-3">
-                                        <div className="w-20 h-20 bg-red-50 rounded-[2rem] flex items-center justify-center mx-auto text-red-500 text-3xl shadow-sm border border-red-100">
-                                            <i className="fa-solid fa-mobile-screen-button"></i>
-                                        </div>
-                                        <h3 className="text-xl font-black text-brand-dark">تأكيد الدفع الرقمي</h3>
-                                        <p className="text-sm font-bold text-slate-500">سيتم توليد العقد وأرشفته فور إتمام العملية.</p>
-                                    </div>
-
-                                    <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200 space-y-4">
-                                        <div className="flex justify-between items-center flex-row-reverse border-b border-slate-200 pb-3">
-                                            <span className="text-xs font-black text-slate-400">الخدمة:</span>
-                                            <span className="text-sm font-black text-brand-dark">عقد سيارة ذكي</span>
-                                        </div>
-                                        <div className="flex justify-between items-center flex-row-reverse">
-                                            <span className="text-xs font-black text-slate-400">المبلغ المستحق:</span>
-                                            <span className="text-2xl font-black text-emerald-600">{(25000 - discountAmount).toLocaleString()} <span className="text-xs text-slate-400">د.ع</span></span>
-                                        </div>
-                                        <div className="flex justify-between items-center flex-row-reverse pt-2 border-t border-slate-100">
-                                            <span className="text-xs font-black text-slate-400">رصيدك الحالي:</span>
-                                            <span className="text-sm font-black text-brand-navy">{(user?.accountBalance || 0).toLocaleString()} د.ع</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200 space-y-4">
-                                        <div className="flex justify-between items-center flex-row-reverse">
-                                            <span className="text-xs font-black text-slate-400">كود الخصم:</span>
-                                            <div className="flex items-center gap-2">
-                                                <input
-                                                    type="text"
-                                                    placeholder="أدخل الكود"
-                                                    value={promoCodeInput}
-                                                    onChange={(e) => setPromoCodeInput(e.target.value)}
-                                                    className="w-32 p-2 bg-white rounded-lg border border-slate-200 outline-none text-right text-sm font-bold"
-                                                    disabled={isApplyingPromo || discountAmount > 0}
-                                                />
-                                                <ActionButton
-                                                    onClick={handleApplyPromoCode}
-                                                    variant="secondary"
-                                                    size="sm"
-                                                    disabled={isApplyingPromo || !promoCodeInput.trim() || discountAmount > 0}
-                                                >
-                                                    {isApplyingPromo ? 'جاري التطبيق...' : 'تطبيق'}
-                                                </ActionButton>
-                                            </div>
-                                        </div>
-                                        {discountAmount > 0 && (
-                                            <div className="flex justify-between items-center flex-row-reverse pt-2 border-t border-slate-100">
-                                                <span className="text-xs font-black text-emerald-600">الخصم المطبق:</span>
-                                                <span className="text-sm font-black text-emerald-600">{discountAmount.toLocaleString()} د.ع</span>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="flex gap-3">
-                                        <ActionButton onClick={prevStep} variant="secondary" className="flex-1" disabled={isPaying}>رجوع</ActionButton>
-                                        {(user?.accountBalance || 0) < 25000 ? (
-                                            <button
-                                                onClick={() => navigate('/billing')}
-                                                className="flex-[2] bg-brand-gold text-brand-dark rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-yellow-500 transition-all shadow-xl shadow-brand-gold/20 active:scale-95"
-                                            >
-                                                <i className="fa-solid fa-circle-plus"></i>
-                                                شحن الرصيد للمتابعة
-                                            </button>
-                                        ) : (
-                                            <button
-                                                onClick={handleWalletPayment} // سيتم تمرير promoCode من خلال formData
-                                                disabled={isPaying}
-                                                className="flex-[2] bg-brand-navy text-white rounded-2xl py-4 font-black flex items-center justify-center gap-3 hover:bg-brand-dark transition-all shadow-xl shadow-brand-navy/20 active:scale-95 disabled:opacity-50"
-                                            >
-                                                {isPaying ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-vault"></i>}
-                                                {isPaying ? 'جاري المعالجة...' : 'تأكيد الدفع من المحفظة'}
-                                            </button>
-                                        )}
-                                    </div>
-                                    {(user?.accountBalance || 0) < 25000 && (
-                                        <p className="text-rose-500 text-[10px] font-black text-center animate-pulse">رصيدك غير كافٍ لإتمام العملية. يرجى الشحن أولاً.</p>
-                                    )}
-                                    {contractError && <p className="text-rose-500 text-xs font-black mt-2 text-center animate-pulse">{contractError}</p>}
-                                </div>
-                            )}
-
-                            {step === 5 && (
-                                <div className="space-y-6">
-                                    <FormSectionTitle title="التوقيع الإلكتروني والمصادقة" icon="fa-pen-nib" colorClass="text-brand-navy" />
-                                    <div className="space-y-8 p-6 rounded-[2rem] border border-slate-200 bg-slate-50/50 shadow-inner">
-                                        <div className="space-y-4">
-                                            <div className="flex items-center justify-between px-1 mb-2">
-                                                {sellerSignature && (
+                                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">اختر محامياً للمراجعة</label>
+                                            <div className="grid gap-2 max-h-48 overflow-y-auto p-1 custom-scrollbar">
+                                                {availableLawyers.map(lawyer => (
                                                     <button
-                                                        onClick={() => setSellerSignature('')}
-                                                        className="text-[10px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
+                                                        key={lawyer.id}
+                                                        onClick={() => setSelectedLawyerId(lawyer.id)}
+                                                        className={`flex items-center justify-between p-3 rounded-xl border transition-all ${selectedLawyerId === lawyer.id ? 'border-brand-navy bg-brand-navy/5' : 'border-slate-100 hover:border-brand-gold'}`}
                                                     >
-                                                        <i className="fa-solid fa-rotate-left"></i> مسح وإعادة البدء
-                                                    </button>
-                                                )}
-                                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mr-auto flex items-center gap-2"><i className="fa-solid fa-user-tie text-brand-navy"></i> توقيع الطرف الأول (البائع)</label>
-                                            </div>
-                                            <SignaturePad
-                                                placeholder={formData.sellerName}
-                                                value={sellerSignature}
-                                                onSave={setSellerSignature}
-                                                onClear={() => setSellerSignature('')}
-                                                nameValue={formData.sellerName}
-                                            />
-                                        </div>
-
-                                        <div className="space-y-4">
-                                            <div className="flex items-center justify-between px-1 mb-2">
-                                                {buyerSignature ? (
-                                                    <button
-                                                        onClick={() => setBuyerSignature('')}
-                                                        className="text-[10px] font-black text-rose-500 hover:text-rose-600 transition flex items-center gap-1"
-                                                    >
-                                                        <i className="fa-solid fa-rotate-left"></i> مسح وإعادة البدء
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={handleShareSignatureLink}
-                                                        disabled={isSharingLink}
-                                                        className="text-[10px] font-black text-brand-navy hover:text-brand-gold transition flex items-center gap-1 disabled:opacity-50"
-                                                    >
-                                                        <i className={`fa-solid ${isSharingLink ? 'fa-spinner fa-spin' : 'fa-share-nodes'}`}></i>
-                                                        مشاركة رابط توقيع للمشتري
-                                                    </button>
-                                                )}
-                                                <label className="block text-[11px] font-black text-slate-400 uppercase tracking-widest mr-auto flex items-center gap-2"><i className="fa-solid fa-user-tag text-brand-gold"></i> توقيع الطرف الثاني (المشتري)</label>
-                                            </div>
-                                            <SignaturePad
-                                                placeholder={formData.buyerName}
-                                                value={buyerSignature}
-                                                onSave={setBuyerSignature}
-                                                onClear={() => setBuyerSignature('')}
-                                                nameValue={formData.buyerName}
-                                            />
-                                        </div>
-                                        <label className="flex items-start justify-end gap-3 cursor-pointer group bg-white p-4 rounded-2xl border border-slate-100">
-                                            <div className="text-right">
-                                                <p className="text-xs font-black text-brand-dark group-hover:text-brand-navy transition-colors">أقر بصحة البيانات المذكورة</p>
-                                                <p className="text-[10px] font-bold text-slate-400 mt-1">الموافقة على شروط العقد والتوقيع الإلكتروني الملزم قانونياً.</p>
-                                            </div>
-                                            <input
-                                                type="checkbox"
-                                                checked={agreedToTerms}
-                                                onChange={e => setAgreedToTerms(e.target.checked)}
-                                                className="h-5 w-5 rounded-lg accent-brand-navy mt-1"
-                                            />
-                                        </label>
-
-                                        <div className={`rounded-[2rem] border p-4 ${isSignatureReady ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'} text-right text-[10px] font-black text-slate-700`}>
-                                            <p className="mb-3">قبل المتابعة، تحقق من:</p>
-                                            <ul className="space-y-2 list-disc list-inside text-slate-600">
-                                                <li className={sellerSignature ? 'text-emerald-700' : 'text-rose-500'}>توقيع البائع مكتمل</li>
-                                                <li className={buyerSignature ? 'text-emerald-700' : 'text-rose-500'}>توقيع المشتري مكتمل</li>
-                                                <li className={agreedToTerms ? 'text-emerald-700' : 'text-rose-500'}>الموافقة على الشروط مفعلة</li>
-                                            </ul>
-                                        </div>
-
-                                        <div className="space-y-3 pt-4 border-t border-slate-100">
-                                            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest">تنبيه التذكير التلقائي (WhatsApp)</label>
-                                            <div className="flex gap-2">
-                                                {[12, 24, 48, 72].map(hours => (
-                                                    <button
-                                                        key={hours}
-                                                        type="button"
-                                                        onClick={() => setFormData({ ...formData, reminderDuration: hours })}
-                                                        className={`flex-1 py-2 rounded-xl text-[10px] font-black border transition ${formData.reminderDuration === hours ? 'bg-brand-navy text-white border-brand-navy shadow-md' : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'}`}
-                                                    >
-                                                        {hours === 24 ? 'يوم واحد' : hours === 48 ? 'يومين' : `${hours} ساعة`}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <ActionButton onClick={prevStep} variant="secondary" className="flex-1">رجوع</ActionButton>
-                                        <ActionButton onClick={handleFinalizeAndNotify} variant="primary" className="flex-[2] py-4 shadow-lg shadow-brand-navy/20" disabled={!sellerSignature || !buyerSignature || !agreedToTerms || isSendingWhatsApp || isSavingToWallet}>
-                                            {isSendingWhatsApp || isSavingToWallet ? <><i className="fa-solid fa-spinner fa-spin ml-2"></i> جاري الإرسال والأرشفة...</> : 'تأكيد وإرسال عبر WhatsApp'}
-                                        </ActionButton>
-                                    </div>
-                                    {contractError && <p className="text-amber-600 text-[11px] mt-2 text-center font-black">{contractError}</p>}
-                                </div>
-                            )}
-
-                            {step === 6 && (
-                                <div className="text-center space-y-6 py-4 relative">
-                                    <div className="relative">
-                                        <div className={`w-24 h-24 ${isDraftSaved ? 'bg-amber-50 text-amber-500 border-amber-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100'} rounded-[2.5rem] flex items-center justify-center mx-auto text-4xl shadow-sm border`}>
-                                            <i className={`fa-solid ${isDraftSaved ? 'fa-file-pen' : 'fa-file-circle-check'}`}></i>
-                                        </div>
-                                        <motion.div
-                                            initial={{ scale: 0 }}
-                                            animate={{ scale: 1 }}
-                                            className={`absolute -top-2 -right-1/3 translate-x-1/2 w-48 h-48 ${isDraftSaved ? 'bg-amber-500/5' : 'bg-emerald-500/5'} rounded-full -z-10 blur-2xl`}
-                                        ></motion.div>
-
-                                        {!isDraftSaved && (
-                                            <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                                                {[...Array(12)].map((_, i) => (
-                                                    <motion.div
-                                                        key={i}
-                                                        initial={{ y: 0, x: 0, opacity: 1, scale: 1 }}
-                                                        animate={{
-                                                            y: [-20, -100],
-                                                            x: [0, (i % 2 === 0 ? 50 : -50)],
-                                                            opacity: 0,
-                                                            scale: 0.5
-                                                        }}
-                                                        transition={{ duration: 1, delay: i * 0.1, repeat: Infinity, repeatDelay: 3 }}
-                                                        className="absolute left-1/2 top-1/2 h-2 w-2 rounded-full bg-emerald-400"
-                                                    />
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <h3 className="text-2xl font-black text-brand-dark">
-                                            {isDraftSaved ? 'تم حفظ المسودة بنجاح!' : 'تم التوقيع والأرشفة بنجاح!'}
-                                        </h3>
-                                        <p className="text-sm font-bold text-slate-500 px-10 leading-relaxed">
-                                            {isDraftSaved
-                                                ? isReviewRequested
-                                                    ? 'تم إرسال طلب المراجعة للمحامي بنجاح. ستصلك رسالة WhatsApp فور اكتمال التدقيق.'
-                                                    : 'تم حفظ العقد كمسودة في محفظتك. يمكنك الآن طلب مراجعة قانونية من محامٍ قبل إرساله للمشتري.'
-                                                : 'تم إرسال نسخة من العقد عبر WhatsApp للأطراف المعنية وتمت أرشفة الوثيقة في محفظتك القانونية.'}
-                                        </p>
-                                    </div>
-
-                                    {isDraftSaved && !isReviewRequested && (
-                                        <div className="px-8 space-y-4">
-                                            <div className="text-right">
-                                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-3">اختر محامياً للمراجعة</label>
-                                                <div className="grid gap-2 max-h-48 overflow-y-auto p-1 custom-scrollbar">
-                                                    {availableLawyers.map(lawyer => (
-                                                        <button
-                                                            key={lawyer.id}
-                                                            onClick={() => setSelectedLawyerId(lawyer.id)}
-                                                            className={`flex items-center justify-between p-3 rounded-xl border transition-all ${selectedLawyerId === lawyer.id ? 'border-brand-navy bg-brand-navy/5' : 'border-slate-100 hover:border-brand-gold'}`}
-                                                        >
-                                                            <div className="flex items-center gap-3">
-                                                                <img src={lawyer.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="" />
-                                                                <div className="text-right">
-                                                                    <p className="text-xs font-black text-brand-dark">{lawyer.name}</p>
-                                                                    <p className="text-[10px] text-slate-400 font-bold">{lawyer.specialty}</p>
-                                                                </div>
+                                                        <div className="flex items-center gap-3">
+                                                            <img src={lawyer.avatar} className="w-8 h-8 rounded-full border border-white shadow-sm" alt="" />
+                                                            <div className="text-right">
+                                                                <p className="text-xs font-black text-brand-dark">{lawyer.name}</p>
+                                                                <p className="text-[10px] text-slate-400 font-bold">{lawyer.specialty}</p>
                                                             </div>
-                                                            {selectedLawyerId === lawyer.id && <i className="fa-solid fa-circle-check text-brand-navy"></i>}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                                        </div>
+                                                        {selectedLawyerId === lawyer.id && <i className="fa-solid fa-circle-check text-brand-navy"></i>}
+                                                    </button>
+                                                ))}
                                             </div>
-                                            <button
-                                                onClick={handleRequestReview}
-                                                disabled={isRequestingReview || !selectedLawyerId}
-                                                className="w-full py-4 bg-brand-gold text-brand-dark rounded-2xl font-black text-sm shadow-lg shadow-brand-gold/20 hover:bg-yellow-500 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
-                                            >
-                                                {isRequestingReview ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-user-shield"></i>}
-                                                إرسال للمراجعة القانونية
-                                            </button>
                                         </div>
-                                    )}
-
-                                    <div className="bg-slate-50 p-5 rounded-[2rem] border border-slate-100 flex items-center gap-4 text-right max-w-sm mx-auto">
-                                        <div className="h-12 w-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-gold shrink-0">
-                                            <i className="fa-solid fa-vault text-xl"></i>
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-black text-brand-navy">محفظة المستندات</p>
-                                            <p className="text-[10px] font-bold text-slate-500 mt-1">العقد متاح الآن في ملفك الشخصي للتحميل في أي وقت.</p>
-                                        </div>
+                                        <button
+                                            onClick={handleRequestReview}
+                                            disabled={isRequestingReview || !selectedLawyerId}
+                                            className="w-full py-4 bg-brand-gold text-brand-dark rounded-2xl font-black text-sm shadow-lg shadow-brand-gold/20 hover:bg-yellow-500 transition-all flex justify-center items-center gap-2 disabled:opacity-50"
+                                        >
+                                            {isRequestingReview ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-user-shield"></i>}
+                                            إرسال للمراجعة القانونية
+                                        </button>
                                     </div>
+                                )}
 
-                                    <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
-                                        <ActionButton onClick={handleDownloadPdf} variant="primary" className="flex-1 py-4 shadow-lg shadow-brand-navy/20">
-                                            <i className="fa-solid fa-file-pdf ml-2"></i>
-                                            تحميل العقد (PDF)
-                                        </ActionButton>
-                                        <ActionButton // Add "View in My Cases" button
-                                            onClick={() => {
-                                                setStep(1);
-                                                clearDraft();
-                                                setIsDraftSaved(false);
-                                                setFormData({ sellerName: '', sellerPhone: '', sellerGovernorate: '', sellerLandmark: '', buyerName: '', buyerPhone: '', buyerGovernorate: '', buyerLandmark: '', carModel: '', vinNumber: '', price: '', currency: 'IQD', customClauses: '', reminderDuration: 24 });
-                                            }}
-                                            variant="secondary"
-                                            className="flex-1 py-4"
-                                        >
-                                            <i className="fa-solid fa-folder-open ml-2"></i>
-                                            عرض في ملفاتي
-                                        </ActionButton>
-                                        <ActionButton
-                                            onClick={() => navigate('/cases', { state: { activeCaseId: currentDraftId, focusArea: 'docs' } })}
-                                            variant="secondary"
-                                        >
-                                            <i className="fa-solid fa-plus ml-2"></i>
-                                            إنشاء عقد جديد
-                                        </ActionButton>
+                                <div className="bg-slate-50 p-5 rounded-[2rem] border border-slate-100 flex items-center gap-4 text-right max-w-sm mx-auto">
+                                    <div className="h-12 w-12 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-gold shrink-0">
+                                        <i className="fa-solid fa-vault text-xl"></i>
+                                    </div>
+                                    <div>
+                                        <p className="text-xs font-black text-brand-navy">محفظة المستندات</p>
+                                        <p className="text-[10px] font-bold text-slate-500 mt-1">العقد متاح الآن في ملفك الشخصي للتحميل في أي وقت.</p>
                                     </div>
                                 </div>
-                            )}
-                        </motion.div>
-                    </AnimatePresence>
-                )}
+
+                                <div className="flex flex-col sm:flex-row gap-3 justify-center pt-4">
+                                    <ActionButton onClick={handleDownloadPdf} variant="primary" className="flex-1 py-4 shadow-lg shadow-brand-navy/20">
+                                        <i className="fa-solid fa-file-pdf ml-2"></i>
+                                        تحميل العقد (PDF)
+                                    </ActionButton>
+                                    <ActionButton
+                                        onClick={() => {
+                                            setStep(1);
+                                            clearDraft();
+                                            setIsDraftSaved(false);
+                                            setFormData({ sellerName: '', sellerPhone: '', sellerGovernorate: '', sellerLandmark: '', buyerName: '', buyerPhone: '', buyerGovernorate: '', buyerLandmark: '', carModel: '', vinNumber: '', price: '', currency: 'IQD', customClauses: '', reminderDuration: 24 });
+                                        }}
+                                        variant="secondary"
+                                        className="flex-1 py-4"
+                                    >
+                                        <i className="fa-solid fa-folder-open ml-2"></i>
+                                        عرض في ملفاتي
+                                    </ActionButton>
+                                    <ActionButton
+                                        onClick={() => navigate('/cases', { state: { activeCaseId: currentDraftId, focusArea: 'docs' } })}
+                                        variant="secondary"
+                                    >
+                                        <i className="fa-solid fa-plus ml-2"></i>
+                                        إنشاء عقد جديد
+                                    </ActionButton>
+                                </div>
+                            </div>
+                        )}
+                    </motion.div>
+                </AnimatePresence>
             </div>
-            <style>{`
-                @import url('https://fonts.googleapis.com/css2?family=Amatic+SC:wght@400;700&display=swap');
-                .font-signature {
-                    font-family: 'Amatic SC', cursive; /* Example: use a signature-like font */
-                    font-size: 2rem;
-                    line-height: 1;
-                    color: #1B365D;
-                }
-                .custom-scrollbar::-webkit-scrollbar {
-                    width: 4px;
-                }
-                .custom-scrollbar::-webkit-scrollbar-track {
-                    background: transparent;
-                }
-                .custom-scrollbar::-webkit-scrollbar-thumb {
-                    background: #e2e8f0;
-                    border-radius: 10px;
-                }
-            `}</style>
         </div>
     );
 }

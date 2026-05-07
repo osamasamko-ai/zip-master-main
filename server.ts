@@ -50,6 +50,9 @@ import {
   addLegalDoc,
   updateLegalDoc,
   deleteLegalDoc,
+  getLegalServices,
+  addLegalService,
+  deleteLegalService,
 } from './src/server/adminData';
 import {
   changeCurrentUserPassword,
@@ -1076,6 +1079,16 @@ async function startServer() {
     res.json(await getTransactionRecords());
   });
 
+  app.get('/api/admin/kyc', async (req, res) => {
+    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    res.json(await getKycApplications(search, status as any));
+  });
+
+  app.get('/api/admin/users', async (req, res) => {
+    res.json(await getUsers());
+  });
+
   app.put('/api/admin/users/:id', async (req, res) => {
     const updated = await updateUserProfile(req.params.id, req.body);
     if (!updated) {
@@ -1326,6 +1339,51 @@ async function startServer() {
       return res.status(404).json({ error: 'document not found' });
     }
     return res.json(updated);
+  });
+
+  app.get('/api/admin/legal-services', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await getLegalServices());
+  });
+
+  app.post('/api/admin/legal-services', authenticateToken, adminOnly, async (req, res) => {
+    const { title, description, price, time, category, lawyerId } = req.body;
+    const icon = req.body.icon || 'fa-solid fa-scale-balanced';
+    const color = req.body.color || 'blue';
+
+    if (!title || !description || !price || !time || !category || !lawyerId) {
+      return res.status(400).json({ error: 'service fields, category, and lawyer are required' });
+    }
+
+    const lawyer = await prisma.user.findFirst({
+      where: {
+        id: lawyerId,
+        role: { in: ['pro', 'admin'] },
+        lawyerProfile: { isNot: null },
+      },
+    });
+
+    if (!lawyer) {
+      return res.status(400).json({ error: 'selected lawyer is not available' });
+    }
+
+    const created = await addLegalService({
+      title,
+      description,
+      icon,
+      price,
+      time,
+      color,
+      category,
+      lawyerId,
+    });
+    return res.status(201).json(created);
+  });
+
+  app.delete('/api/admin/legal-services/:id', authenticateToken, adminOnly, async (req, res) => {
+    if (!(await deleteLegalService(req.params.id))) {
+      return res.status(404).json({ error: 'service not found' });
+    }
+    return res.json({ success: true });
   });
 
   app.get('/api/admin/export', (req, res) => {
