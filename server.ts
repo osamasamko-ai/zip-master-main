@@ -1047,26 +1047,6 @@ async function startServer() {
     res.json(await getAdminMetrics());
   });
 
-  app.get('/api/kyc/applications', authenticateToken, adminOnly, async (req, res) => {
-    const search = typeof req.query.search === 'string' ? req.query.search : undefined;
-    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
-    res.json(await getKycApplications(search, status as any));
-  });
-
-  app.post('/api/kyc/applications/:id', authenticateToken, adminOnly, async (req, res) => {
-    const { status } = req.body;
-    if (status !== 'approved' && status !== 'rejected') {
-      return res.status(400).json({ error: 'status must be approved or rejected' });
-    }
-
-    const updated = await updateKycApplication(req.params.id, status);
-    if (!updated) {
-      return res.status(404).json({ error: 'application not found' });
-    }
-
-    return res.json({ success: true, application: updated });
-  });
-
   app.get('/api/admin/alerts', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getSecurityAlerts());
   });
@@ -1080,7 +1060,7 @@ async function startServer() {
     res.json(await getTransactionRecords());
   });
 
-  app.get('/api/admin/kyc', async (req, res) => {
+  app.get('/api/admin/kyc', authenticateToken, adminOnly, async (req, res) => {
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     res.json(await getKycApplications(search, status as any));
@@ -1100,11 +1080,11 @@ async function startServer() {
     return res.json({ success: true, application: updated });
   });
 
-  app.get('/api/admin/users', async (req, res) => {
+  app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getUsers());
   });
 
-  app.put('/api/admin/users/:id', async (req, res) => {
+  app.put('/api/admin/users/:id', authenticateToken, adminOnly, async (req, res) => {
     const updated = await updateUserProfile(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'user not found' });
@@ -1112,7 +1092,7 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.post('/api/admin/users/:id/role', async (req, res) => {
+  app.post('/api/admin/users/:id/role', authenticateToken, adminOnly, async (req, res) => {
     const { role } = req.body;
     if (!['user', 'pro', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'role must be user, pro, or admin' });
@@ -1124,7 +1104,7 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.post('/api/admin/users/:id/block', async (req, res) => {
+  app.post('/api/admin/users/:id/block', authenticateToken, adminOnly, async (req, res) => {
     const updated = await toggleUserBlock(req.params.id);
     if (!updated) {
       return res.status(404).json({ error: 'user not found' });
@@ -1197,11 +1177,11 @@ async function startServer() {
     }
   });
 
-  app.get('/api/admin/feature-flags', async (req, res) => {
+  app.get('/api/admin/feature-flags', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getFeatureFlags());
   });
 
-  app.post('/api/admin/feature-flags/:key', async (req, res) => {
+  app.post('/api/admin/feature-flags/:key', authenticateToken, adminOnly, async (req, res) => {
     const { enabled } = req.body;
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'enabled must be boolean' });
@@ -1213,11 +1193,11 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/support-tickets', async (req, res) => {
+  app.get('/api/admin/support-tickets', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getSupportTickets());
   });
 
-  app.post('/api/admin/support-tickets/:id', async (req, res) => {
+  app.post('/api/admin/support-tickets/:id', authenticateToken, adminOnly, async (req, res) => {
     const { status } = req.body;
     if (!['open', 'pending', 'resolved', 'escalated'].includes(status)) {
       return res.status(400).json({ error: 'invalid ticket status' });
@@ -1229,11 +1209,11 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/policies', async (req, res) => {
+  app.get('/api/admin/policies', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getPolicies());
   });
 
-  app.post('/api/admin/policies/:key', async (req, res) => {
+  app.post('/api/admin/policies/:key', authenticateToken, adminOnly, async (req, res) => {
     const { value } = req.body;
     if (typeof value !== 'string') {
       return res.status(400).json({ error: 'value must be a string' });
@@ -1249,25 +1229,25 @@ async function startServer() {
     res.json(await getSystemSettings());
   });
 
-  app.post('/api/admin/system-settings', async (req, res) => {
+  app.post('/api/admin/system-settings', authenticateToken, adminOnly, async (req, res) => {
     const updated = await updateSystemSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/ai-settings', async (req, res) => {
+  app.get('/api/admin/ai-settings', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getAiSettings());
   });
 
-  app.post('/api/admin/ai-settings', async (req, res) => {
+  app.post('/api/admin/ai-settings', authenticateToken, adminOnly, async (req, res) => {
     const updated = await updateAiSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/payment-gateways', async (req, res) => {
+  app.get('/api/admin/payment-gateways', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getPaymentGateways());
   });
 
-  app.post('/api/admin/payment-gateways/:key', async (req, res) => {
+  app.post('/api/admin/payment-gateways/:key', authenticateToken, adminOnly, async (req, res) => {
     const { enabled, feePercent } = req.body;
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'enabled must be boolean' });
@@ -1279,20 +1259,20 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/workflow-settings', async (req, res) => {
+  app.get('/api/admin/workflow-settings', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getWorkflowSettings());
   });
 
-  app.post('/api/admin/workflow-settings', async (req, res) => {
+  app.post('/api/admin/workflow-settings', authenticateToken, adminOnly, async (req, res) => {
     const updated = await updateWorkflowSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/notification-templates', async (req, res) => {
+  app.get('/api/admin/notification-templates', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getNotificationTemplates());
   });
 
-  app.post('/api/admin/notification-templates/:key', async (req, res) => {
+  app.post('/api/admin/notification-templates/:key', authenticateToken, adminOnly, async (req, res) => {
     const updated = await updateNotificationTemplate(req.params.key, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'notification template not found' });
@@ -1300,11 +1280,11 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/moderation-rules', async (req, res) => {
+  app.get('/api/admin/moderation-rules', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getModerationRules());
   });
 
-  app.post('/api/admin/moderation-rules', async (req, res) => {
+  app.post('/api/admin/moderation-rules', authenticateToken, adminOnly, async (req, res) => {
     const { type, value, active } = req.body;
     if (!type || !value) {
       return res.status(400).json({ error: 'type and value are required' });
@@ -1313,7 +1293,7 @@ async function startServer() {
     return res.status(201).json(newRule);
   });
 
-  app.post('/api/admin/moderation-rules/:id', async (req, res) => {
+  app.post('/api/admin/moderation-rules/:id', authenticateToken, adminOnly, async (req, res) => {
     const updated = await updateModerationRule(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'moderation rule not found' });
@@ -1321,18 +1301,18 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.delete('/api/admin/moderation-rules/:id', async (req, res) => {
+  app.delete('/api/admin/moderation-rules/:id', authenticateToken, adminOnly, async (req, res) => {
     if (!(await deleteModerationRule(req.params.id))) {
       return res.status(404).json({ error: 'moderation rule not found' });
     }
     return res.json({ success: true });
   });
 
-  app.get('/api/admin/legal-docs', async (req, res) => {
+  app.get('/api/admin/legal-docs', authenticateToken, adminOnly, async (req, res) => {
     res.json(await getLegalDocs());
   });
 
-  app.post('/api/admin/legal-docs', async (req, res) => {
+  app.post('/api/admin/legal-docs', authenticateToken, adminOnly, async (req, res) => {
     const { title, law, article, category, summary, source } = req.body;
     if (!title || !law || !article || !category || !summary || !source) {
       return res.status(400).json({ error: 'missing document fields' });
@@ -1341,14 +1321,14 @@ async function startServer() {
     return res.status(201).json(newDoc);
   });
 
-  app.delete('/api/admin/legal-docs/:id', async (req, res) => {
+  app.delete('/api/admin/legal-docs/:id', authenticateToken, adminOnly, async (req, res) => {
     if (!(await deleteLegalDoc(req.params.id))) {
       return res.status(404).json({ error: 'document not found' });
     }
     return res.json({ success: true });
   });
 
-  app.put('/api/admin/legal-docs/:id', async (req, res) => {
+  app.put('/api/admin/legal-docs/:id', authenticateToken, adminOnly, async (req, res) => {
     const updated = await updateLegalDoc(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'document not found' });
@@ -1410,7 +1390,7 @@ async function startServer() {
     res.json({ success: true, message: 'AI services restart queued' });
   });
 
-  app.get('/api/admin/export', async (req, res) => {
+  app.get('/api/admin/export', authenticateToken, adminOnly, async (req, res) => {
     const type = typeof req.query.type === 'string' ? req.query.type : 'kyc';
     if (type !== 'kyc' && type !== 'transactions') {
       return res.status(400).json({ error: 'type must be kyc or transactions' });

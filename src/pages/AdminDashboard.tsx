@@ -296,7 +296,7 @@ export default function AdminDashboard() {
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
 
   const getAuthHeaders = () => {
-    const token = typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null;
+    const token = typeof window !== 'undefined' ? window.localStorage.getItem('lexigate_token') : null;
     return token ? { Authorization: `Bearer ${token}` } : {};
   };
 

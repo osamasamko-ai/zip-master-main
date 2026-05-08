@@ -233,7 +233,19 @@ export async function updateKycApplication(id: string, status: KycStatus): Promi
     const updated = await prisma.kycApplication.update({
         where: { id },
         data: { status }
-    });
+    }) as any;
+
+    // Business Logic: If approved, update user verified status and lawyer profile
+    if (status === 'approved' && updated.userId) {
+        await prisma.user.update({
+            where: { id: updated.userId },
+            data: { verified: true }
+        });
+        await prisma.lawyerProfile.update({
+            where: { userId: updated.userId },
+            data: { licenseStatus: 'verified' }
+        });
+    }
 
     // Create Audit Log
     await prisma.transaction.create({
