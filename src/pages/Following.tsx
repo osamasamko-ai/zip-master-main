@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import FollowButton from '../components/FollowButton';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
-import NoticePanel from '../components/ui/NoticePanel';
 import StatusBadge from '../components/ui/StatusBadge';
 import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 import apiClient from '../api/client';
@@ -21,17 +20,23 @@ export default function Following() {
   const navigate = useNavigate();
   const { followedIds, follow, unfollow, isFollowed, isPending, totalFollowed } = useFollowedLawyers();
   const [followedSearch, setFollowedSearch] = useState('');
+  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [specialtyFilter, setSpecialtyFilter] = useState('all');
+  const [isLoading, setIsLoading] = useState(true);
   const [alerts, setAlerts] = useState<AvailabilityAlert[]>([]);
   const [activeToast, setActiveToast] = useState<AvailabilityAlert | null>(null);
   const [allLawyers, setAllLawyers] = useState<any[]>([]);
 
   useEffect(() => {
     const load = async () => {
+      setIsLoading(true);
       try {
         const lawyersResponse = await apiClient.getLawyers();
         setAllLawyers(lawyersResponse.data || []);
       } catch (error) {
         console.error('Failed to load following page data', error);
+      } finally {
+        setIsLoading(false);
       }
     };
 
@@ -59,19 +64,55 @@ export default function Following() {
     return () => window.removeEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
   }, []);
 
-  const followedLawyers = useMemo(
-    () =>
-      allLawyers
-        .filter((lawyer) => followedIds.includes(lawyer.id))
-        .filter((lawyer) => lawyer.name.toLowerCase().includes(followedSearch.trim().toLowerCase()))
-        .sort((left, right) => Number(right.isOnline) - Number(left.isOnline) || right.rating - left.rating),
-    [allLawyers, followedIds, followedSearch]
+  const savedLawyers = useMemo(
+    () => allLawyers.filter((lawyer) => followedIds.includes(lawyer.id)),
+    [allLawyers, followedIds],
   );
+
+  const specialties = useMemo(
+    () => ['all', ...Array.from(new Set(savedLawyers.map((lawyer) => lawyer.specialty).filter(Boolean)))],
+    [savedLawyers],
+  );
+
+  const followedLawyers = useMemo(() => {
+    const normalizedSearch = followedSearch.trim().toLowerCase();
+    return savedLawyers
+      .filter((lawyer) => {
+        const matchesSearch =
+          normalizedSearch.length === 0 ||
+          lawyer.name.toLowerCase().includes(normalizedSearch) ||
+          lawyer.specialty.toLowerCase().includes(normalizedSearch) ||
+          lawyer.location.toLowerCase().includes(normalizedSearch);
+        const matchesAvailability =
+          availabilityFilter === 'all' ||
+          (availabilityFilter === 'online' && lawyer.isOnline) ||
+          (availabilityFilter === 'offline' && !lawyer.isOnline);
+        const matchesSpecialty = specialtyFilter === 'all' || lawyer.specialty === specialtyFilter;
+
+        return matchesSearch && matchesAvailability && matchesSpecialty;
+      })
+      .sort((left, right) => Number(right.isOnline) - Number(left.isOnline) || right.rating - left.rating);
+  }, [availabilityFilter, followedSearch, savedLawyers, specialtyFilter]);
 
   const suggestedLawyers = useMemo(
     () => allLawyers.filter((lawyer) => !followedIds.includes(lawyer.id)).sort((left, right) => right.followers - left.followers),
     [allLawyers, followedIds]
   );
+
+  const onlineFollowedCount = savedLawyers.filter((lawyer) => lawyer.isOnline).length;
+  const totalFollowersAcrossSaved = savedLawyers.reduce((sum, lawyer) => sum + (lawyer.followers || 0), 0);
+  const topSavedLawyer = savedLawyers.slice().sort((left, right) => right.rating - left.rating)[0] || null;
+  const activeFilterCount = [
+    followedSearch.trim().length > 0,
+    availabilityFilter !== 'all',
+    specialtyFilter !== 'all',
+  ].filter(Boolean).length;
+
+  const resetFilters = () => {
+    setFollowedSearch('');
+    setAvailabilityFilter('all');
+    setSpecialtyFilter('all');
+  };
 
   useEffect(() => {
     if (!followedIds.length) return;
@@ -98,7 +139,7 @@ export default function Following() {
   }, [allLawyers, followedIds]);
 
   return (
-    <div className="app-view fade-in space-y-8 pb-12 text-right">
+    <div className="app-view fade-in space-y-6 pb-12 text-right">
       <AnimatePresence>
         {activeToast && (
           <motion.div
@@ -126,28 +167,53 @@ export default function Following() {
         )}
       </AnimatePresence>
 
-      <section className="relative overflow-hidden rounded-[2.5rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.03] p-8 shadow-premium">
-        <div className="absolute -left-20 -top-20 h-56 w-56 rounded-full bg-brand-gold/10 blur-3xl"></div>
-        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">Saved Lawyers</p>
-            <h2 className="mt-3 text-3xl font-black text-brand-dark">المحامون المحفوظون</h2>
-            <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
-              قائمة عملية للرجوع السريع إلى المحامين الذين تثق بهم، ثم التواصل أو فتح قضية جديدة معهم دون خطوات إضافية.
-            </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 lg:min-w-[320px]">
-            <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">المحفوظون</p>
-              <p className="mt-2 text-3xl font-black text-brand-dark">{totalFollowed}</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">قائمة مفضلة سريعة الوصول</p>
+      <section className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-white/80 shadow-premium backdrop-blur">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="p-6 md:p-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-gold">
+              <i className="fa-solid fa-bookmark"></i>
+              Saved Lawyers
             </div>
-            <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">الدليل الاجتماعي</p>
-              <p className="mt-2 text-3xl font-black text-brand-dark">
-                {followedLawyers.reduce((sum, lawyer) => sum + lawyer.followers, 0).toLocaleString()}
-              </p>
-              <p className="mt-1 text-xs font-bold text-slate-500">إجمالي متابعي المحامين المتابَعين</p>
+            <h2 className="mt-4 max-w-3xl text-3xl font-black leading-tight text-brand-dark md:text-4xl">المحامون المحفوظون</h2>
+            <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-slate-500">
+              قائمة عملية للرجوع السريع إلى المحامين الذين تثق بهم، مع فلاتر للتوفر والتخصص وإجراءات مباشرة للتواصل أو فتح قضية.
+            </p>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">المحفوظون</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{totalFollowed.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">متاحون الآن</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{onlineFollowedCount.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">أفضل محفوظ</p>
+                <p className="mt-2 truncate text-sm font-black text-brand-dark">{topSavedLawyer ? `${topSavedLawyer.name} • ${topSavedLawyer.rating}` : 'لا يوجد'}</p>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-6 text-white md:p-8">
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-lightgold">Saved Network</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                <p className="text-[11px] font-black text-white/60">نتائج العرض</p>
+                <p className="mt-2 text-3xl font-black">{followedLawyers.length.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                <p className="text-[11px] font-black text-white/60">إجمالي المتابعين</p>
+                <p className="mt-2 text-3xl font-black">{totalFollowersAcrossSaved.toLocaleString('ar-IQ')}</p>
+              </div>
+            </div>
+            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/10 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/60">الإجراء الأسرع</p>
+              <p className="mt-2 text-sm font-black">{onlineFollowedCount > 0 ? 'ابدأ بالمحامين المتاحين الآن' : 'راجع المقترحين أو افتح دليل المحامين'}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button onClick={() => setAvailabilityFilter('online')} className="rounded-xl bg-brand-gold px-3 py-2 text-[10px] font-black text-brand-dark transition hover:bg-brand-lightgold">المتاحون</button>
+                <button onClick={() => navigate('/lawyers')} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white transition hover:bg-white/20">دليل المحامين</button>
+              </div>
             </div>
           </div>
         </div>
@@ -155,10 +221,7 @@ export default function Following() {
 
       <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-6">
-          <NoticePanel
-            title="الخطوة التالية"
-            description="إذا كنت تريد إنجازاً سريعاً، ابدأ بالمحامي المتاح الآن ثم استخدم زر التواصل أو افتح قضية جديدة مباشرة من هذه الصفحة."
-          />
+          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-xl font-black text-brand-dark">المحامون المحفوظون</h3>
@@ -175,14 +238,54 @@ export default function Following() {
               <i className="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
             </div>
           </div>
+          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+            {([
+              { id: 'all', label: 'الكل', count: savedLawyers.length },
+              { id: 'online', label: 'متاح الآن', count: savedLawyers.filter((lawyer) => lawyer.isOnline).length },
+              { id: 'offline', label: 'حسب الجدول', count: savedLawyers.filter((lawyer) => !lawyer.isOnline).length },
+            ] as Array<{ id: 'all' | 'online' | 'offline'; label: string; count: number }>).map((filter) => (
+              <button
+                key={filter.id}
+                type="button"
+                onClick={() => setAvailabilityFilter(filter.id)}
+                className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition ${availabilityFilter === filter.id ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+              >
+                {filter.label}
+                <span className="mr-2 rounded-full bg-white/20 px-2 py-0.5">{filter.count.toLocaleString('ar-IQ')}</span>
+              </button>
+            ))}
+            {specialties.map((specialty) => (
+              <button
+                key={specialty}
+                type="button"
+                onClick={() => setSpecialtyFilter(specialty)}
+                className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition ${specialtyFilter === specialty ? 'bg-brand-gold text-brand-dark shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-gold hover:bg-white hover:text-brand-dark'}`}
+              >
+                {specialty === 'all' ? 'كل التخصصات' : specialty}
+              </button>
+            ))}
+          </div>
+          {(activeFilterCount > 0) && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
+              <span className="text-xs font-black text-slate-500">{activeFilterCount.toLocaleString('ar-IQ')} فلتر نشط</span>
+              <button onClick={resetFilters} className="text-xs font-black text-brand-navy transition hover:text-brand-dark">مسح الفلاتر</button>
+            </div>
+          )}
+          </section>
 
-          {followedLawyers.length > 0 ? (
+          {isLoading ? (
+            <div className="grid gap-6 sm:grid-cols-2">
+              {[0, 1, 2, 3].map((item) => (
+                <div key={item} className="h-80 animate-pulse rounded-[2rem] border border-slate-200 bg-white shadow-sm" />
+              ))}
+            </div>
+          ) : followedLawyers.length > 0 ? (
             <div className="grid gap-6 sm:grid-cols-2">
               {followedLawyers.map((lawyer) => (
                 <motion.article
                   key={lawyer.id}
                   layout
-                  className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm"
+                  className="group overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:border-brand-navy/30 hover:shadow-lg"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="space-y-3 text-right">
@@ -202,8 +305,8 @@ export default function Following() {
                         <p className="mt-1 text-sm font-bold text-slate-500">{lawyer.tagline}</p>
                       </div>
                     </div>
-                    <div className="relative">
-                      <img src={lawyer.avatar} alt={lawyer.name} className="h-16 w-16 rounded-2xl object-cover shadow-sm" />
+                    <div className="relative shrink-0">
+                      <img src={lawyer.avatar} alt={lawyer.name} className="h-16 w-16 rounded-2xl object-cover shadow-sm ring-4 ring-slate-50 transition group-hover:scale-105" />
                       <span className={`absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white ${lawyer.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
                     </div>
                   </div>
@@ -225,7 +328,7 @@ export default function Following() {
 
                   <div className="mt-5 flex items-center justify-between rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
                     <div className="text-right">
-                      <p className="text-xs font-black text-emerald-700">{lawyer.responseTime}</p>
+                      <p className={`text-xs font-black ${lawyer.isOnline ? 'text-emerald-700' : 'text-slate-600'}`}>{lawyer.isOnline ? 'متاح الآن' : lawyer.responseTime}</p>
                       <p className="mt-1 text-[11px] font-bold text-slate-500">يثق به {lawyer.followers.toLocaleString()} متابع</p>
                     </div>
                     <FollowButton isFollowing={true} isLoading={isPending(lawyer.id)} onToggle={() => unfollow(lawyer.id)} />
@@ -260,12 +363,16 @@ export default function Following() {
           ) : (
             <EmptyState
               icon="user-plus"
-              title="لا توجد محامون محفوظون بعد"
-              description="احفظ المحامين المناسبين لاحتياجك حتى تتمكن من العودة إليهم بسرعة والتواصل معهم من دون إعادة البحث."
+              title={savedLawyers.length > 0 ? 'لا توجد نتائج مطابقة' : 'لا توجد محامون محفوظون بعد'}
+              description={savedLawyers.length > 0 ? 'غيّر البحث أو الفلاتر لعرض محامين محفوظين أكثر.' : 'احفظ المحامين المناسبين لاحتياجك حتى تتمكن من العودة إليهم بسرعة والتواصل معهم من دون إعادة البحث.'}
               action={
-                <ActionButton onClick={() => navigate('/lawyers')} variant="primary">
-                  ابحث عن محامٍ
-                </ActionButton>
+                savedLawyers.length > 0 ? (
+                  <ActionButton onClick={resetFilters} variant="primary">مسح الفلاتر</ActionButton>
+                ) : (
+                  <ActionButton onClick={() => navigate('/lawyers')} variant="primary">
+                    ابحث عن محامٍ
+                  </ActionButton>
+                )
               }
             />
           )}
