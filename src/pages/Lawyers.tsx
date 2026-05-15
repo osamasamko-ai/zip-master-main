@@ -53,6 +53,8 @@ export default function Lawyers() {
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [sortMode, setSortMode] = useState<SortMode>('best');
   const [selectedLawyerId, setSelectedLawyerId] = useState('');
+  const [isLoadingLawyers, setIsLoadingLawyers] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [consultationLawyer, setConsultationLawyer] = useState<LawyerItem | null>(null);
   const [consultationNote, setConsultationNote] = useState('');
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(CONSULTATION_PAYMENT_METHODS[0].id);
@@ -62,12 +64,17 @@ export default function Lawyers() {
 
   useEffect(() => {
     const load = async () => {
+      setIsLoadingLawyers(true);
+      setLoadError('');
       try {
         const response = await apiClient.getLawyers();
         setLawyers(response.data || []);
         setSelectedLawyerId((response.data || [])[0]?.id || '');
       } catch (error) {
         console.error('Failed to load lawyers', error);
+        setLoadError('تعذر تحميل قائمة المحامين حالياً. حاول تحديث الصفحة.');
+      } finally {
+        setIsLoadingLawyers(false);
       }
     };
 
@@ -135,6 +142,28 @@ export default function Lawyers() {
   }, [filteredLawyers, selectedLawyerId]);
 
   const selectedLawyer = filteredLawyers.find((lawyer) => lawyer.id === selectedLawyerId) || filteredLawyers[0] || null;
+  const recommendedLawyer = filteredLawyers[0] || null;
+  const activeFilterCount = [
+    query.trim().length > 0,
+    specialty !== 'الكل',
+    verifiedOnly,
+    onlineOnly,
+    sortMode !== 'best',
+  ].filter(Boolean).length;
+  const onlineCount = filteredLawyers.filter((lawyer) => lawyer.isOnline).length;
+  const verifiedCount = filteredLawyers.filter((lawyer) => lawyer.verified).length;
+  const highestRatedLawyer = filteredLawyers.reduce<LawyerItem | null>(
+    (best, lawyer) => (!best || lawyer.rating > best.rating ? lawyer : best),
+    null,
+  );
+
+  const resetFilters = () => {
+    setQuery('');
+    setSpecialty('الكل');
+    setVerifiedOnly(false);
+    setOnlineOnly(false);
+    setSortMode('best');
+  };
 
   const handleOpenCase = (lawyer: LawyerItem) => {
     navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: lawyer.id } });
@@ -180,35 +209,68 @@ export default function Lawyers() {
   const selectedConsultationAmount = consultationLawyer ? parseConsultationFee(consultationLawyer.consultationFee) : 0;
 
   return (
-    <div className="app-view fade-in mx-auto max-w-[1440px] space-y-8 pb-12 text-right">
-      <section className="rounded-[2.5rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.03] p-8 shadow-premium">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px] xl:items-end">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">Find A Lawyer</p>
-            <h1 className="mt-3 text-3xl font-black text-brand-dark">ابحث عن المحامي المناسب بسرعة</h1>
-            <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">
-              ابحث حسب نوع القضية أو التخصص أو المدينة، ثم تواصل أو افتح ملفاً جديداً مباشرة من النتيجة دون المرور بخطوات إضافية.
+    <div className="app-view fade-in mx-auto max-w-[1440px] space-y-6 pb-12 text-right">
+      <section className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-white/80 shadow-premium backdrop-blur">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="p-6 md:p-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-gold">
+              <i className="fa-solid fa-scale-balanced"></i>
+              دليل المحامين
+            </div>
+            <h1 className="mt-4 max-w-3xl text-3xl font-black leading-tight text-brand-dark md:text-4xl">ابحث عن المحامي المناسب، ثم ابدأ الإجراء من نفس المكان</h1>
+            <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-slate-500">
+              فلترة سريعة حسب التخصص والتوفر، مقارنة واضحة للتقييم والاستجابة، وخيارات مباشرة للاستشارة أو فتح قضية.
             </p>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white px-4 py-3 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">أفضل تطابق</p>
+                <p className="mt-1 truncate text-sm font-black text-brand-dark">{recommendedLawyer?.name || 'بانتظار النتائج'}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white px-4 py-3 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">أعلى تقييم</p>
+                <p className="mt-1 truncate text-sm font-black text-brand-dark">{highestRatedLawyer ? `${highestRatedLawyer.name} • ${highestRatedLawyer.rating.toFixed(1)}` : 'لا يوجد'}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white px-4 py-3 shadow-sm">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">فلاتر نشطة</p>
+                <p className="mt-1 text-sm font-black text-brand-dark">{activeFilterCount.toLocaleString('ar-IQ')}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">النتائج</p>
-              <p className="mt-2 text-3xl font-black text-brand-dark">{filteredLawyers.length.toLocaleString('ar-IQ')}</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">مطابقة للبحث الحالي</p>
+          <div className="border-t border-slate-100 bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-6 text-white xl:border-r xl:border-t-0 md:p-8">
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-lightgold">Directory Pulse</p>
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <p className="text-[11px] font-black uppercase tracking-widest text-white/60">النتائج</p>
+                <p className="mt-2 text-3xl font-black">{filteredLawyers.length.toLocaleString('ar-IQ')}</p>
+                <p className="mt-1 text-xs font-bold text-white/60">مطابقة</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <p className="text-[11px] font-black uppercase tracking-widest text-white/60">متاحون</p>
+                <p className="mt-2 text-3xl font-black">{onlineCount.toLocaleString('ar-IQ')}</p>
+                <p className="mt-1 text-xs font-bold text-white/60">الآن</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <p className="text-[11px] font-black uppercase tracking-widest text-white/60">موثقون</p>
+                <p className="mt-2 text-3xl font-black">{verifiedCount.toLocaleString('ar-IQ')}</p>
+                <p className="mt-1 text-xs font-bold text-white/60">ضمن النتائج</p>
+              </div>
             </div>
-            <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">المتاحون الآن</p>
-              <p className="mt-2 text-3xl font-black text-brand-dark">
-                {filteredLawyers.filter((lawyer) => lawyer.isOnline).length.toLocaleString('ar-IQ')}
-              </p>
-              <p className="mt-1 text-xs font-bold text-slate-500">جاهزون للتواصل</p>
-            </div>
-            <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">المحفوظون</p>
-              <p className="mt-2 text-3xl font-black text-brand-dark">{followedIds.length.toLocaleString('ar-IQ')}</p>
-              <p className="mt-1 text-xs font-bold text-slate-500">عودة أسرع لاحقاً</p>
-            </div>
+
+            {recommendedLawyer && (
+              <button
+                type="button"
+                onClick={() => setSelectedLawyerId(recommendedLawyer.id)}
+                className="mt-5 flex w-full items-center justify-between gap-4 rounded-[1.5rem] border border-white/10 bg-white/10 p-4 text-right transition hover:bg-white/15"
+              >
+                <span className="rounded-full bg-brand-gold px-3 py-1 text-[10px] font-black text-brand-dark">مقترح</span>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black">{recommendedLawyer.name}</p>
+                  <p className="mt-1 truncate text-xs font-bold text-white/65">{recommendedLawyer.specialty} • {recommendedLawyer.responseTime}</p>
+                </div>
+              </button>
+            )}
           </div>
         </div>
       </section>
@@ -260,7 +322,31 @@ export default function Lawyers() {
               </label>
             </div>
 
-            <div className="mt-4 flex flex-wrap justify-end gap-3">
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+              {specialties.map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setSpecialty(item)}
+                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition ${specialty === item ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap gap-2">
+                {activeFilterCount > 0 && (
+                  <span className="rounded-full bg-brand-navy/5 px-3 py-2 text-[10px] font-black text-brand-navy">
+                    {activeFilterCount.toLocaleString('ar-IQ')} فلتر نشط
+                  </span>
+                )}
+                {query.trim() && (
+                  <span className="rounded-full bg-slate-100 px-3 py-2 text-[10px] font-black text-slate-500">بحث: {query.trim()}</span>
+                )}
+              </div>
+              <div className="flex flex-wrap justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setVerifiedOnly((current) => !current)}
@@ -277,32 +363,62 @@ export default function Lawyers() {
               </button>
               <button
                 type="button"
-                onClick={() => {
-                  setQuery('');
-                  setSpecialty('الكل');
-                  setVerifiedOnly(false);
-                  setOnlineOnly(false);
-                  setSortMode('best');
-                }}
+                onClick={resetFilters}
                 className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-500 transition hover:border-brand-navy hover:text-brand-navy"
               >
                 مسح الفلاتر
               </button>
+              </div>
             </div>
           </section>
 
-          {filteredLawyers.length > 0 ? (
+          {loadError ? (
+            <EmptyState
+              icon="triangle-exclamation"
+              title="تعذر تحميل المحامين"
+              description={loadError}
+              action={<ActionButton variant="primary" onClick={() => window.location.reload()}>تحديث الصفحة</ActionButton>}
+            />
+          ) : isLoadingLawyers ? (
             <div className="grid gap-4">
-              {filteredLawyers.map((lawyer) => (
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                  <div className="animate-pulse space-y-5">
+                    <div className="flex items-start gap-4">
+                      <div className="h-20 w-20 rounded-[1.75rem] bg-slate-100"></div>
+                      <div className="flex-1 space-y-3">
+                        <div className="h-4 w-1/3 rounded bg-slate-100"></div>
+                        <div className="h-3 w-2/3 rounded bg-slate-100"></div>
+                        <div className="h-3 w-1/2 rounded bg-slate-100"></div>
+                      </div>
+                    </div>
+                    <div className="grid gap-3 md:grid-cols-4">
+                      <div className="h-16 rounded-2xl bg-slate-100"></div>
+                      <div className="h-16 rounded-2xl bg-slate-100"></div>
+                      <div className="h-16 rounded-2xl bg-slate-100"></div>
+                      <div className="h-16 rounded-2xl bg-slate-100"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : filteredLawyers.length > 0 ? (
+            <div className="grid gap-4">
+              {filteredLawyers.map((lawyer, index) => (
                 <article
                   key={lawyer.id}
-                  className={`rounded-[2rem] border bg-white p-5 text-right shadow-sm transition ${selectedLawyer?.id === lawyer.id ? 'border-brand-navy shadow-lg' : 'border-slate-200 hover:border-brand-navy/30 hover:shadow-md'}`}
+                  className={`relative overflow-hidden rounded-[2rem] border bg-white p-5 text-right shadow-sm transition ${selectedLawyer?.id === lawyer.id ? 'border-brand-navy shadow-lg shadow-brand-navy/10' : 'border-slate-200 hover:border-brand-navy/30 hover:shadow-md'}`}
                 >
+                  <div className={`absolute inset-y-0 right-0 w-1.5 ${selectedLawyer?.id === lawyer.id ? 'bg-brand-navy' : 'bg-transparent'}`}></div>
                   <div className="flex flex-col gap-4 lg:flex-row-reverse lg:items-start lg:justify-between">
                     <div className="flex items-start gap-4">
-                      <img src={lawyer.avatar} alt={lawyer.name} className="h-20 w-20 rounded-[1.75rem] object-cover shadow-sm" />
-                      <div className="space-y-3">
+                      <div className="relative shrink-0">
+                        <img src={lawyer.avatar} alt={lawyer.name} className="h-20 w-20 rounded-[1.75rem] object-cover shadow-sm ring-4 ring-slate-50" />
+                        {lawyer.isOnline && <span className="absolute bottom-1 left-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500"></span>}
+                      </div>
+                      <div className="min-w-0 space-y-3">
                         <div className="flex flex-wrap items-center justify-end gap-2">
+                          {index === 0 && sortMode === 'best' && <StatusBadge tone="warning">أفضل تطابق</StatusBadge>}
                           {lawyer.verified && <StatusBadge tone="info">موثق</StatusBadge>}
                           {followedIds.includes(lawyer.id) && <StatusBadge tone="warning">محفوظ</StatusBadge>}
                           <StatusBadge tone={lawyer.isOnline ? 'success' : 'neutral'}>
@@ -324,9 +440,9 @@ export default function Lawyers() {
                     <button
                       type="button"
                       onClick={() => setSelectedLawyerId(lawyer.id)}
-                      className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-black text-slate-600 transition hover:border-brand-navy hover:bg-white hover:text-brand-navy"
+                      className={`rounded-2xl border px-4 py-3 text-xs font-black transition ${selectedLawyer?.id === lawyer.id ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
                     >
-                      عرض الملخص
+                      {selectedLawyer?.id === lawyer.id ? 'معروض في الملخص' : 'عرض الملخص'}
                     </button>
                   </div>
 
@@ -381,6 +497,12 @@ export default function Lawyers() {
                         {lawyer.isOnline ? 'رد أسرع متوقع' : 'ابدأ بتنظيم الطلب'}
                       </span>
                     </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-brand-gold transition-all"
+                        style={{ width: `${Math.min(100, Math.round((lawyer.rating / 5) * 72 + (lawyer.isOnline ? 14 : 0) + (lawyer.verified ? 14 : 0)))}%` }}
+                      ></div>
+                    </div>
                   </div>
                 </article>
               ))}
@@ -393,11 +515,7 @@ export default function Lawyers() {
               action={
                 <ActionButton
                   onClick={() => {
-                    setQuery('');
-                    setSpecialty('الكل');
-                    setVerifiedOnly(false);
-                    setOnlineOnly(false);
-                    setSortMode('best');
+                    resetFilters();
                   }}
                   variant="primary"
                 >
