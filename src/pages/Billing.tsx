@@ -34,6 +34,8 @@ type TopUpMethod = {
   icon: string;
 };
 
+type TransactionFilter = 'all' | 'pending' | 'paid' | 'credit';
+
 const PRESET_AMOUNTS = [25000, 50000, 100000, 250000];
 
 const PAYMENT_METHODS: TopUpMethod[] = [
@@ -58,6 +60,8 @@ export default function Billing() {
   const [selectedAmount, setSelectedAmount] = useState<number>(PRESET_AMOUNTS[1]);
   const [customAmount, setCustomAmount] = useState('');
   const [selectedMethodId, setSelectedMethodId] = useState(PAYMENT_METHODS[0].id);
+  const [transactionFilter, setTransactionFilter] = useState<TransactionFilter>('all');
+  const [transactionSearch, setTransactionSearch] = useState('');
   const [note, setNote] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingBalance, setIsAddingBalance] = useState(false);
@@ -91,7 +95,36 @@ export default function Billing() {
     () => (dashboard?.payments || []).filter((item) => item.type === 'credit' || item.label.includes('رصيد')),
     [dashboard?.payments],
   );
+  const totalPendingAmount = useMemo(
+    () => pendingPayments.reduce((total, item) => total + parseAmount(item.amount), 0),
+    [pendingPayments],
+  );
+  const recentCreditAmount = useMemo(
+    () => creditTransactions.reduce((total, item) => total + parseAmount(item.amount), 0),
+    [creditTransactions],
+  );
+  const filteredTransactions = useMemo(() => {
+    const normalizedQuery = transactionSearch.trim().toLowerCase();
+
+    return (dashboard?.payments || []).filter((item) => {
+      const matchesFilter =
+        transactionFilter === 'all' ||
+        (transactionFilter === 'pending' && item.status !== 'مدفوع') ||
+        (transactionFilter === 'paid' && item.status === 'مدفوع') ||
+        (transactionFilter === 'credit' && (item.type === 'credit' || item.label.includes('رصيد')));
+      const matchesSearch =
+        normalizedQuery.length === 0 ||
+        item.label.toLowerCase().includes(normalizedQuery) ||
+        item.amount.toLowerCase().includes(normalizedQuery) ||
+        item.status.toLowerCase().includes(normalizedQuery) ||
+        (item.source || '').toLowerCase().includes(normalizedQuery);
+
+      return matchesFilter && matchesSearch;
+    });
+  }, [dashboard?.payments, transactionFilter, transactionSearch]);
   const isAmountValid = amountToUse >= 5000 && amountToUse <= 1000000;
+  const walletTarget = Math.max(250000, totalPendingAmount + 100000);
+  const walletCoverage = Math.min(100, Math.round((availableBalance / walletTarget) * 100));
 
   const handleAddBalance = async () => {
     if (!isAmountValid || isAddingBalance) {
@@ -137,34 +170,38 @@ export default function Billing() {
 
   return (
     <div className="app-view fade-in mx-auto max-w-[1400px] space-y-6 pb-12 text-right">
-      <section className="rounded-[1.75rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.03] p-5 shadow-premium md:p-7">
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="flex flex-col justify-between gap-6">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">Billing</p>
-              <h1 className="mt-3 text-3xl font-black text-brand-dark">المحفظة والمدفوعات</h1>
-              <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">
-                أضف رصيداً، راجع المستحقات، وتابع سجل المدفوعات من شاشة واحدة واضحة.
-              </p>
+      <section className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-white/80 shadow-premium backdrop-blur">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="p-6 md:p-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-gold">
+              <i className="fa-solid fa-receipt"></i>
+              Billing Center
             </div>
+            <h1 className="mt-4 max-w-3xl text-3xl font-black leading-tight text-brand-dark md:text-4xl">المحفظة والمدفوعات في لوحة واحدة</h1>
+            <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-slate-500">
+              راقب الرصيد، سدّد المستحقات، وأضف رصيداً جديداً مع سجل معاملات قابل للبحث والفلترة.
+            </p>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+            <div className="mt-6 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
                 <p className="text-[11px] font-black text-slate-400">المستحق الآن</p>
-                <p className="mt-2 text-2xl font-black text-brand-dark">{pendingPayments.length.toLocaleString('ar-IQ')}</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{formatCurrency(totalPendingAmount)}</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">{pendingPayments.length.toLocaleString('ar-IQ')} فاتورة معلقة</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
                 <p className="text-[11px] font-black text-slate-400">إضافات الرصيد</p>
-                <p className="mt-2 text-2xl font-black text-brand-dark">{creditTransactions.length.toLocaleString('ar-IQ')}</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{formatCurrency(recentCreditAmount)}</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">{creditTransactions.length.toLocaleString('ar-IQ')} عملية</p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white/90 p-4 shadow-sm">
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
                 <p className="text-[11px] font-black text-slate-400">آخر تحديث</p>
-                <p className="mt-2 text-sm font-black text-brand-dark">{dashboard?.payments?.[0]?.date || 'لا توجد معاملات'}</p>
+                <p className="mt-2 truncate text-sm font-black text-brand-dark">{dashboard?.payments?.[0]?.date || 'لا توجد معاملات'}</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">سجل المدفوعات</p>
               </div>
             </div>
           </div>
 
-          <div className="overflow-hidden rounded-2xl bg-brand-navy p-6 text-white shadow-xl shadow-brand-navy/15">
+          <div className="overflow-hidden bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-6 text-white md:p-8">
             <div className="flex items-start justify-between gap-4">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-brand-gold">
                 <i className="fa-solid fa-wallet text-xl"></i>
@@ -176,6 +213,16 @@ export default function Billing() {
                 </p>
                 <p className="mt-2 text-xs font-bold leading-6 text-blue-100">يمكن استخدامه لفتح الاستشارات أو تسوية الفواتير القادمة.</p>
               </div>
+            </div>
+            <div className="mt-5 rounded-2xl bg-white/10 p-4">
+              <div className="mb-2 flex items-center justify-between text-[11px] font-black text-blue-100">
+                <span>{walletCoverage}%</span>
+                <span>جاهزية المحفظة</span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-white/15">
+                <div className="h-full rounded-full bg-brand-gold transition-all" style={{ width: `${walletCoverage}%` }}></div>
+              </div>
+              <p className="mt-2 text-[11px] font-bold leading-5 text-blue-100">الهدف المقترح: {formatCurrency(walletTarget)}</p>
             </div>
             <div className="mt-5 grid gap-3 sm:grid-cols-2">
               <ActionButton
@@ -202,7 +249,7 @@ export default function Billing() {
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="space-y-5">
-          <section id="add-credit-balance" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section id="add-credit-balance" className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-lg font-black text-brand-dark">إضافة رصيد</h2>
@@ -229,6 +276,25 @@ export default function Billing() {
               ))}
             </div>
 
+            <div className="mt-4 rounded-[1.5rem] border border-brand-navy/10 bg-brand-navy/[0.03] p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">اقتراح سريع</p>
+                  <p className="mt-1 text-sm font-black text-brand-dark">أضف ما يكفي لتغطية المستحقات الحالية مع هامش للاستشارات.</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedAmount(walletTarget);
+                    setCustomAmount(String(walletTarget));
+                  }}
+                  className="rounded-xl border border-brand-navy/10 bg-white px-4 py-2 text-xs font-black text-brand-navy shadow-sm transition hover:border-brand-navy"
+                >
+                  استخدام {formatCurrency(walletTarget)}
+                </button>
+              </div>
+            </div>
+
             <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_300px]">
               <div className="space-y-4">
                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -251,9 +317,12 @@ export default function Billing() {
                       key={method.id}
                       type="button"
                       onClick={() => setSelectedMethodId(method.id)}
-                      className={`rounded-2xl border p-4 text-right transition ${selectedMethodId === method.id ? 'border-brand-navy bg-brand-navy/5 shadow-sm' : 'border-slate-200 bg-white hover:border-brand-navy/30'}`}
+                      className={`rounded-2xl border p-4 text-right transition ${selectedMethodId === method.id ? 'border-brand-navy bg-brand-navy/5 shadow-sm ring-4 ring-brand-navy/5' : 'border-slate-200 bg-white hover:border-brand-navy/30'}`}
                     >
-                      <i className={`fa-solid ${method.icon} text-lg text-brand-gold`}></i>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className={`h-4 w-4 rounded-full border ${selectedMethodId === method.id ? 'border-brand-navy bg-brand-navy shadow-[inset_0_0_0_3px_white]' : 'border-slate-300 bg-white'}`}></span>
+                        <i className={`fa-solid ${method.icon} text-lg text-brand-gold`}></i>
+                      </div>
                       <p className="mt-3 text-sm font-black text-brand-dark">{method.label}</p>
                       <p className="mt-1 text-[10px] font-bold text-slate-400">{method.detail}</p>
                     </button>
@@ -269,9 +338,12 @@ export default function Billing() {
                 />
               </div>
 
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4">
                 <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">ملخص الإضافة</p>
                 <p className="mt-4 text-3xl font-black text-brand-dark">{formatCurrency(amountToUse)}</p>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-white">
+                  <div className={`h-full rounded-full transition-all ${isAmountValid ? 'bg-emerald-500' : 'bg-red-400'}`} style={{ width: `${Math.min(100, Math.max(6, (amountToUse / 1000000) * 100))}%` }}></div>
+                </div>
                 <div className="mt-4 space-y-3 text-xs font-bold text-slate-500">
                   <div className="flex items-center justify-between gap-3">
                     <span>{selectedMethod.label}</span>
@@ -308,21 +380,52 @@ export default function Billing() {
             </div>
           </section>
 
-          <section id="billing-transactions" className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
+          <section id="billing-transactions" className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <h2 className="text-lg font-black text-brand-dark">المعاملات والفواتير</h2>
                 <p className="mt-1 text-xs font-bold text-slate-500">سجل واضح يساعدك على معرفة ما تم دفعه وما يزال معلقاً.</p>
               </div>
-              <ActionButton
-                type="button"
-                onClick={() => document.getElementById('add-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
-                variant="ghost"
-                size="sm"
-              >
-                <i className="fa-solid fa-plus"></i>
-                إضافة
-              </ActionButton>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="relative">
+                  <input
+                    type="search"
+                    value={transactionSearch}
+                    onChange={(event) => setTransactionSearch(event.target.value)}
+                    placeholder="ابحث في المعاملات..."
+                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-4 pr-10 text-right text-xs font-bold text-slate-700 outline-none transition focus:border-brand-navy sm:w-64"
+                  />
+                  <i className="fa-solid fa-search absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400"></i>
+                </div>
+                <ActionButton
+                  type="button"
+                  onClick={() => document.getElementById('add-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                  variant="ghost"
+                  size="sm"
+                >
+                  <i className="fa-solid fa-plus"></i>
+                  إضافة
+                </ActionButton>
+              </div>
+            </div>
+
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+              {([
+                { id: 'all', label: 'الكل', count: dashboard?.payments?.length || 0 },
+                { id: 'pending', label: 'معلقة', count: pendingPayments.length },
+                { id: 'paid', label: 'مدفوعة', count: (dashboard?.payments || []).filter((item) => item.status === 'مدفوع').length },
+                { id: 'credit', label: 'رصيد', count: creditTransactions.length },
+              ] as Array<{ id: TransactionFilter; label: string; count: number }>).map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setTransactionFilter(filter.id)}
+                  className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition ${transactionFilter === filter.id ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+                >
+                  {filter.label}
+                  <span className="mr-2 rounded-full bg-white/20 px-2 py-0.5">{filter.count.toLocaleString('ar-IQ')}</span>
+                </button>
+              ))}
             </div>
 
             {isLoading ? (
@@ -331,10 +434,10 @@ export default function Billing() {
                   <div key={item} className="h-24 animate-pulse rounded-2xl bg-slate-100" />
                 ))}
               </div>
-            ) : (dashboard?.payments || []).length > 0 ? (
+            ) : filteredTransactions.length > 0 ? (
               <div className="mt-4 grid gap-3">
-                {(dashboard?.payments || []).map((item) => (
-                  <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+                {filteredTransactions.map((item) => (
+                  <div key={item.id} className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4 transition hover:border-brand-navy/30 hover:bg-white">
                     <div className="flex items-start justify-between gap-3">
                       <span className={`rounded-xl px-3 py-1 text-[11px] font-black ${item.status === 'مدفوع' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
                         {item.status}
@@ -353,6 +456,21 @@ export default function Billing() {
                   </div>
                 ))}
               </div>
+            ) : (dashboard?.payments || []).length > 0 ? (
+              <div className="mt-4 rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center">
+                <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-300 shadow-sm">
+                  <i className="fa-solid fa-filter-circle-xmark text-xl"></i>
+                </div>
+                <p className="text-sm font-black text-brand-dark">لا توجد معاملات مطابقة</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">غيّر البحث أو الفلتر لعرض معاملات أكثر.</p>
+                <button
+                  type="button"
+                  onClick={() => { setTransactionSearch(''); setTransactionFilter('all'); }}
+                  className="mt-4 rounded-xl border border-slate-200 bg-white px-4 py-2 text-[10px] font-black text-brand-navy shadow-sm transition hover:border-brand-navy"
+                >
+                  مسح الفلاتر
+                </button>
+              </div>
             ) : (
               <div className="mt-4">
                 <EmptyState
@@ -366,15 +484,29 @@ export default function Billing() {
         </div>
 
         <aside className="space-y-4">
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-black text-brand-dark">المطلوب الآن</h2>
             <div className="mt-4 space-y-3">
               {pendingPayments.length > 0 ? (
                 pendingPayments.map((item) => (
                   <div key={item.id} className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-4">
-                    <p className="text-sm font-black text-brand-dark">{item.label}</p>
-                    <p className="mt-1 text-xs font-bold text-slate-500">{item.amount}</p>
-                    <p className="mt-1 text-xs font-bold text-amber-700">الحالة: {item.status}</p>
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-amber-700">{item.status}</span>
+                      <div>
+                        <p className="text-sm font-black text-brand-dark">{item.label}</p>
+                        <p className="mt-1 text-xs font-bold text-slate-500">{item.source || item.date}</p>
+                      </div>
+                    </div>
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => document.getElementById('add-credit-balance')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+                        className="rounded-xl bg-brand-navy px-3 py-2 text-[10px] font-black text-white transition hover:bg-brand-dark"
+                      >
+                        إضافة رصيد
+                      </button>
+                      <p className="text-sm font-black text-amber-800">{item.amount}</p>
+                    </div>
                   </div>
                 ))
               ) : (
@@ -385,7 +517,7 @@ export default function Billing() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-black text-brand-dark">نصائح سريعة</h2>
             <div className="mt-4 space-y-3">
               <div className="rounded-2xl bg-slate-50 p-4">
@@ -399,7 +531,7 @@ export default function Billing() {
             </div>
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-black text-brand-dark">أسرع المسارات</h2>
             <div className="mt-4 grid gap-3">
               <ActionButton onClick={() => navigate('/cases', { state: { openNewCase: true } })} variant="primary" className="w-full">
