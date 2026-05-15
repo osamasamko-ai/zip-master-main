@@ -253,6 +253,7 @@ export default function Messages() {
       : 'اكتب رسالتك أو استفسارك هنا...';
   const selectedCaseDocumentsNeedingAction = selectedCase?.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length ?? 0;
   const selectedCaseSignedDocuments = selectedCase?.documents.filter((doc) => doc.isSigned).length ?? 0;
+  const viewerAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || (viewerRole === 'lawyer' ? 'محامي' : 'مستخدم'))}&background=1A237E&color=ffffff`;
 
   const replaceCaseInState = useCallback((nextCase: WorkspaceCase) => {
     setCases((current) => {
@@ -936,10 +937,10 @@ export default function Messages() {
           </aside>
           )}
 
-          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-premium xl:min-h-0">
+          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-premium xl:min-h-0">
             {selectedConversation && selectedCase ? (
               <>
-                <div className="border-b border-slate-100 bg-white p-4">
+                <div className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(248,250,252,0.96),rgba(255,255,255,1))] p-4">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div
                       className={`flex items-center gap-3 ${viewerRole === 'user' ? 'cursor-pointer group/participant' : ''}`}
@@ -1081,7 +1082,7 @@ export default function Messages() {
 
                 <div
                   ref={scrollRef}
-                  className="custom-scrollbar flex-1 space-y-5 overflow-y-auto bg-slate-50/60 p-4 md:p-6"
+                  className="custom-scrollbar flex-1 space-y-5 overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(241,245,249,0.72))] p-4 md:p-6"
                 >
                   <div className="flex justify-center my-4">
                     <span className="rounded-full bg-slate-100 px-4 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">اليوم</span>
@@ -1098,15 +1099,25 @@ export default function Messages() {
                         <motion.div
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className={`flex ${isMe ? 'justify-start' : 'justify-end'}`}
+                          className={`flex items-end gap-2 ${isMe ? 'justify-start' : 'justify-end'}`}
                         >
+                          <div className={`flex items-end gap-2 ${isMe ? 'flex-row' : 'flex-row-reverse'}`}>
+                            <img
+                              src={isMe ? viewerAvatar : selectedConversation.participantImg}
+                              alt={isMe ? 'أنت' : selectedConversation.participantName}
+                              className="h-8 w-8 shrink-0 rounded-xl border border-white object-cover shadow-sm"
+                            />
                           <div className={`relative max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm md:max-w-[72%] md:px-5 group ${isMe
-                            ? 'bg-brand-navy text-white rounded-tl-md'
+                            ? 'bg-brand-navy text-white rounded-tl-md shadow-brand-navy/10'
                             : isRequestMessage(message.text)
                               ? 'bg-white border border-brand-gold/30 text-slate-700 rounded-tr-md ring-4 ring-brand-gold/5'
                               : 'bg-white border border-slate-100 text-slate-700 rounded-tr-md'
                             }`}
                           >
+                            <div className={`mb-2 flex items-center justify-between gap-3 text-[10px] font-black ${isMe ? 'text-white/55' : 'text-slate-400'}`}>
+                              <span>{formatTime(message.createdAt)}</span>
+                              <span>{isMe ? 'أنت' : selectedConversation.participantName}</span>
+                            </div>
                             <button
                               onClick={() => navigator.clipboard.writeText(message.text)}
                               className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-slate-100 bg-white text-slate-400 opacity-0 shadow-sm transition hover:text-brand-navy group-hover:opacity-100 ${isMe ? 'left-2' : 'right-2'}`}
@@ -1219,7 +1230,7 @@ export default function Messages() {
                               </div>
                             )}
                             <div className={`mt-2 flex items-center justify-end gap-1.5 text-[9px] font-black uppercase ${isMe ? 'text-white/50' : 'text-slate-400'}`}>
-                              <span>{formatTime(message.createdAt)}</span>
+                              <span>{message.deliveryState === 'sending' ? 'جارٍ المزامنة' : 'تمت المزامنة'}</span>
                               {isMe && (
                                 <motion.i
                                   initial={false}
@@ -1230,6 +1241,7 @@ export default function Messages() {
                                 />
                               )}
                             </div>
+                          </div>
                           </div>
                         </motion.div>
                       </div>
@@ -1253,9 +1265,9 @@ export default function Messages() {
                   )}
                 </div>
 
-                <div className="border-t border-slate-100 p-4 bg-white">
+                <div className="border-t border-slate-100 bg-white p-4">
                   <div className="max-w-4xl mx-auto w-full">
-                    <div className="rounded-2xl border border-brand-navy/5 bg-slate-50/60 p-3 shadow-sm">
+                    <div className="rounded-[1.5rem] border border-brand-navy/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(255,255,255,1))] p-3 shadow-sm">
                       <AnimatePresence>
                         {aiResponse && (
                           <motion.div
@@ -1312,6 +1324,12 @@ export default function Messages() {
                           </div>
                         </div>
                       )}
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-slate-400 shadow-sm ring-1 ring-slate-100">
+                          {draftLength.toLocaleString('ar-IQ')} حرف
+                        </span>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ردود سريعة</p>
+                      </div>
                       <div className="flex flex-wrap justify-end gap-2 mb-4">
                         {quickMessagePrompts.map((prompt) => (
                           <button
@@ -1328,7 +1346,7 @@ export default function Messages() {
                           </button>
                         ))}
                       </div>
-                      <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-inner">
+                      <div className="rounded-[1.4rem] border border-slate-200 bg-white p-3 shadow-inner focus-within:border-brand-navy/30 focus-within:ring-4 focus-within:ring-brand-navy/5">
                         {replyingToMessage && (
                           <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-brand-navy/10 bg-slate-50 px-4 py-3 text-right">
                             <div className="min-w-0">
@@ -1460,6 +1478,22 @@ export default function Messages() {
               <i className="fa-solid fa-folder-open"></i>
             </button>
           </div>
+
+          <div className="mb-4 grid grid-cols-3 gap-2">
+            <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center">
+              <p className="text-[9px] font-black text-slate-400">الكل</p>
+              <p className="mt-1 text-sm font-black text-brand-dark">{selectedCase.documents.length.toLocaleString('ar-IQ')}</p>
+            </div>
+            <div className="rounded-2xl bg-amber-50 px-3 py-3 text-center">
+              <p className="text-[9px] font-black text-amber-700">مطلوب</p>
+              <p className="mt-1 text-sm font-black text-amber-800">{selectedCaseDocumentsNeedingAction.toLocaleString('ar-IQ')}</p>
+            </div>
+            <div className="rounded-2xl bg-emerald-50 px-3 py-3 text-center">
+              <p className="text-[9px] font-black text-emerald-700">موقعة</p>
+              <p className="mt-1 text-sm font-black text-emerald-800">{selectedCaseSignedDocuments.toLocaleString('ar-IQ')}</p>
+            </div>
+          </div>
+
           <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto">
             {selectedCase.documents.length > 0 ? (
               selectedCase.documents.map((doc) => (
