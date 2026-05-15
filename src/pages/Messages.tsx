@@ -88,6 +88,8 @@ type Conversation = {
   lastSeen?: string;
 };
 
+type ConversationFilter = 'all' | 'unread' | 'urgent' | 'waiting' | 'closed';
+
 function formatTime(date: Date): string {
   return new Date(date).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
 }
@@ -118,6 +120,7 @@ export default function Messages() {
   const selectedCaseIdFromQuery = useSelectedCaseId();
   const [cases, setCases] = useState<WorkspaceCase[]>([]);
   const [query, setQuery] = useState('');
+  const [conversationFilter, setConversationFilter] = useState<ConversationFilter>('all');
   const [selectedConversationId, setSelectedConversationId] = useState('');
   const [draft, setDraft] = useState('');
   const [isLoadingConversations, setIsLoadingConversations] = useState(true); // New state for loading skeleton
@@ -181,15 +184,45 @@ export default function Messages() {
 
   const conversations = useMemo(() => buildConversations(cases, viewerRole), [cases, viewerRole]);
 
+  const inboxStats = useMemo(() => {
+    const unread = conversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0);
+    const urgent = conversations.filter((conversation) =>
+      conversation.cases.some((item) => item.statusText?.includes('خطر') || item.statusText?.includes('عاجل')),
+    ).length;
+    const waiting = conversations.filter((conversation) =>
+      conversation.cases.some((item) => {
+        const latestUserMessage = [...item.messages].reverse().find((message) => message.sender === 'user');
+        return latestUserMessage?.awaitingResponse;
+      }),
+    ).length;
+
+    return { unread, urgent, waiting };
+  }, [conversations]);
+
   const filteredConversations = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    if (!normalizedQuery) return conversations;
 
-    return conversations.filter((conversation) =>
-      conversation.participantName.toLowerCase().includes(normalizedQuery) ||
-      conversation.cases.some((item) => item.title.toLowerCase().includes(normalizedQuery)),
-    );
-  }, [conversations, query]);
+    return conversations.filter((conversation) => {
+      const matchesQuery =
+        normalizedQuery.length === 0 ||
+        conversation.participantName.toLowerCase().includes(normalizedQuery) ||
+        conversation.cases.some((item) => item.title.toLowerCase().includes(normalizedQuery));
+      const matchesFilter =
+        conversationFilter === 'all' ||
+        (conversationFilter === 'unread' && conversation.unreadCount > 0) ||
+        (conversationFilter === 'urgent' && conversation.cases.some((item) => item.statusText?.includes('خطر') || item.statusText?.includes('عاجل'))) ||
+        (conversationFilter === 'waiting' && conversation.cases.some((item) => {
+          const latestUserMessage = [...item.messages].reverse().find((message) => message.sender === 'user');
+          return latestUserMessage?.awaitingResponse;
+        })) ||
+        (conversationFilter === 'closed' && conversation.cases.some((item) => {
+          const latestUserMessage = [...item.messages].reverse().find((message) => message.sender === 'user');
+          return latestUserMessage && !latestUserMessage.awaitingResponse;
+        }));
+
+      return matchesQuery && matchesFilter;
+    });
+  }, [conversationFilter, conversations, query]);
 
   const selectedConversation =
     filteredConversations.find((conversation) => conversation.id === selectedConversationId) ||
@@ -216,6 +249,8 @@ export default function Messages() {
     : viewerRole === 'lawyer'
       ? 'اكتب ردك للعميل هنا...'
       : 'اكتب رسالتك أو استفسارك هنا...';
+  const selectedCaseDocumentsNeedingAction = selectedCase?.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length ?? 0;
+  const selectedCaseSignedDocuments = selectedCase?.documents.filter((doc) => doc.isSigned).length ?? 0;
 
   const replaceCaseInState = useCallback((nextCase: WorkspaceCase) => {
     setCases((current) => {
@@ -688,30 +723,49 @@ export default function Messages() {
 
   return (
     <div className="app-view fade-in mx-auto max-w-[1440px] space-y-5 pb-6 text-right">
-      <section className="rounded-[1.75rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.03] p-5 shadow-premium md:p-7">
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">Messages</p>
-            <h1 className="mt-3 text-3xl font-black text-brand-dark">محادثاتك القانونية في مكان واحد</h1>
-            <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">
-              راجع أحدث الردود، افتح القضية المرتبطة، أو أرسل تحديثاً سريعاً للمحامي دون التنقل بين الشاشات.
+      <section className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-white/80 shadow-premium backdrop-blur">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
+          <div className="p-6 md:p-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-gold">
+              <i className="fa-solid fa-comments"></i>
+              Messages Hub
+            </div>
+            <h1 className="mt-4 max-w-3xl text-3xl font-black leading-tight text-brand-dark md:text-4xl">محادثاتك القانونية في مكان واحد</h1>
+            <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-slate-500">
+              راجع أحدث الردود، افرز المحادثات حسب الأولوية، افتح القضية المرتبطة، أو أرسل تحديثاً سريعاً دون التنقل بين الشاشات.
             </p>
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">المحادثات</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{conversations.length.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">غير المقروء</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{inboxStats.unread.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">تحتاج متابعة</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{inboxStats.waiting.toLocaleString('ar-IQ')}</p>
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:min-w-[360px] lg:grid-cols-3">
-            <div className="rounded-2xl border border-white bg-white/90 p-4 text-center shadow-sm">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">المحادثات</p>
-              <p className="mt-2 text-3xl font-black text-brand-dark">{conversations.length.toLocaleString('ar-IQ')}</p>
+          <div className="bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-6 text-white md:p-8">
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-lightgold">Inbox Pulse</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                <p className="text-[11px] font-black text-white/60">عاجلة</p>
+                <p className="mt-2 text-3xl font-black">{inboxStats.urgent.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                <p className="text-[11px] font-black text-white/60">نتائج العرض</p>
+                <p className="mt-2 text-3xl font-black">{filteredConversations.length.toLocaleString('ar-IQ')}</p>
+              </div>
             </div>
-            <div className="rounded-2xl border border-white bg-white/90 p-4 text-center shadow-sm">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">غير المقروء</p>
-              <p className="mt-2 text-3xl font-black text-brand-dark">
-                {conversations.reduce((sum, conversation) => sum + conversation.unreadCount, 0).toLocaleString('ar-IQ')}
-              </p>
-            </div>
-            <div className="col-span-2 rounded-2xl border border-white bg-white/90 p-4 text-center shadow-sm lg:col-span-1">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">الإجراء الأسرع</p>
-              <p className="mt-2 text-sm font-black text-brand-dark">اطلب تحديثاً أو افتح القضية</p>
+            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/10 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/60">المحادثة المحددة</p>
+              <p className="mt-2 truncate text-sm font-black">{selectedConversation?.participantName || 'اختر محادثة'}</p>
+              <p className="mt-1 truncate text-xs font-bold text-white/60">{selectedCase?.title || 'سيظهر ملف القضية هنا'}</p>
             </div>
           </div>
         </div>
@@ -729,6 +783,29 @@ export default function Messages() {
                 className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pl-11 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white focus:ring-4 focus:ring-brand-navy/5"
               />
               <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            </div>
+
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {([
+                { id: 'all', label: 'الكل', count: conversations.length },
+                { id: 'unread', label: 'غير مقروء', count: conversations.filter((item) => item.unreadCount > 0).length },
+                { id: 'urgent', label: 'عاجل', count: inboxStats.urgent },
+                { id: 'waiting', label: viewerRole === 'lawyer' ? 'بانتظارك' : 'بانتظار المحامي', count: inboxStats.waiting },
+                { id: 'closed', label: 'مغلقة', count: conversations.filter((conversation) => conversation.cases.some((item) => {
+                  const latestUserMessage = [...item.messages].reverse().find((message) => message.sender === 'user');
+                  return latestUserMessage && !latestUserMessage.awaitingResponse;
+                })).length },
+              ] as Array<{ id: ConversationFilter; label: string; count: number }>).map((filter) => (
+                <button
+                  key={filter.id}
+                  type="button"
+                  onClick={() => setConversationFilter(filter.id)}
+                  className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black transition ${conversationFilter === filter.id ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+                >
+                  {filter.label}
+                  <span className="mr-1 rounded-full bg-white/20 px-1.5 py-0.5">{filter.count.toLocaleString('ar-IQ')}</span>
+                </button>
+              ))}
             </div>
 
             {viewerRole === 'lawyer' && (
@@ -945,6 +1022,35 @@ export default function Messages() {
                       <p className="text-[11px] font-black text-red-700">تنبيه: هذه القضية تتطلب متابعة فورية نظراً لاقتراب موعد جلسة أو مهلة قانونية.</p>
                     </div>
                   )}
+
+                  <div className="mt-3 grid gap-3 md:grid-cols-4">
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black text-slate-400">تقدم القضية</p>
+                      <div className="mt-2 flex items-center gap-3">
+                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-white">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{ width: `${selectedCase.progress}%`, backgroundColor: getProgressColor(selectedCase.progress) }}
+                          ></div>
+                        </div>
+                        <span className="text-xs font-black text-brand-dark">{selectedCase.progress}%</span>
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black text-slate-400">الوثائق</p>
+                      <p className="mt-1 text-sm font-black text-brand-dark">{selectedCase.documents.length.toLocaleString('ar-IQ')}</p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black text-slate-400">مطلوب إجراء</p>
+                      <p className={`mt-1 text-sm font-black ${selectedCaseDocumentsNeedingAction > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                        {selectedCaseDocumentsNeedingAction.toLocaleString('ar-IQ')}
+                      </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
+                      <p className="text-[10px] font-black text-slate-400">موقعة</p>
+                      <p className="mt-1 text-sm font-black text-brand-dark">{selectedCaseSignedDocuments.toLocaleString('ar-IQ')}</p>
+                    </div>
+                  </div>
                 </div>
 
                 <div
