@@ -98,6 +98,12 @@ function formatDate(date: Date): string {
   return new Date(date).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'short', year: 'numeric' });
 }
 
+function isSameDay(date1: Date, date2: Date): boolean {
+  return date1.getFullYear() === date2.getFullYear() &&
+    date1.getMonth() === date2.getMonth() &&
+    date1.getDate() === date2.getDate();
+}
+
 function getUploadedFileNameFromMessage(text: string): string | null {
   const marker = UPLOAD_MESSAGE_MARKERS.find((entry) => text.includes(entry));
   return marker ? text.split(marker).pop()?.trim() || null : null;
@@ -147,6 +153,16 @@ export default function Messages() {
     const g = Math.round(158 + (197 - 158) * (p / 100));
     const b = Math.round(11 + (94 - 11) * (p / 100));
     return `rgb(${r}, ${g}, ${b})`;
+  }, []);
+
+  const getDayLabel = useCallback((date: Date) => {
+    const now = new Date();
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+
+    if (isSameDay(date, now)) return 'اليوم';
+    if (isSameDay(date, yesterday)) return 'أمس';
+    return formatDate(date);
   }, []);
 
   const viewerRole: 'user' | 'lawyer' = useMemo(() => (user?.role === 'pro' || user?.role === 'admin' ? 'lawyer' : 'user'), [user]);
@@ -777,164 +793,166 @@ export default function Messages() {
       {conversations.length > 0 ? (
         <section className={`grid gap-4 ${isChatHeightExpanded ? 'xl:h-[calc(100vh-118px)] xl:min-h-[820px]' : 'xl:h-[calc(100vh-238px)] xl:min-h-[620px]'} ${isChatExpanded ? 'xl:grid-cols-[minmax(0,1fr)]' : selectedConversation && selectedCase ? 'xl:grid-cols-[310px_minmax(0,1fr)_300px]' : 'xl:grid-cols-[310px_minmax(0,1fr)]'}`}>
           {!isChatExpanded && (
-          <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
-            <div className="relative">
-              <input
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder="ابحث عن محامٍ أو قضية"
-                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pl-11 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white focus:ring-4 focus:ring-brand-navy/5"
-              />
-              <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-            </div>
-
-            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
-              {([
-                { id: 'all', label: 'الكل', count: conversations.length },
-                { id: 'unread', label: 'غير مقروء', count: conversations.filter((item) => item.unreadCount > 0).length },
-                { id: 'urgent', label: 'عاجل', count: inboxStats.urgent },
-                { id: 'waiting', label: viewerRole === 'lawyer' ? 'بانتظارك' : 'بانتظار المحامي', count: inboxStats.waiting },
-                { id: 'closed', label: 'مغلقة', count: conversations.filter((conversation) => conversation.cases.some((item) => {
-                  const latestUserMessage = [...item.messages].reverse().find((message) => message.sender === 'user');
-                  return latestUserMessage && !latestUserMessage.awaitingResponse;
-                })).length },
-              ] as Array<{ id: ConversationFilter; label: string; count: number }>).map((filter) => (
-                <button
-                  key={filter.id}
-                  type="button"
-                  onClick={() => setConversationFilter(filter.id)}
-                  className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black transition ${conversationFilter === filter.id ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
-                >
-                  {filter.label}
-                  <span className="mr-1 rounded-full bg-white/20 px-1.5 py-0.5">{filter.count.toLocaleString('ar-IQ')}</span>
-                </button>
-              ))}
-            </div>
-
-            {viewerRole === 'lawyer' && (
-              <div className="mt-3 flex items-center justify-between px-1">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ملخص القضايا</p>
-                <button
-                  onClick={() => setShowCaseSummary(!showCaseSummary)}
-                  className={`h-5 w-9 rounded-full transition-colors relative flex items-center px-1 ${showCaseSummary ? 'bg-brand-gold' : 'bg-slate-200'}`}
-                  title={showCaseSummary ? "إخفاء ملخص القضايا" : "عرض ملخص القضايا"}
-                >
-                  <div className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${showCaseSummary ? '-translate-x-4' : 'translate-x-0'}`}></div>
-                </button>
+            <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
+              <div className="relative">
+                <input
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="ابحث عن محامٍ أو قضية"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pl-11 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white focus:ring-4 focus:ring-brand-navy/5"
+                />
+                <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
               </div>
-            )}
 
-            <div className="mt-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar pr-1">
-              {isLoadingConversations ? (
-                <ConversationSkeleton />
-              ) : filteredConversations.length === 0 ? (
-                <div className="py-12 text-center">
-                  <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3 text-slate-300">
-                    <i className="fa-solid fa-magnifying-glass text-xl"></i>
-                  </div>
-                  <p className="text-xs font-bold text-slate-400">لا توجد نتائج تطابق بحثك</p>
-                </div>
-              ) : (
-                filteredConversations.map((conversation) => (
+              <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                {([
+                  { id: 'all', label: 'الكل', count: conversations.length },
+                  { id: 'unread', label: 'غير مقروء', count: conversations.filter((item) => item.unreadCount > 0).length },
+                  { id: 'urgent', label: 'عاجل', count: inboxStats.urgent },
+                  { id: 'waiting', label: viewerRole === 'lawyer' ? 'بانتظارك' : 'بانتظار المحامي', count: inboxStats.waiting },
+                  {
+                    id: 'closed', label: 'مغلقة', count: conversations.filter((conversation) => conversation.cases.some((item) => {
+                      const latestUserMessage = [...item.messages].reverse().find((message) => message.sender === 'user');
+                      return latestUserMessage && !latestUserMessage.awaitingResponse;
+                    })).length
+                  },
+                ] as Array<{ id: ConversationFilter; label: string; count: number }>).map((filter) => (
                   <button
-                    key={conversation.id}
+                    key={filter.id}
                     type="button"
-                    onClick={() => {
-                      setSelectedConversationId(conversation.id);
-                      setActiveCaseId(conversation.cases[0]?.id || '');
-                    }}
-                    className={`w-full rounded-xl border p-3 text-right transition-all duration-200 ${selectedConversation?.id === conversation.id
-                      ? 'border-brand-navy/20 bg-brand-navy/5 shadow-sm'
-                      : 'border-transparent hover:border-slate-100 hover:bg-slate-50'}`}
+                    onClick={() => setConversationFilter(filter.id)}
+                    className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black transition ${conversationFilter === filter.id ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
                   >
-                    <div className="flex flex-row-reverse items-start gap-3">
-                      <div className="relative shrink-0">
-                        <img src={conversation.participantImg} alt={conversation.participantName} className="h-11 w-11 rounded-xl object-cover shadow-sm" />
-                        {conversation.cases.some(c => c.statusText?.includes('خطر') || c.statusText?.includes('عاجل')) && (
-                          <span
-                            className="absolute -bottom-1 -left-1 h-4 w-4 rounded-full bg-red-50 text-[8px] flex items-center justify-center text-red-500 border border-red-100 shadow-sm"
-                            title="قضية عاجلة"
-                          ><i className="fa-solid fa-triangle-exclamation"></i></span>
-                        )}
-                        {conversation.unreadCount > 0 && (
-                          <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-white ring-2 ring-red-500/10"></span>
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1 text-right">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[9px] font-bold text-slate-400 uppercase">
-                            {conversation.lastMessage ? formatTime(conversation.lastMessage.createdAt) : conversation.cases[0] ? formatDate(conversation.cases[0].createdAt) : ''}
-                          </span>
-                          <p className={`truncate text-sm font-black ${conversation.unreadCount > 0 ? 'text-brand-dark' : 'text-slate-600'}`}>{conversation.participantName}</p>
-                        </div>
-                        <div className="mt-0.5 flex flex-row-reverse items-center gap-2">
-                          <div className="relative h-4 w-4 shrink-0">
-                            <svg className="h-full w-full" viewBox="0 0 36 36">
-                              <circle className="text-slate-100" strokeWidth="4" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" />
-                              <circle
-                                style={{ stroke: getProgressColor(conversation.cases[0]?.progress || 0) }}
-                                className="transition-all duration-1000"
-                                strokeWidth="4"
-                                strokeDasharray={`${conversation.cases[0]?.progress}, 100`}
-                                strokeLinecap="round"
-                                fill="transparent"
-                                r="16" cx="18" cy="18"
-                                transform="rotate(-90 18 18)" />
-                            </svg>
-                            <span className="absolute inset-0 flex items-center justify-center text-[5px] font-black text-slate-500">{conversation.cases[0]?.progress}%</span>
-                          </div>
-                          <p className="truncate text-[11px] font-bold text-slate-400">{conversation.cases[0]?.title}</p>
-                        </div>
-                        <p className={`mt-1 truncate text-xs font-medium ${conversation.unreadCount > 0 ? 'text-brand-navy font-bold' : 'text-slate-400'}`}>
-                          {conversation.lastMessage?.text || conversation.cases[0]?.title}
-                        </p>
-                      </div>
-                    </div>
-
-                    {showCaseSummary && viewerRole === 'lawyer' && (
-                      <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
-                        {conversation.cases.map(c => (
-                          <div
-                            key={c.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedConversationId(conversation.id);
-                              setActiveCaseId(c.id);
-                            }}
-                            className={`rounded-xl p-2 text-[10px] flex items-center justify-between border cursor-pointer transition-all ${activeCaseId === c.id ? 'bg-brand-navy/10 border-brand-navy/20 shadow-inner' : 'bg-white/50 border-slate-100/50 hover:bg-white hover:shadow-sm'}`}
-                          >
-                            <div className="flex flex-row-reverse items-center gap-2">
-                              <div className="relative h-7 w-7 shrink-0">
-                                <svg className="h-full w-full" viewBox="0 0 36 36">
-                                  <circle className="text-slate-100" strokeWidth="3" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" />
-                                  <circle
-                                    style={{ stroke: getProgressColor(c.progress || 0) }}
-                                    className="transition-all duration-1000"
-                                    strokeWidth="3"
-                                    strokeDasharray={`${c.progress}, 100`}
-                                    strokeLinecap="round"
-                                    fill="transparent"
-                                    r="16" cx="18" cy="18"
-                                    transform="rotate(-90 18 18)" />
-                                </svg>
-                                <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black text-slate-500">{c.progress}%</span>
-                              </div>
-                              <div className="text-right">
-                                <p className="font-bold text-slate-700 truncate max-w-[100px]">{c.title}</p>
-                                <p className="text-slate-400 mt-0.5">{formatDate(c.createdAt)}</p>
-                              </div>
-                            </div>
-                            <span className="rounded-lg bg-brand-navy/5 px-2 py-1 font-black text-brand-navy">{c.statusText}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    {filter.label}
+                    <span className="mr-1 rounded-full bg-white/20 px-1.5 py-0.5">{filter.count.toLocaleString('ar-IQ')}</span>
                   </button>
-                ))
+                ))}
+              </div>
+
+              {viewerRole === 'lawyer' && (
+                <div className="mt-3 flex items-center justify-between px-1">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ملخص القضايا</p>
+                  <button
+                    onClick={() => setShowCaseSummary(!showCaseSummary)}
+                    className={`h-5 w-9 rounded-full transition-colors relative flex items-center px-1 ${showCaseSummary ? 'bg-brand-gold' : 'bg-slate-200'}`}
+                    title={showCaseSummary ? "إخفاء ملخص القضايا" : "عرض ملخص القضايا"}
+                  >
+                    <div className={`h-3 w-3 rounded-full bg-white shadow-sm transition-transform ${showCaseSummary ? '-translate-x-4' : 'translate-x-0'}`}></div>
+                  </button>
+                </div>
               )}
-            </div>
-          </aside>
+
+              <div className="mt-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar pr-1">
+                {isLoadingConversations ? (
+                  <ConversationSkeleton />
+                ) : filteredConversations.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <div className="h-12 w-12 rounded-2xl bg-slate-50 flex items-center justify-center mx-auto mb-3 text-slate-300">
+                      <i className="fa-solid fa-magnifying-glass text-xl"></i>
+                    </div>
+                    <p className="text-xs font-bold text-slate-400">لا توجد نتائج تطابق بحثك</p>
+                  </div>
+                ) : (
+                  filteredConversations.map((conversation) => (
+                    <button
+                      key={conversation.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedConversationId(conversation.id);
+                        setActiveCaseId(conversation.cases[0]?.id || '');
+                      }}
+                      className={`w-full rounded-xl border p-3 text-right transition-all duration-200 ${selectedConversation?.id === conversation.id
+                        ? 'border-brand-navy/20 bg-brand-navy/5 shadow-sm'
+                        : 'border-transparent hover:border-slate-100 hover:bg-slate-50'}`}
+                    >
+                      <div className="flex flex-row-reverse items-start gap-3">
+                        <div className="relative shrink-0">
+                          <img src={conversation.participantImg} alt={conversation.participantName} className="h-11 w-11 rounded-xl object-cover shadow-sm" />
+                          {conversation.cases.some(c => c.statusText?.includes('خطر') || c.statusText?.includes('عاجل')) && (
+                            <span
+                              className="absolute -bottom-1 -left-1 h-4 w-4 rounded-full bg-red-50 text-[8px] flex items-center justify-center text-red-500 border border-red-100 shadow-sm"
+                              title="قضية عاجلة"
+                            ><i className="fa-solid fa-triangle-exclamation"></i></span>
+                          )}
+                          {conversation.unreadCount > 0 && (
+                            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-white ring-2 ring-red-500/10"></span>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1 text-right">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[9px] font-bold text-slate-400 uppercase">
+                              {conversation.lastMessage ? formatTime(conversation.lastMessage.createdAt) : conversation.cases[0] ? formatDate(conversation.cases[0].createdAt) : ''}
+                            </span>
+                            <p className={`truncate text-sm font-black ${conversation.unreadCount > 0 ? 'text-brand-dark' : 'text-slate-600'}`}>{conversation.participantName}</p>
+                          </div>
+                          <div className="mt-0.5 flex flex-row-reverse items-center gap-2">
+                            <div className="relative h-4 w-4 shrink-0">
+                              <svg className="h-full w-full" viewBox="0 0 36 36">
+                                <circle className="text-slate-100" strokeWidth="4" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" />
+                                <circle
+                                  style={{ stroke: getProgressColor(conversation.cases[0]?.progress || 0) }}
+                                  className="transition-all duration-1000"
+                                  strokeWidth="4"
+                                  strokeDasharray={`${conversation.cases[0]?.progress}, 100`}
+                                  strokeLinecap="round"
+                                  fill="transparent"
+                                  r="16" cx="18" cy="18"
+                                  transform="rotate(-90 18 18)" />
+                              </svg>
+                              <span className="absolute inset-0 flex items-center justify-center text-[5px] font-black text-slate-500">{conversation.cases[0]?.progress}%</span>
+                            </div>
+                            <p className="truncate text-[11px] font-bold text-slate-400">{conversation.cases[0]?.title}</p>
+                          </div>
+                          <p className={`mt-1 truncate text-xs font-medium ${conversation.unreadCount > 0 ? 'text-brand-navy font-bold' : 'text-slate-400'}`}>
+                            {conversation.lastMessage?.text || conversation.cases[0]?.title}
+                          </p>
+                        </div>
+                      </div>
+
+                      {showCaseSummary && viewerRole === 'lawyer' && (
+                        <div className="mt-3 space-y-2 border-t border-slate-100 pt-3">
+                          {conversation.cases.map(c => (
+                            <div
+                              key={c.id}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedConversationId(conversation.id);
+                                setActiveCaseId(c.id);
+                              }}
+                              className={`rounded-xl p-2 text-[10px] flex items-center justify-between border cursor-pointer transition-all ${activeCaseId === c.id ? 'bg-brand-navy/10 border-brand-navy/20 shadow-inner' : 'bg-white/50 border-slate-100/50 hover:bg-white hover:shadow-sm'}`}
+                            >
+                              <div className="flex flex-row-reverse items-center gap-2">
+                                <div className="relative h-7 w-7 shrink-0">
+                                  <svg className="h-full w-full" viewBox="0 0 36 36">
+                                    <circle className="text-slate-100" strokeWidth="3" stroke="currentColor" fill="transparent" r="16" cx="18" cy="18" />
+                                    <circle
+                                      style={{ stroke: getProgressColor(c.progress || 0) }}
+                                      className="transition-all duration-1000"
+                                      strokeWidth="3"
+                                      strokeDasharray={`${c.progress}, 100`}
+                                      strokeLinecap="round"
+                                      fill="transparent"
+                                      r="16" cx="18" cy="18"
+                                      transform="rotate(-90 18 18)" />
+                                  </svg>
+                                  <span className="absolute inset-0 flex items-center justify-center text-[7px] font-black text-slate-500">{c.progress}%</span>
+                                </div>
+                                <div className="text-right">
+                                  <p className="font-bold text-slate-700 truncate max-w-[100px]">{c.title}</p>
+                                  <p className="text-slate-400 mt-0.5">{formatDate(c.createdAt)}</p>
+                                </div>
+                              </div>
+                              <span className="rounded-lg bg-brand-navy/5 px-2 py-1 font-black text-brand-navy">{c.statusText}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </aside>
           )}
 
           <section className="flex min-h-[640px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-premium xl:min-h-0">
@@ -1084,167 +1102,175 @@ export default function Messages() {
                   ref={scrollRef}
                   className="custom-scrollbar flex-1 space-y-5 overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(241,245,249,0.72))] p-4 md:p-6"
                 >
-                  <div className="flex justify-center my-4">
-                    <span className="rounded-full bg-slate-100 px-4 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest">اليوم</span>
-                  </div>
-
-                  {threadMessages.map((message) => {
+                  {threadMessages.map((message, index) => {
                     const isMe = message.sender === viewerRole;
+                    const msgDate = new Date(message.createdAt);
+                    const prevMsg = threadMessages[index - 1];
+                    const showDateSeparator = !prevMsg || !isSameDay(new Date(prevMsg.createdAt), msgDate);
 
                     const attachedFileName = getUploadedFileNameFromMessage(message.text);
                     const attachedDoc = attachedFileName ? selectedCase?.documents.find(d => d.name === attachedFileName) : null;
 
                     return (
-                      <div key={message.id} className="max-w-4xl mx-auto w-full">
-                        <motion.div
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          className={`flex items-end gap-2 ${isMe ? 'justify-start' : 'justify-end'}`}
-                        >
-                          <div className={`flex items-end gap-2 ${isMe ? 'flex-row' : 'flex-row-reverse'}`}>
-                            <img
-                              src={isMe ? viewerAvatar : selectedConversation.participantImg}
-                              alt={isMe ? 'أنت' : selectedConversation.participantName}
-                              className="h-8 w-8 shrink-0 rounded-xl border border-white object-cover shadow-sm"
-                            />
-                          <div className={`relative max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm md:max-w-[72%] md:px-5 group ${isMe
-                            ? 'bg-brand-navy text-white rounded-tl-md shadow-brand-navy/10'
-                            : isRequestMessage(message.text)
-                              ? 'bg-white border border-brand-gold/30 text-slate-700 rounded-tr-md ring-4 ring-brand-gold/5'
-                              : 'bg-white border border-slate-100 text-slate-700 rounded-tr-md'
-                            }`}
+                      <React.Fragment key={message.id}>
+                        {showDateSeparator && (
+                          <div className="flex justify-center my-6">
+                            <span className="rounded-full bg-slate-200/50 backdrop-blur-sm px-4 py-1.5 text-[10px] font-black text-slate-500 uppercase tracking-widest shadow-sm">
+                              {getDayLabel(msgDate)}
+                            </span>
+                          </div>
+                        )}
+                        <div className="max-w-4xl mx-auto w-full">
+                          <motion.div
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className={`flex items-end gap-2 ${isMe ? 'justify-start' : 'justify-end'}`}
                           >
-                            <div className={`mb-2 flex items-center justify-between gap-3 text-[10px] font-black ${isMe ? 'text-white/55' : 'text-slate-400'}`}>
-                              <span>{formatTime(message.createdAt)}</span>
-                              <span>{isMe ? 'أنت' : selectedConversation.participantName}</span>
-                            </div>
-                            <button
-                              onClick={() => navigator.clipboard.writeText(message.text)}
-                              className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-slate-100 bg-white text-slate-400 opacity-0 shadow-sm transition hover:text-brand-navy group-hover:opacity-100 ${isMe ? 'left-2' : 'right-2'}`}
-                              title="نسخ النص"
-                            >
-                              <i className="fa-regular fa-copy text-xs"></i>
-                            </button>
-                            {isMe && (
-                              <button
-                                onClick={() => handleDeleteMessage(message.id)}
-                                className={`absolute top-10 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-slate-100 bg-white text-slate-400 opacity-0 shadow-sm transition hover:text-red-500 group-hover:opacity-100 ${isMe ? 'left-2' : 'right-2'}`}
-                                title="حذف الرسالة"
+                            <div className={`flex items-end gap-2 ${isMe ? 'flex-row' : 'flex-row-reverse'}`}>
+                              <img
+                                src={isMe ? viewerAvatar : selectedConversation.participantImg}
+                                alt={isMe ? 'أنت' : selectedConversation.participantName}
+                                className="h-8 w-8 shrink-0 rounded-xl border border-white object-cover shadow-sm"
+                              />
+                              <div className={`relative max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm md:max-w-[72%] md:px-5 group ${isMe
+                                ? 'bg-brand-navy text-white rounded-tl-md shadow-brand-navy/10'
+                                : isRequestMessage(message.text)
+                                  ? 'bg-amber-50/50 border border-brand-gold/30 text-slate-700 rounded-tr-md ring-4 ring-brand-gold/5'
+                                  : 'bg-white border border-slate-100 text-slate-700 rounded-tr-md'
+                                }`}
                               >
-                                <i className="fa-solid fa-trash-can text-xs"></i>
-                              </button>
-                            )}
-                            {!isMe && (
-                              <button
-                                type="button"
-                                onClick={() => handleReplyToMessage(message)}
-                                className="absolute right-2 top-10 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-slate-100 bg-white text-slate-400 opacity-0 shadow-sm transition hover:text-brand-navy group-hover:opacity-100"
-                                title={viewerRole === 'lawyer' ? 'الرد على العميل' : 'الرد على المحامي'}
-                              >
-                                <i className="fa-solid fa-reply text-xs"></i>
-                              </button>
-                            )}
-                            {message.uploadProgress !== undefined && (
-                              <div className="mt-3 mb-2 space-y-2">
-                                <div className="flex items-center justify-between text-[10px] font-black">
-                                  <div className="flex items-center gap-2">
-                                    <button
-                                      onClick={() => handleCancelUpload(message.id)}
-                                      className={`hover:text-red-500 transition-colors ${isMe ? 'text-white/50' : 'text-slate-400'}`}
-                                      title="إلغاء رفع الوثيقة"
-                                    >
-                                      <i className="fa-solid fa-circle-xmark"></i>
-                                    </button>
-                                    <span className={isMe ? 'text-white/70' : 'text-slate-400'}>{message.uploadProgress}%</span>
-                                  </div>
-                                  <span className={isMe ? 'text-white/70' : 'text-slate-400'}>جارٍ رفع الوثيقة</span>
+                                <div className={`mb-2 flex items-center justify-between gap-3 text-[10px] font-black ${isMe ? 'text-white/55' : 'text-slate-400'}`}>
+                                  <span>{formatTime(message.createdAt)}</span>
+                                  <span>{isMe ? 'أنت' : selectedConversation.participantName}</span>
                                 </div>
-                                <div className={`h-1.5 w-full rounded-full overflow-hidden ${isMe ? 'bg-white/20' : 'bg-slate-100 shadow-inner'}`}>
-                                  <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${message.uploadProgress}%` }}
-                                    className={`h-full rounded-full ${isMe ? 'bg-brand-gold' : 'bg-brand-navy'}`}
-                                  />
-                                </div>
-                              </div>
-                            )}
-                            <p className="text-[14px] md:text-[15px] font-medium leading-relaxed">{message.text}</p>
-
-                            {attachedDoc && (
-                              <div
-                                className={`mt-3 p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all ${isMe ? 'bg-white/10 border-white/20 hover:bg-white/20' : 'bg-slate-50 border-slate-100 hover:border-brand-navy/30'}`}
-                              >
-                                <div
-                                  onClick={() => setActivePreviewDoc(attachedDoc)}
-                                  className="flex items-center gap-3 min-w-0 cursor-pointer flex-1 group/file"
+                                <button
+                                  onClick={() => navigator.clipboard.writeText(message.text)}
+                                  className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-slate-100 bg-white text-slate-400 opacity-0 shadow-sm transition hover:text-brand-navy group-hover:opacity-100 ${isMe ? 'left-2' : 'right-2'}`}
+                                  title="نسخ النص"
                                 >
-                                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform active:scale-95 ${isMe ? 'bg-white/10' : 'bg-white shadow-sm'} ${attachedDoc.type === 'pdf' ? 'text-red-500' : 'text-blue-500'}`}>
-                                    <i className={`fa-solid ${getFileIconClass(attachedDoc.type)} text-base`}></i>
-                                  </div>
-                                  <div className="text-right min-w-0">
-                                    <p className={`text-[11px] font-black truncate group-hover/file:underline ${isMe ? 'text-white' : 'text-brand-dark'}`}>{attachedDoc.name}</p>
-                                    <p className={`text-[9px] font-bold ${isMe ? 'text-white/60' : 'text-slate-400'}`}>{attachedDoc.size}</p>
-                                  </div>
-                                </div>
-                                <div className="flex gap-1.5">
+                                  <i className="fa-regular fa-copy text-xs"></i>
+                                </button>
+                                {isMe && (
                                   <button
-                                    onClick={() => setActivePreviewDoc(attachedDoc)}
-                                    className={`h-8 w-8 flex items-center justify-center rounded-xl transition-all shadow-sm ${isMe ? 'bg-white/10 text-white hover:bg-white/30' : 'bg-slate-100 text-slate-400 hover:text-brand-navy'}`}
-                                    title="معاينة فورية"
+                                    onClick={() => handleDeleteMessage(message.id)}
+                                    className={`absolute top-10 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-slate-100 bg-white text-slate-400 opacity-0 shadow-sm transition hover:text-red-500 group-hover:opacity-100 ${isMe ? 'left-2' : 'right-2'}`}
+                                    title="حذف الرسالة"
                                   >
-                                    <i className="fa-solid fa-eye text-[10px]"></i>
+                                    <i className="fa-solid fa-trash-can text-xs"></i>
                                   </button>
-                                  <a
-                                    href={attachedDoc.previewUrl || attachedDoc.fileUrl || '#'}
-                                    download={attachedDoc.name}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className={`h-8 w-8 flex items-center justify-center rounded-xl transition-all shadow-sm ${isMe ? 'bg-white text-brand-navy hover:bg-brand-gold' : 'bg-brand-navy text-white hover:bg-brand-dark'}`}
-                                    title="تنزيل الملف"
-                                  >
-                                    <i className="fa-solid fa-download text-[10px]"></i>
-                                  </a>
-                                </div>
-                              </div>
-                            )}
-
-                            {isMe && (
-                              <div className="mt-2 flex flex-wrap items-center gap-2">
-                                <p className={`text-[10px] font-black ${message.awaitingResponse ? (viewerRole === 'user' ? 'text-blue-200/80' : 'text-amber-200/80') : 'text-emerald-200/80'}`}>
-                                  {message.awaitingResponse ? (viewerRole === 'user' ? 'بانتظار رد المحامي' : 'بانتظار رد العميل') : 'تم الرد'}
-                                </p>
-                                {message.deliveryState === 'sending' && (
-                                  <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black text-white/60">
-                                    جارٍ الإرسال...
-                                  </span>
                                 )}
-                                {message.deliveryState === 'failed' && (
+                                {!isMe && (
                                   <button
                                     type="button"
-                                    onClick={() => handleRetryMessage(message)}
-                                    className="rounded-full bg-red-500/20 px-2 py-0.5 text-[9px] font-black text-red-200 transition hover:bg-red-500/40"
+                                    onClick={() => handleReplyToMessage(message)}
+                                    className="absolute right-2 top-10 z-10 flex h-7 w-7 items-center justify-center rounded-lg border border-slate-100 bg-white text-slate-400 opacity-0 shadow-sm transition hover:text-brand-navy group-hover:opacity-100"
+                                    title={viewerRole === 'lawyer' ? 'الرد على العميل' : 'الرد على المحامي'}
                                   >
-                                    فشل - إعادة محاولة
+                                    <i className="fa-solid fa-reply text-xs"></i>
                                   </button>
                                 )}
+                                {message.uploadProgress !== undefined && (
+                                  <div className="mt-3 mb-2 space-y-2">
+                                    <div className="flex items-center justify-between text-[10px] font-black">
+                                      <div className="flex items-center gap-2">
+                                        <button
+                                          onClick={() => handleCancelUpload(message.id)}
+                                          className={`hover:text-red-500 transition-colors ${isMe ? 'text-white/50' : 'text-slate-400'}`}
+                                          title="إلغاء رفع الوثيقة"
+                                        >
+                                          <i className="fa-solid fa-circle-xmark"></i>
+                                        </button>
+                                        <span className={isMe ? 'text-white/70' : 'text-slate-400'}>{message.uploadProgress}%</span>
+                                      </div>
+                                      <span className={isMe ? 'text-white/70' : 'text-slate-400'}>جارٍ رفع الوثيقة</span>
+                                    </div>
+                                    <div className={`h-1.5 w-full rounded-full overflow-hidden ${isMe ? 'bg-white/20' : 'bg-slate-100 shadow-inner'}`}>
+                                      <motion.div
+                                        initial={{ width: 0 }}
+                                        animate={{ width: `${message.uploadProgress}%` }}
+                                        className={`h-full rounded-full ${isMe ? 'bg-brand-gold' : 'bg-brand-navy'}`}
+                                      />
+                                    </div>
+                                  </div>
+                                )}
+                                <p className="text-[14px] md:text-[15px] font-medium leading-relaxed">{message.text}</p>
+
+                                {attachedDoc && (
+                                  <div
+                                    className={`mt-3 p-3 rounded-2xl border flex items-center justify-between gap-3 transition-all ${isMe ? 'bg-white/10 border-white/20 hover:bg-white/20' : 'bg-slate-50 border-slate-100 hover:border-brand-navy/30'}`}
+                                  >
+                                    <div
+                                      onClick={() => setActivePreviewDoc(attachedDoc)}
+                                      className="flex items-center gap-3 min-w-0 cursor-pointer flex-1 group/file"
+                                    >
+                                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-transform active:scale-95 ${isMe ? 'bg-white/10' : 'bg-white shadow-sm'} ${attachedDoc.type === 'pdf' ? 'text-red-500' : 'text-blue-500'}`}>
+                                        <i className={`fa-solid ${getFileIconClass(attachedDoc.type)} text-base`}></i>
+                                      </div>
+                                      <div className="text-right min-w-0">
+                                        <p className={`text-[11px] font-black truncate group-hover/file:underline ${isMe ? 'text-white' : 'text-brand-dark'}`}>{attachedDoc.name}</p>
+                                        <p className={`text-[9px] font-bold ${isMe ? 'text-white/60' : 'text-slate-400'}`}>{attachedDoc.size}</p>
+                                      </div>
+                                    </div>
+                                    <div className="flex gap-1.5">
+                                      <button
+                                        onClick={() => setActivePreviewDoc(attachedDoc)}
+                                        className={`h-8 w-8 flex items-center justify-center rounded-xl transition-all shadow-sm ${isMe ? 'bg-white/10 text-white hover:bg-white/30' : 'bg-slate-100 text-slate-400 hover:text-brand-navy'}`}
+                                        title="معاينة فورية"
+                                      >
+                                        <i className="fa-solid fa-eye text-[10px]"></i>
+                                      </button>
+                                      <a
+                                        href={attachedDoc.previewUrl || attachedDoc.fileUrl || '#'}
+                                        download={attachedDoc.name}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className={`h-8 w-8 flex items-center justify-center rounded-xl transition-all shadow-sm ${isMe ? 'bg-white text-brand-navy hover:bg-brand-gold' : 'bg-brand-navy text-white hover:bg-brand-dark'}`}
+                                        title="تنزيل الملف"
+                                      >
+                                        <i className="fa-solid fa-download text-[10px]"></i>
+                                      </a>
+                                    </div>
+                                  </div>
+                                )}
+
+                                {isMe && (
+                                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                                    <p className={`text-[10px] font-black ${message.awaitingResponse ? (viewerRole === 'user' ? 'text-blue-200/80' : 'text-amber-200/80') : 'text-emerald-200/80'}`}>
+                                      {message.awaitingResponse ? (viewerRole === 'user' ? 'بانتظار رد المحامي' : 'بانتظار رد العميل') : 'تم الرد'}
+                                    </p>
+                                    {message.deliveryState === 'sending' && (
+                                      <span className="rounded-full bg-white/10 px-2 py-0.5 text-[9px] font-black text-white/60">
+                                        جارٍ الإرسال...
+                                      </span>
+                                    )}
+                                    {message.deliveryState === 'failed' && (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleRetryMessage(message)}
+                                        className="rounded-full bg-red-500/20 px-2 py-0.5 text-[9px] font-black text-red-200 transition hover:bg-red-500/40"
+                                      >
+                                        فشل - إعادة محاولة
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                                <div className={`mt-2 flex items-center justify-end gap-1.5 text-[9px] font-black uppercase ${isMe ? 'text-white/50' : 'text-slate-400'}`}>
+                                  <span>{message.deliveryState === 'sending' ? 'جارٍ المزامنة' : 'تمت المزامنة'}</span>
+                                  {isMe && (
+                                    <motion.i
+                                      initial={false}
+                                      animate={message.awaitingResponse ? { scale: 1, opacity: 0.4 } : { scale: [1, 1.4, 1], opacity: 1, color: '#93c5fd' }}
+                                      transition={{ duration: 0.4 }}
+                                      className="fa-solid fa-check-double"
+                                      title={message.awaitingResponse ? 'تم الإرسال' : 'تمت القراءة'}
+                                    />
+                                  )}
+                                </div>
                               </div>
-                            )}
-                            <div className={`mt-2 flex items-center justify-end gap-1.5 text-[9px] font-black uppercase ${isMe ? 'text-white/50' : 'text-slate-400'}`}>
-                              <span>{message.deliveryState === 'sending' ? 'جارٍ المزامنة' : 'تمت المزامنة'}</span>
-                              {isMe && (
-                                <motion.i
-                                  initial={false}
-                                  animate={message.awaitingResponse ? { scale: 1, opacity: 0.4 } : { scale: [1, 1.4, 1], opacity: 1, color: '#93c5fd' }}
-                                  transition={{ duration: 0.4 }}
-                                  className="fa-solid fa-check-double"
-                                  title={message.awaitingResponse ? 'تم الإرسال' : 'تمت القراءة'}
-                                />
-                              )}
                             </div>
-                          </div>
-                          </div>
-                        </motion.div>
-                      </div>
+                          </motion.div>
+                        </div>
+                      </React.Fragment>
                     );
                   })}
 
@@ -1454,114 +1480,114 @@ export default function Messages() {
                     </div>
                   </div>
                 </div>
-          </>
-          ) : (
-          <div className="flex-1 p-8">
-            <EmptyState
-              icon="comments"
-              title="اختر محادثة للمتابعة"
-              description="ستظهر هنا رسائلك المرتبطة بالقضايا الحالية حتى تتمكن من الرد أو طلب تحديث سريع."
-            />
-          </div>
-            )}
-        </section>
-
-          {!isChatExpanded && selectedConversation && selectedCase && (
-        <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-black text-brand-dark">وثائق القضية</h3>
-            <button
-              onClick={() => navigate(`/cases`, { state: { activeCaseId: selectedCase.id, focusArea: 'docs' } })}
-              className="text-slate-400 hover:text-brand-navy transition w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-50"
-              title="عرض كل الوثائق"
-            >
-              <i className="fa-solid fa-folder-open"></i>
-            </button>
-          </div>
-
-          <div className="mb-4 grid grid-cols-3 gap-2">
-            <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center">
-              <p className="text-[9px] font-black text-slate-400">الكل</p>
-              <p className="mt-1 text-sm font-black text-brand-dark">{selectedCase.documents.length.toLocaleString('ar-IQ')}</p>
-            </div>
-            <div className="rounded-2xl bg-amber-50 px-3 py-3 text-center">
-              <p className="text-[9px] font-black text-amber-700">مطلوب</p>
-              <p className="mt-1 text-sm font-black text-amber-800">{selectedCaseDocumentsNeedingAction.toLocaleString('ar-IQ')}</p>
-            </div>
-            <div className="rounded-2xl bg-emerald-50 px-3 py-3 text-center">
-              <p className="text-[9px] font-black text-emerald-700">موقعة</p>
-              <p className="mt-1 text-sm font-black text-emerald-800">{selectedCaseSignedDocuments.toLocaleString('ar-IQ')}</p>
-            </div>
-          </div>
-
-          <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto">
-            {selectedCase.documents.length > 0 ? (
-              selectedCase.documents.map((doc) => (
-                <div
-                  key={doc.id}
-                  onClick={() => setActivePreviewDoc(doc)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      setActivePreviewDoc(doc);
-                    }
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3 text-right transition hover:border-brand-navy/20 hover:bg-white hover:shadow-sm"
-                >
-                  <div className={`text-xl ${doc.type === 'pdf' ? 'text-red-500' : doc.type === 'image' ? 'text-blue-500' : 'text-gray-500'}`}>
-                    <i className={`fa-solid ${getFileIconClass(doc.type)}`}></i>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-black text-brand-dark truncate">{doc.name}</p>
-                    <p className="text-[10px] font-bold text-slate-400">{doc.size} • {formatDate(doc.createdAt)}</p>
-                  </div>
-                  <span className="rounded-lg border border-slate-100 bg-white px-2 py-1 text-[9px] font-black text-slate-400">
-                    معاينة
-                  </span>
-                  {doc.actionRequired && (
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        handleDocReply(doc);
-                      }}
-                      className="flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[9px] font-black text-amber-600 transition hover:bg-amber-100"
-                    >
-                      <i className="fa-solid fa-reply text-[8px]"></i>
-                      رد
-                    </button>
-                  )}
-                </div>
-              ))
+              </>
             ) : (
-              <div className="text-center py-10 text-slate-400">
-                <i className="fa-solid fa-file-circle-xmark text-3xl mb-3 opacity-20"></i>
-                <p className="text-xs font-bold">لا توجد وثائق لهذا الملف</p>
+              <div className="flex-1 p-8">
+                <EmptyState
+                  icon="comments"
+                  title="اختر محادثة للمتابعة"
+                  description="ستظهر هنا رسائلك المرتبطة بالقضايا الحالية حتى تتمكن من الرد أو طلب تحديث سريع."
+                />
               </div>
             )}
-          </div>
-        </aside>
+          </section>
+
+          {!isChatExpanded && selectedConversation && selectedCase && (
+            <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-black text-brand-dark">وثائق القضية</h3>
+                <button
+                  onClick={() => navigate(`/cases`, { state: { activeCaseId: selectedCase.id, focusArea: 'docs' } })}
+                  className="text-slate-400 hover:text-brand-navy transition w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-50"
+                  title="عرض كل الوثائق"
+                >
+                  <i className="fa-solid fa-folder-open"></i>
+                </button>
+              </div>
+
+              <div className="mb-4 grid grid-cols-3 gap-2">
+                <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center">
+                  <p className="text-[9px] font-black text-slate-400">الكل</p>
+                  <p className="mt-1 text-sm font-black text-brand-dark">{selectedCase.documents.length.toLocaleString('ar-IQ')}</p>
+                </div>
+                <div className="rounded-2xl bg-amber-50 px-3 py-3 text-center">
+                  <p className="text-[9px] font-black text-amber-700">مطلوب</p>
+                  <p className="mt-1 text-sm font-black text-amber-800">{selectedCaseDocumentsNeedingAction.toLocaleString('ar-IQ')}</p>
+                </div>
+                <div className="rounded-2xl bg-emerald-50 px-3 py-3 text-center">
+                  <p className="text-[9px] font-black text-emerald-700">موقعة</p>
+                  <p className="mt-1 text-sm font-black text-emerald-800">{selectedCaseSignedDocuments.toLocaleString('ar-IQ')}</p>
+                </div>
+              </div>
+
+              <div className="custom-scrollbar flex-1 space-y-2 overflow-y-auto">
+                {selectedCase.documents.length > 0 ? (
+                  selectedCase.documents.map((doc) => (
+                    <div
+                      key={doc.id}
+                      onClick={() => setActivePreviewDoc(doc)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault();
+                          setActivePreviewDoc(doc);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3 text-right transition hover:border-brand-navy/20 hover:bg-white hover:shadow-sm"
+                    >
+                      <div className={`text-xl ${doc.type === 'pdf' ? 'text-red-500' : doc.type === 'image' ? 'text-blue-500' : 'text-gray-500'}`}>
+                        <i className={`fa-solid ${getFileIconClass(doc.type)}`}></i>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-black text-brand-dark truncate">{doc.name}</p>
+                        <p className="text-[10px] font-bold text-slate-400">{doc.size} • {formatDate(doc.createdAt)}</p>
+                      </div>
+                      <span className="rounded-lg border border-slate-100 bg-white px-2 py-1 text-[9px] font-black text-slate-400">
+                        معاينة
+                      </span>
+                      {doc.actionRequired && (
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleDocReply(doc);
+                          }}
+                          className="flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-[9px] font-black text-amber-600 transition hover:bg-amber-100"
+                        >
+                          <i className="fa-solid fa-reply text-[8px]"></i>
+                          رد
+                        </button>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-center py-10 text-slate-400">
+                    <i className="fa-solid fa-file-circle-xmark text-3xl mb-3 opacity-20"></i>
+                    <p className="text-xs font-bold">لا توجد وثائق لهذا الملف</p>
+                  </div>
+                )}
+              </div>
+            </aside>
+          )}
+        </section>
+      ) : (
+        <EmptyState
+          icon="comments"
+          title="لا توجد محادثات حتى الآن"
+          description="ابدأ قضية جديدة أو اختر محامياً مناسباً لبدء أول تواصل قانوني من داخل المنصة."
+          action={
+            <div className="flex justify-center gap-3">
+              <ActionButton onClick={() => navigate('/lawyers')} variant="secondary">
+                ابحث عن محامٍ
+              </ActionButton>
+              <ActionButton onClick={() => navigate('/cases', { state: { openNewCase: true } })} variant="primary">
+                افتح قضية جديدة
+              </ActionButton>
+            </div>
+          }
+        />
       )}
-    </section>
-  ) : (
-    <EmptyState
-      icon="comments"
-      title="لا توجد محادثات حتى الآن"
-      description="ابدأ قضية جديدة أو اختر محامياً مناسباً لبدء أول تواصل قانوني من داخل المنصة."
-      action={
-        <div className="flex justify-center gap-3">
-          <ActionButton onClick={() => navigate('/lawyers')} variant="secondary">
-            ابحث عن محامٍ
-          </ActionButton>
-          <ActionButton onClick={() => navigate('/cases', { state: { openNewCase: true } })} variant="primary">
-            افتح قضية جديدة
-          </ActionButton>
-        </div>
-      }
-    />
-  )}
 
       <AnimatePresence>
         {activePreviewDoc && (
