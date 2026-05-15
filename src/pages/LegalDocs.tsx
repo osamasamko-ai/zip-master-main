@@ -5,7 +5,6 @@ import { useNavigate } from 'react-router-dom';
 import html2pdf from 'html2pdf.js';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
-import NoticePanel from '../components/ui/NoticePanel';
 
 export interface LawSource {
   id: string;
@@ -40,7 +39,8 @@ const tabs: Array<{
 
 const HighlightText = ({ text, highlight }: { text: string; highlight: string }) => {
   if (!highlight.trim()) return <>{text}</>;
-  const regex = new RegExp(`(${highlight})`, 'gi');
+  const escapedHighlight = highlight.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(${escapedHighlight})`, 'gi');
   const parts = text.split(regex);
   return (
     <>
@@ -336,9 +336,9 @@ export default function LegalDocs() {
     const opt = {
       margin: 10,
       filename: `${selectedDoc.title.replace(/\s/g, '_')}.pdf`,
-      image: { type: 'jpeg', quality: 0.98 },
+      image: { type: 'jpeg' as const, quality: 0.98 },
       html2canvas: { scale: 2, logging: true, dpi: 192, letterRendering: true },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const },
     };
 
     try {
@@ -357,6 +357,35 @@ export default function LegalDocs() {
     if (activeTab === 'categories') return categorySearchQuery;
     return workspaceQuery;
   };
+
+  const clearActiveFilters = () => {
+    if (activeTab === 'explore') {
+      setExploreQuery('');
+      setExploreCategoryFilter('all');
+      return;
+    }
+    if (activeTab === 'categories') {
+      setCategorySearchQuery('');
+      setSelectedCategory('all');
+      return;
+    }
+    setWorkspaceQuery('');
+  };
+
+  const activeQuery = getActiveSearchQuery();
+  const currentResultCount =
+    activeTab === 'explore'
+      ? exploreDocs.length
+      : activeTab === 'categories'
+        ? categoryDocs.length
+        : workspaceDocs.length;
+  const activeCategoryLabel =
+    activeTab === 'explore'
+      ? exploreCategoryFilter
+      : activeTab === 'categories'
+        ? selectedCategory
+        : 'workspace';
+  const selectedDocComments = selectedDoc ? docComments[selectedDoc.id] || [] : [];
 
   const renderDocList = (items: LawSource[], emptyMessage: string) => {
     const query = getActiveSearchQuery();
@@ -431,31 +460,54 @@ export default function LegalDocs() {
   };
 
   return (
-    <div className="app-view fade-in min-h-[calc(100vh-140px)] text-right space-y-5">
-      <section className="rounded-[32px] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/5 p-5 shadow-premium md:p-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="max-w-3xl">
-            <div className="inline-flex items-center rounded-full border border-brand-gold/20 bg-white/80 px-3 py-1 text-xs font-bold text-brand-navy">
-              <i className="fa-solid fa-gavel ml-2"></i>
+    <div className="app-view fade-in min-h-[calc(100vh-140px)] space-y-5 text-right">
+      <section className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-white/80 shadow-premium backdrop-blur">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="p-6 md:p-8">
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-gold">
+              <i className="fa-solid fa-gavel"></i>
               Legal Research Workspace
             </div>
-            <h2 className="mt-4 text-3xl font-bold leading-tight text-brand-dark">قاعدة القوانين العراقية</h2>
-            <p className="mt-2 text-sm font-bold text-slate-500 leading-relaxed">
-              مساحة قانونية مصممة للاستخدام المكثف: بحث أسرع، عرض أكثر كثافة، وتنقل أوضح بين المراجع القانونية دون إرباك بصري.
+            <h2 className="mt-4 max-w-3xl text-3xl font-black leading-tight text-brand-dark md:text-4xl">قاعدة القوانين العراقية</h2>
+            <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-slate-500">
+              مساحة بحث قانونية أكثر وضوحاً: نتائج قابلة للتصفية، مراجع محفوظة، ملخص قراءة، وتعليقات خاصة على كل مادة.
             </p>
+
+            <div className="mt-6 grid gap-3 md:grid-cols-3">
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">المواد المتاحة</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{totalArticles.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">الفئات</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{totalCategories.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
+                <p className="text-[11px] font-black text-slate-400">الفئة الأوسع</p>
+                <p className="mt-2 truncate text-sm font-black text-brand-dark">{categoryWithMostDocs?.category ?? '...'}</p>
+              </div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-3 xl:min-w-[320px]">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">الفئات</p>
-              <p className="mt-2 text-2xl font-bold text-brand-dark">{totalCategories}</p>
+
+          <div className="bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-6 text-white md:p-8">
+            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-lightgold">Research Pulse</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                <p className="text-[11px] font-black text-white/60">نتائج العرض</p>
+                <p className="mt-2 text-3xl font-black">{currentResultCount.toLocaleString('ar-IQ')}</p>
+              </div>
+              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+                <p className="text-[11px] font-black text-white/60">محفوظات</p>
+                <p className="mt-2 text-3xl font-black">{pinnedDocIds.length.toLocaleString('ar-IQ')}</p>
+              </div>
             </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">مراجع مثبّتة</p>
-              <p className="mt-2 text-2xl font-bold text-brand-navy">{pinnedDocIds.length}</p>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">الفئة الأوسع</p>
-              <p className="mt-2 truncate text-base font-bold text-brand-dark">{categoryWithMostDocs?.category ?? '...'}</p>
+            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/10 p-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-white/60">المادة المحددة</p>
+              <p className="mt-2 line-clamp-2 text-sm font-black">{selectedDoc?.title || 'اختر مادة من القائمة'}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button type="button" onClick={() => selectedDoc && copyCitation(selectedDoc)} disabled={!selectedDoc} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white transition hover:bg-white/20 disabled:opacity-40">نسخ الاقتباس</button>
+                <button type="button" onClick={() => selectedDoc && setIsFullView(true)} disabled={!selectedDoc} className="rounded-xl bg-brand-gold px-3 py-2 text-[10px] font-black text-brand-dark transition hover:bg-brand-lightgold disabled:opacity-40">قراءة موسعة</button>
+              </div>
             </div>
           </div>
         </div>
@@ -474,10 +526,21 @@ export default function LegalDocs() {
         />
       ) : (
         <>
-          <NoticePanel
-            title="الخطوة التالية"
-            description="ابدأ بالاستكشاف إذا كنت تعرف الكلمات المفتاحية، واستخدم الفئات إذا كنت ما زلت في مرحلة تضييق المجال القانوني المناسب."
-          />
+          <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">نطاق البحث الحالي</p>
+                <p className="mt-1 text-sm font-black text-brand-dark">
+                  {activeTab === 'explore' ? 'الاستكشاف' : activeTab === 'categories' ? 'الفئات' : 'مساحة العمل'} • {activeCategoryLabel === 'all' ? 'كل التصنيفات' : activeCategoryLabel}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {activeQuery.trim() && <span className="rounded-full bg-slate-100 px-3 py-2 text-[10px] font-black text-slate-500">بحث: {activeQuery.trim()}</span>}
+                <span className="rounded-full bg-brand-navy/5 px-3 py-2 text-[10px] font-black text-brand-navy">{currentResultCount.toLocaleString('ar-IQ')} نتيجة</span>
+                <button type="button" onClick={clearActiveFilters} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-500 transition hover:border-brand-navy hover:text-brand-navy">مسح النطاق</button>
+              </div>
+            </div>
+          </section>
           <section className="sticky top-[72px] z-20 rounded-[2rem] border border-slate-200 bg-white/90 p-2 shadow-premium backdrop-blur-md transition-all duration-300">
             <div
               role="tablist"
@@ -556,6 +619,18 @@ export default function LegalDocs() {
                         ))}
                       </select>
                     </div>
+                  </div>
+                  <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+                    {categories.map((category) => (
+                      <button
+                        key={category}
+                        type="button"
+                        onClick={() => setExploreCategoryFilter(category)}
+                        className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition ${exploreCategoryFilter === category ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+                      >
+                        {category === 'all' ? 'كل التصنيفات' : category}
+                      </button>
+                    ))}
                   </div>
                   <div className="mt-6">{renderDocList(exploreDocs, 'لم يتم العثور على مواد قانونية مطابقة للبحث الحالي.')}</div>
                 </div>
@@ -736,6 +811,17 @@ export default function LegalDocs() {
                         <div className="flex gap-2">
                           <ActionButton
                             type="button"
+                            onClick={handleExportPdf}
+                            disabled={isExportingPdf}
+                            variant="secondary"
+                            size="sm"
+                            className="flex-1"
+                          >
+                            {isExportingPdf ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-file-pdf"></i>}
+                            PDF
+                          </ActionButton>
+                          <ActionButton
+                            type="button"
                             onClick={() => { setActiveTab('workspace'); togglePinnedDoc(selectedDoc.id); }}
                             variant="secondary"
                             size="sm"
@@ -762,11 +848,11 @@ export default function LegalDocs() {
                           ملاحظاتي الخاصة
                         </h4>
 
-                        <div className="space-y-3 max-h-48 overflow-y-auto mb-4 pr-1 custom-scrollbar">
-                          {(docComments[selectedDoc.id] || []).length === 0 ? (
+                        <div className="mb-4 max-h-48 space-y-3 overflow-y-auto pr-1 custom-scrollbar">
+                          {selectedDocComments.length === 0 ? (
                             <p className="text-xs font-bold text-slate-400 italic text-center py-4">لم تضف أي ملاحظات على هذه المادة بعد.</p>
                           ) : (
-                            (docComments[selectedDoc.id] || []).map(comment => (
+                            selectedDocComments.map(comment => (
                               <div key={comment.id} className="bg-slate-50 rounded-2xl p-4 text-right group/comment relative border border-slate-100">
                                 <div className="flex justify-between items-center mb-1">
                                   <span className="text-[9px] font-black text-brand-navy uppercase tracking-widest">{comment.userName}</span>
@@ -843,6 +929,90 @@ export default function LegalDocs() {
           </section>
         </>
       )}
+
+      {/* Full Reading View */}
+      <AnimatePresence>
+        {isFullView && selectedDoc && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[220] flex items-center justify-center bg-brand-dark/70 p-4 backdrop-blur-md md:p-8"
+          >
+            <button
+              type="button"
+              onClick={() => setIsFullView(false)}
+              className="absolute inset-0"
+              aria-label="إغلاق عرض القراءة"
+            />
+            <motion.article
+              initial={{ y: 24, scale: 0.98, opacity: 0 }}
+              animate={{ y: 0, scale: 1, opacity: 1 }}
+              exit={{ y: 24, scale: 0.98, opacity: 0 }}
+              className="relative z-[221] flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-[2.5rem] bg-white shadow-2xl"
+            >
+              <header className="border-b border-slate-100 bg-slate-50/70 p-5 md:p-6">
+                <div className="flex items-start justify-between gap-4">
+                  <button
+                    type="button"
+                    onClick={() => setIsFullView(false)}
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm transition hover:text-red-500"
+                  >
+                    <i className="fa-solid fa-times"></i>
+                  </button>
+                  <div className="min-w-0 text-right">
+                    <div className="mb-3 flex flex-wrap justify-end gap-2">
+                      <span className="rounded-lg bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand-gold">{selectedDoc.category}</span>
+                      <span className="rounded-lg bg-brand-navy/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand-navy">المادة {selectedDoc.article}</span>
+                    </div>
+                    <h2 className="text-2xl font-black leading-tight text-brand-dark md:text-3xl">{selectedDoc.title}</h2>
+                    <p className="mt-2 text-sm font-bold text-slate-500">{selectedDoc.law}</p>
+                  </div>
+                </div>
+              </header>
+
+              <div className="flex-1 overflow-y-auto p-6 custom-scrollbar md:p-8">
+                <div className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ملخص المادة</p>
+                  <p className="mt-4 text-base font-bold leading-9 text-slate-700">{selectedDoc.summary}</p>
+                </div>
+
+                <div className="mt-5 grid gap-3 md:grid-cols-3">
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-[10px] font-black text-slate-400">القانون</p>
+                    <p className="mt-1 text-sm font-black text-brand-dark">{selectedDoc.law}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-[10px] font-black text-slate-400">التصنيف</p>
+                    <p className="mt-1 text-sm font-black text-brand-dark">{selectedDoc.category}</p>
+                  </div>
+                  <div className="rounded-2xl bg-slate-50 p-4">
+                    <p className="text-[10px] font-black text-slate-400">الملاحظات</p>
+                    <p className="mt-1 text-sm font-black text-brand-dark">{selectedDocComments.length.toLocaleString('ar-IQ')}</p>
+                  </div>
+                </div>
+              </div>
+
+              <footer className="border-t border-slate-100 bg-white p-5">
+                <div className="flex flex-col gap-3 sm:flex-row">
+                  <ActionButton type="button" onClick={() => copyCitation(selectedDoc)} variant="secondary" className="flex-1">
+                    <i className="fa-solid fa-quote-right"></i>
+                    نسخ الاقتباس
+                  </ActionButton>
+                  <ActionButton type="button" onClick={handleExportPdf} disabled={isExportingPdf} variant="ghost" className="flex-1">
+                    {isExportingPdf ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-file-pdf"></i>}
+                    تصدير PDF
+                  </ActionButton>
+                  <ActionButton type="button" onClick={() => consultAI(selectedDoc)} variant="primary" className="flex-1">
+                    <i className="fa-solid fa-wand-magic-sparkles"></i>
+                    استشارة AI
+                  </ActionButton>
+                </div>
+              </footer>
+            </motion.article>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Toast Feedback System */}
       <AnimatePresence>
