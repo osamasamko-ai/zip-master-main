@@ -128,6 +128,7 @@ export default function Messages() {
   const [activePreviewDoc, setActivePreviewDoc] = useState<LegalDocument | null>(null);
   const [activeCaseId, setActiveCaseId] = useState('');
   const [showCaseSummary, setShowCaseSummary] = useState(false);
+  const [isChatExpanded, setIsChatExpanded] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [replyingToMessage, setReplyingToMessage] = useState<MessageItem | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -772,7 +773,8 @@ export default function Messages() {
       </section>
 
       {conversations.length > 0 ? (
-        <section className={`grid gap-4 xl:h-[calc(100vh-238px)] xl:min-h-[620px] ${selectedConversation && selectedCase ? 'xl:grid-cols-[310px_minmax(0,1fr)_300px]' : 'xl:grid-cols-[310px_minmax(0,1fr)]'}`}>
+        <section className={`grid gap-4 xl:h-[calc(100vh-238px)] xl:min-h-[620px] ${isChatExpanded ? 'xl:grid-cols-[minmax(0,1fr)]' : selectedConversation && selectedCase ? 'xl:grid-cols-[310px_minmax(0,1fr)_300px]' : 'xl:grid-cols-[310px_minmax(0,1fr)]'}`}>
+          {!isChatExpanded && (
           <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
             <div className="relative">
               <input
@@ -931,6 +933,7 @@ export default function Messages() {
               )}
             </div>
           </aside>
+          )}
 
           <section className="flex min-h-[640px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-premium xl:min-h-0">
             {selectedConversation && selectedCase ? (
@@ -1003,6 +1006,17 @@ export default function Messages() {
                     </div>
 
                     <div className="flex flex-wrap justify-end gap-2">
+                      <ActionButton
+                        type="button"
+                        onClick={() => setIsChatExpanded((current) => !current)}
+                        variant={isChatExpanded ? 'primary' : 'ghost'}
+                        size="sm"
+                        className={isChatExpanded ? '' : 'bg-white border-slate-100 text-slate-600 hover:text-brand-navy'}
+                        title={isChatExpanded ? 'إرجاع عرض المحادثة' : 'توسيع مساحة المحادثة'}
+                      >
+                        <i className={`fa-solid ${isChatExpanded ? 'fa-compress' : 'fa-expand'} ml-1.5`}></i>
+                        {isChatExpanded ? 'تصغير' : 'توسيع'}
+                      </ActionButton>
                       <ActionButton onClick={() => navigate('/cases', { state: { activeCaseId: selectedCase.id } })} variant="ghost" size="sm" className="bg-white border-slate-100 text-slate-600 hover:text-brand-navy">
                         <i className="fa-solid fa-folder-open ml-1.5"></i>
                         الملف
@@ -1422,7 +1436,7 @@ export default function Messages() {
             )}
         </section>
 
-          {selectedConversation && selectedCase && (
+          {!isChatExpanded && selectedConversation && selectedCase && (
         <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-black text-brand-dark">وثائق القضية</h3>
