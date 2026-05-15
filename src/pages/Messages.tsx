@@ -129,6 +129,7 @@ export default function Messages() {
   const [activeCaseId, setActiveCaseId] = useState('');
   const [showCaseSummary, setShowCaseSummary] = useState(false);
   const [isChatExpanded, setIsChatExpanded] = useState(false);
+  const [isChatHeightExpanded, setIsChatHeightExpanded] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [replyingToMessage, setReplyingToMessage] = useState<MessageItem | null>(null);
   const [isSending, setIsSending] = useState(false);
@@ -773,7 +774,7 @@ export default function Messages() {
       </section>
 
       {conversations.length > 0 ? (
-        <section className={`grid gap-4 xl:h-[calc(100vh-238px)] xl:min-h-[620px] ${isChatExpanded ? 'xl:grid-cols-[minmax(0,1fr)]' : selectedConversation && selectedCase ? 'xl:grid-cols-[310px_minmax(0,1fr)_300px]' : 'xl:grid-cols-[310px_minmax(0,1fr)]'}`}>
+        <section className={`grid gap-4 ${isChatHeightExpanded ? 'xl:h-[calc(100vh-118px)] xl:min-h-[820px]' : 'xl:h-[calc(100vh-238px)] xl:min-h-[620px]'} ${isChatExpanded ? 'xl:grid-cols-[minmax(0,1fr)]' : selectedConversation && selectedCase ? 'xl:grid-cols-[310px_minmax(0,1fr)_300px]' : 'xl:grid-cols-[310px_minmax(0,1fr)]'}`}>
           {!isChatExpanded && (
           <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
             <div className="relative">
@@ -1016,6 +1017,17 @@ export default function Messages() {
                       >
                         <i className={`fa-solid ${isChatExpanded ? 'fa-compress' : 'fa-expand'} ml-1.5`}></i>
                         {isChatExpanded ? 'تصغير' : 'توسيع'}
+                      </ActionButton>
+                      <ActionButton
+                        type="button"
+                        onClick={() => setIsChatHeightExpanded((current) => !current)}
+                        variant={isChatHeightExpanded ? 'primary' : 'ghost'}
+                        size="sm"
+                        className={isChatHeightExpanded ? '' : 'bg-white border-slate-100 text-slate-600 hover:text-brand-navy'}
+                        title={isChatHeightExpanded ? 'إرجاع ارتفاع المحادثة' : 'توسيع ارتفاع المحادثة'}
+                      >
+                        <i className={`fa-solid ${isChatHeightExpanded ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'} ml-1.5`}></i>
+                        {isChatHeightExpanded ? 'ارتفاع عادي' : 'توسيع الطول'}
                       </ActionButton>
                       <ActionButton onClick={() => navigate('/cases', { state: { activeCaseId: selectedCase.id } })} variant="ghost" size="sm" className="bg-white border-slate-100 text-slate-600 hover:text-brand-navy">
                         <i className="fa-solid fa-folder-open ml-1.5"></i>
