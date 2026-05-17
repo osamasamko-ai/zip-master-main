@@ -18,6 +18,7 @@ export default function MainLayout() {
   const [sosOpen, setSosOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [notificationsFilter, setNotificationsFilter] = useState<'all' | 'unread'>('unread');
 
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
@@ -152,13 +153,45 @@ export default function MainLayout() {
     fetchSettings();
   }, []);
 
+  const filteredNotifications = useMemo(() => {
+    return notificationsFilter === 'all'
+      ? notifications
+      : notifications.filter((notification) => !notification.read);
+  }, [notifications, notificationsFilter]);
+
+  const groupedNotifications = useMemo(() => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    const getGroupKey = (createdAt: string) => {
+      const date = new Date(createdAt);
+      const isToday = date.toDateString() === today.toDateString();
+      const isYesterday = date.toDateString() === yesterday.toDateString();
+      return isToday ? 'today' : isYesterday ? 'yesterday' : 'older';
+    };
+
+    const groups: Record<string, { label: string; items: typeof notifications }> = {
+      today: { label: 'اليوم', items: [] },
+      yesterday: { label: 'أمس', items: [] },
+      older: { label: 'أقدم', items: [] }
+    };
+
+    [...filteredNotifications]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .forEach((notification) => {
+        const key = getGroupKey(notification.createdAt);
+        groups[key].items.push(notification);
+      });
+
+    return Object.values(groups).filter((group) => group.items.length > 0);
+  }, [filteredNotifications]);
+
   useEffect(() => {
     setMobileNavOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
-    if (typeof document === 'undefined') return;
-
     const root = document.documentElement;
     root.setAttribute('dir', 'rtl');
     root.lang = 'ar';
@@ -244,44 +277,57 @@ export default function MainLayout() {
                     exit={{ opacity: 0, y: 10, scale: 0.95 }}
                     className="absolute left-0 top-full mt-3 w-80 overflow-hidden rounded-[2rem] border border-slate-200 bg-white text-right shadow-2xl z-50 origin-top-left"
                   >
-                    <div className="flex items-center justify-between border-b border-slate-50 bg-slate-50/50 p-4">
-                      <button onClick={clearAllNotifications} className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 hover:text-red-500 transition-colors">
-                        <i className="fa-solid fa-trash-can text-[9px]"></i>
-                        مسح الكل
-                      </button>
+                    <div className="flex items-center justify-between border-b border-slate-50 bg-slate-50/50 p-3 gap-2">
+                      <div className="flex items-center gap-2">
+                        <button onClick={clearAllNotifications} className="flex items-center gap-1.5 text-[10px] font-black text-slate-400 hover:text-red-500 transition-colors">
+                          <i className="fa-solid fa-trash-can text-[9px]"></i>
+                          مسح الكل
+                        </button>
+                        <div className="h-6 w-px bg-slate-100" />
+                        <button onClick={() => setNotificationsFilter('unread')} className={`text-[10px] font-black px-2 py-1 rounded-xl ${notificationsFilter === 'unread' ? 'bg-brand-navy text-white' : 'text-slate-500 hover:bg-slate-50'}`}>غير المقروءة</button>
+                        <button onClick={() => setNotificationsFilter('all')} className={`text-[10px] font-black px-2 py-1 rounded-xl ${notificationsFilter === 'all' ? 'bg-brand-navy text-white' : 'text-slate-500 hover:bg-slate-50'}`}>الكل</button>
+                      </div>
                       <h4 className="text-xs font-black text-brand-dark">التنبيهات</h4>
                     </div>
                     <div className="max-h-96 overflow-y-auto">
-                      {notifications.length > 0 ? notifications.map((n) => (
-                        <div
-                          key={n.id}
-                          onClick={() => {
-                            markAsRead(n.id);
-                            if (n.link) navigate(n.link);
-                            setIsNotificationsOpen(false);
-                          }}
-                          className={`group/item cursor-pointer border-b border-slate-50 p-4 transition hover:bg-slate-50 last:border-0 relative ${!n.read ? 'bg-brand-navy/[0.02]' : ''}`}
-                        >
-                          <div className="mb-1 flex items-center justify-between">
-                            <span className="text-[9px] font-bold text-slate-400">
-                              {new Date(n.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
-                            </span>
-                            <p className={`text-xs font-black ${!n.read ? 'text-brand-navy' : 'text-slate-600'}`}>{n.title}</p>
+                      {groupedNotifications.length > 0 ? (
+                        groupedNotifications.map((group) => (
+                          <div key={group.label} className="space-y-3 px-1 py-2">
+                            <div className="rounded-2xl bg-slate-100 px-4 py-2 text-[11px] font-black uppercase tracking-[0.24em] text-slate-500">
+                              {group.label}
+                            </div>
+                            <div className="space-y-2">
+                              {group.items.map((n) => (
+                                <div
+                                  key={n.id}
+                                  onClick={() => {
+                                    markAsRead(n.id);
+                                    if (n.link) navigate(n.link);
+                                    setIsNotificationsOpen(false);
+                                  }}
+                                  className={`group/item cursor-pointer rounded-[1.75rem] border border-slate-100 p-4 transition hover:bg-slate-50 relative ${!n.read ? 'bg-brand-navy/[0.04]' : 'bg-white'}`}
+                                >
+                                  <div className="mb-1 flex items-center justify-between gap-3">
+                                    <p className={`text-xs font-black truncate ${!n.read ? 'text-brand-navy' : 'text-slate-700'}`}>{n.title}</p>
+                                    <span className="text-[9px] font-bold text-slate-400">{new Date(n.createdAt).toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}</span>
+                                  </div>
+                                  <p className="text-[11px] font-bold leading-relaxed text-slate-500">{n.message}</p>
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
+                                    className="absolute left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 h-7 w-7 rounded-lg bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 transition flex items-center justify-center shadow-sm"
+                                    title="حذف"
+                                  >
+                                    <i className="fa-solid fa-trash-can text-[10px]"></i>
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
                           </div>
-                          <p className="text-[11px] font-bold leading-relaxed text-slate-500">{n.message}</p>
-
-                          <button
-                            onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
-                            className="absolute left-4 top-1/2 -translate-y-1/2 opacity-0 group-hover/item:opacity-100 h-7 w-7 rounded-lg bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500 transition flex items-center justify-center shadow-sm"
-                            title="حذف"
-                          >
-                            <i className="fa-solid fa-trash-can text-[10px]"></i>
-                          </button>
-                        </div>
-                      )) : (
+                        ))
+                      ) : (
                         <div className="p-10 text-center text-slate-300">
                           <i className="fa-solid fa-bell-slash mb-3 block text-3xl opacity-20"></i>
-                          <p className="text-xs font-bold">لا توجد تنبيهات جديدة</p>
+                          <p className="text-xs font-bold">لا توجد إشعارات متاحة</p>
                         </div>
                       )}
                     </div>
