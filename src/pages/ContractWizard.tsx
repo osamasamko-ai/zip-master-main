@@ -376,6 +376,31 @@ export default function ContractWizard() {
         6: 'fa-circle-check',
     };
 
+    const getContractStatusTone = (status: string) => {
+        if (status === 'signed' || status === 'active') return 'success';
+        if (status === 'draft') return 'warning';
+        if (status === 'waiting_buyer') return 'info';
+        return 'secondary';
+    };
+
+    const getContractStatusLabel = (status: string) => {
+        if (status === 'signed' || status === 'active') return 'مكتمل';
+        if (status === 'draft') return 'مسودة';
+        if (status === 'waiting_buyer') return 'بانتظار المشتري';
+        return 'قيد التنفيذ';
+    };
+
+    const contractStatusCounts = useMemo(() => {
+        return userContracts.reduce(
+            (acc, contract) => {
+                const status = contract.status || 'pending';
+                acc[status] = (acc[status] || 0) + 1;
+                return acc;
+            },
+            {} as Record<string, number>
+        );
+    }, [userContracts]);
+
     const validatePhone = (phone: string) => {
         return /^[0-9]{10}$/.test(phone);
     };
@@ -849,6 +874,20 @@ export default function ContractWizard() {
 
     const renderContractsTab = () => (
         <div className="space-y-8 text-right">
+            <div className="grid gap-4 md:grid-cols-3">
+                <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">عدد العقود</p>
+                    <p className="mt-3 text-3xl font-black text-brand-dark">{userContracts.length}</p>
+                </div>
+                <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">قيد الانتظار</p>
+                    <p className="mt-3 text-3xl font-black text-brand-navy">{contractStatusCounts.waiting_buyer || 0}</p>
+                </div>
+                <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-slate-400 font-black">المكتمل</p>
+                    <p className="mt-3 text-3xl font-black text-emerald-600">{contractStatusCounts.signed || contractStatusCounts.active || 0}</p>
+                </div>
+            </div>
             <div className="flex flex-col gap-3">
                 <h2 className="text-2xl font-black text-brand-dark">العقود المحفوظة والمكتملة</h2>
                 <p className="text-sm font-bold text-slate-500 max-w-3xl mx-auto">هنا تعرض العقود التي قمت بحفظها أو إنهائها، ويمكنك تنزيلها أو العودة إليها في أي وقت.</p>
@@ -875,8 +914,8 @@ export default function ContractWizard() {
                                         {createdAt && <p className="text-[10px] font-bold text-slate-400">تاريخ الإنشاء: {createdAt}</p>}
                                     </div>
                                     <div className="flex items-center gap-2">
-                                        <StatusBadge tone={contractStatus === 'active' ? 'success' : contractStatus === 'draft' ? 'warning' : 'info'}>
-                                            {contractStatus === 'active' ? 'مكتمل' : contractStatus === 'draft' ? 'مسودة' : 'قيد التنفيذ'}
+                                        <StatusBadge tone={getContractStatusTone(contractStatus)}>
+                                            {getContractStatusLabel(contractStatus)}
                                         </StatusBadge>
                                         <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[10px] font-black text-slate-500">{note.buyerName ? `المشتري: ${note.buyerName}` : 'لا بيانات مشتري'}</span>
                                     </div>
@@ -906,6 +945,13 @@ export default function ContractWizard() {
                                         <i className="fa-solid fa-file-pdf ml-2"></i>
                                         {pdfUrl ? 'تحميل العقد' : 'لا يوجد ملف PDF'}
                                     </ActionButton>
+                                    <button
+                                        onClick={() => navigate('/contracts')}
+                                        className="flex-1 rounded-2xl border border-slate-200 bg-slate-50 text-slate-700 font-black hover:border-brand-navy hover:text-brand-navy transition-all py-4"
+                                    >
+                                        <i className="fa-solid fa-pen-to-square ml-2"></i>
+                                        تعديل العقد
+                                    </button>
                                 </div>
                             </div>
                         );
@@ -975,7 +1021,28 @@ export default function ContractWizard() {
                 </div>
             </div>
 
+            {activeTab === 'create' && (
+                <div className="grid gap-4 md:grid-cols-3 max-w-6xl mx-auto mt-6">
+                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm text-right">
+                        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">اجمالي العقود</p>
+                        <p className="mt-3 text-3xl font-black text-brand-dark">{userContracts.length}</p>
+                        <p className="text-xs text-slate-500 mt-2">العقود المحملة أو الموثقة لديك حتى الآن</p>
+                    </div>
+                    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-5 shadow-sm text-right">
+                        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">المسودات</p>
+                        <p className="mt-3 text-3xl font-black text-brand-navy">{contractStatusCounts.draft || 0}</p>
+                        <p className="text-xs text-slate-500 mt-2">عقود لم تُكمل بعد ويمكن استئنافها لاحقاً</p>
+                    </div>
+                    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-5 shadow-sm text-right">
+                        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">المكتملات</p>
+                        <p className="mt-3 text-3xl font-black text-emerald-600">{contractStatusCounts.signed || contractStatusCounts.active || 0}</p>
+                        <p className="text-xs text-slate-500 mt-2">العقود التي تم توقيعها وتوثيقها بنجاح</p>
+                    </div>
+                </div>
+            )}
+
             <div className="max-w-6xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 p-8 md:p-12 shadow-premium relative">
+                {step > 0 && activeTab === 'create' && renderStepHeader()}
                 {activeTab === 'create' && (
                     <div>
                         <h2 className="text-2xl font-black text-brand-dark mb-8 flex items-center justify-center gap-3">
