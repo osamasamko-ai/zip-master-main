@@ -142,6 +142,7 @@ export default function Messages() {
   const [isLawyerTyping, setIsLawyerTyping] = useState(false);
   const [isAiConsulting, setIsAiConsulting] = useState(false);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -163,6 +164,23 @@ export default function Messages() {
     if (isSameDay(date, now)) return 'اليوم';
     if (isSameDay(date, yesterday)) return 'أمس';
     return formatDate(date);
+  }, []);
+
+  const handleScroll = useCallback(() => {
+    if (!scrollRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = scrollRef.current;
+    // Show button if we are more than 300px away from the bottom
+    const isScrolledUp = scrollHeight - scrollTop - clientHeight > 300;
+    setShowJumpToBottom(isScrolledUp);
+  }, []);
+
+  const jumpToBottom = useCallback(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTo({
+        top: scrollRef.current.scrollHeight,
+        behavior: 'smooth',
+      });
+    }
   }, []);
 
   const viewerRole: 'user' | 'lawyer' = useMemo(() => (user?.role === 'pro' || user?.role === 'admin' ? 'lawyer' : 'user'), [user]);
@@ -955,7 +973,22 @@ export default function Messages() {
             </aside>
           )}
 
-          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-premium xl:min-h-0">
+          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-premium xl:min-h-0 relative">
+            <AnimatePresence>
+              {showJumpToBottom && (
+                <motion.button
+                  initial={{ opacity: 0, scale: 0.8, y: 20 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.8, y: 20 }}
+                  onClick={jumpToBottom}
+                  className="absolute bottom-40 left-8 z-20 flex h-12 w-12 items-center justify-center rounded-full bg-brand-navy text-white shadow-2xl ring-4 ring-white transition hover:bg-brand-dark active:scale-95 md:bottom-44"
+                  title="انتقال للأسفل"
+                >
+                  <i className="fa-solid fa-chevron-down text-lg"></i>
+                </motion.button>
+              )}
+            </AnimatePresence>
+
             {selectedConversation && selectedCase ? (
               <>
                 <div className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(248,250,252,0.96),rgba(255,255,255,1))] p-4">
@@ -1100,6 +1133,7 @@ export default function Messages() {
 
                 <div
                   ref={scrollRef}
+                  onScroll={handleScroll}
                   className="custom-scrollbar flex-1 space-y-5 overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(241,245,249,0.72))] p-4 md:p-6"
                 >
                   {threadMessages.map((message, index) => {
