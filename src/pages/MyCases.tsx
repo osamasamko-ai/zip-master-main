@@ -131,6 +131,15 @@ const SIDEBAR_FILTERS: Array<{ id: SidebarFilter; label: string; icon: string }>
   { id: 'all', label: 'الكل', icon: 'fa-layer-group' },
 ];
 
+const DOC_FILTERS: Array<{ id: DocFilter; label: string; icon: string; activeClass: string; idleClass: string }> = [
+  { id: 'all', label: 'الكل', icon: 'fa-layer-group', activeClass: 'bg-brand-navy text-white shadow-md', idleClass: 'bg-slate-50 text-slate-500 hover:bg-white hover:shadow-sm' },
+  { id: 'pending', label: 'للتوقيع', icon: 'fa-signature', activeClass: 'bg-amber-500 text-white shadow-md', idleClass: 'bg-amber-50 text-amber-700 hover:bg-white hover:shadow-sm' },
+  { id: 'contracts', label: 'العقود', icon: 'fa-file-contract', activeClass: 'bg-brand-gold text-brand-dark shadow-md', idleClass: 'bg-yellow-50 text-yellow-700 hover:bg-white hover:shadow-sm' },
+  { id: 'signed', label: 'موقعة', icon: 'fa-circle-check', activeClass: 'bg-emerald-500 text-white shadow-md', idleClass: 'bg-emerald-50 text-emerald-700 hover:bg-white hover:shadow-sm' },
+  { id: 'expired', label: 'منتهية', icon: 'fa-clock', activeClass: 'bg-red-500 text-white shadow-md', idleClass: 'bg-red-50 text-red-700 hover:bg-white hover:shadow-sm' },
+  { id: 'uploaded', label: 'مرفوعة', icon: 'fa-cloud-arrow-up', activeClass: 'bg-blue-500 text-white shadow-md', idleClass: 'bg-blue-50 text-blue-700 hover:bg-white hover:shadow-sm' },
+];
+
 const getCaseStatusTone = (status: CaseStatus) => {
   if (status === 'closed') return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
   if (status === 'review') return 'bg-amber-50 text-amber-700 ring-amber-100';
@@ -1551,6 +1560,29 @@ export default function MyCases() {
     ];
   }, [activeCase]);
 
+  const documentFilterCounts = useMemo(() => {
+    const docs = activeCase?.documents || [];
+    const recentLimit = 1000 * 60 * 60 * 24 * 7;
+
+    return {
+      all: docs.length,
+      pending: docs.filter((doc) => doc.actionRequired === 'بانتظار توقيعك' && !doc.isSigned).length,
+      expired: docs.filter((doc) => doc.expiresAt && !doc.isSigned).length,
+      signed: docs.filter((doc) => doc.isSigned).length,
+      uploaded: docs.filter((doc) => doc.uploadedAt && Date.now() - new Date(doc.uploadedAt).getTime() < recentLimit).length,
+      contracts: docs.filter((doc) => doc.tags?.includes('contract')).length,
+    } satisfies Record<DocFilter, number>;
+  }, [activeCase]);
+
+  const documentHealth = useMemo(() => {
+    const docs = activeCase?.documents || [];
+    const signed = docs.filter((doc) => doc.isSigned).length;
+    const needsAction = docs.filter((doc) => doc.actionRequired || doc.expiresAt).length;
+    const percent = docs.length ? Math.round((signed / docs.length) * 100) : 0;
+
+    return { signed, needsAction, percent };
+  }, [activeCase]);
+
   return (
     <div className="app-view fade-in w-full max-w-full space-y-5 overflow-x-hidden">
       {/* Toast Notification for Reminders */}
@@ -1594,7 +1626,7 @@ export default function MyCases() {
       )}
 
       {/* Header section */}
-      <div className="relative overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.88))] p-5 text-right shadow-premium">
+      <div className="relative overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-white p-5 text-right shadow-sm">
         <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#D4AF37,#1B365D,#D4AF37)]"></div>
         <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-start gap-4">
@@ -1605,12 +1637,8 @@ export default function MyCases() {
             <i className={`fa-solid ${isSidebarCollapsed ? 'fa-indent' : 'fa-outdent'}`}></i>
           </button>
           <div className="min-w-0">
-            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">لوحة متابعة القضايا</p>
+            <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">قضاياي</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-2 rounded-xl border border-slate-100 bg-white px-3 py-1.5 shadow-sm">
-                <i className="fa-solid fa-wallet text-brand-gold text-xs"></i>
-                <span className="text-xs font-black text-brand-dark">{(user?.accountBalance ?? 0).toLocaleString('ar-IQ')} د.ع</span>
-              </div>
               <span className="rounded-xl border border-slate-100 bg-white px-3 py-1.5 text-xs font-black text-slate-500 shadow-sm">
                 {showArchived ? 'عرض الأرشيف' : 'القضايا النشطة'}
               </span>
@@ -1620,10 +1648,8 @@ export default function MyCases() {
                 </span>
               )}
             </div>
-            <h2 className="mt-2 text-2xl font-black text-brand-dark sm:text-3xl">إدارة قضاياك وملفاتك</h2>
-            <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
-              مساحة عمل واحدة للرسائل، المستندات، المتابعة المالية، والإجراءات العاجلة لكل ملف قانوني.
-            </p>
+            <h2 className="mt-2 text-2xl font-black text-brand-dark sm:text-3xl">متابعة القضايا</h2>
+            <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">اختر قضية، راجع الرسائل والوثائق، ثم نفّذ الإجراء المطلوب.</p>
           </div>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
@@ -1640,90 +1666,36 @@ export default function MyCases() {
         </div>
       </div>
 
-      <div className="rounded-[2rem] border border-white/70 bg-white/80 p-4 shadow-premium backdrop-blur">
-        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-          <div className="rounded-[1.5rem] border border-brand-navy/10 bg-[linear-gradient(135deg,rgba(27,54,93,0.05),rgba(255,255,255,1))] p-5 shadow-sm">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-              <div className="min-w-0">
-                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">مركز المتابعة</p>
-                <h3 className="mt-1 truncate text-xl font-black text-brand-dark">
-                  {activeCase ? activeCase.title : 'اختر ملفاً للبدء'}
-                </h3>
-                <p className="mt-2 text-sm font-bold leading-6 text-slate-500">
-                  {activeCase
-                    ? activeCaseActionCount > 0
-                      ? `لديك ${activeCaseActionCount.toLocaleString('ar-IQ')} عنصر يحتاج انتباهك في هذا الملف.`
-                      : 'كل شيء هادئ حالياً، ويمكنك مراجعة التقدم أو إضافة مستند جديد.'
-                    : 'ابحث، فلتر، أو افتح ملفاً جديداً من نفس الشاشة.'}
-                </p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {nextAction ? (
-                  <ActionButton
-                    variant="primary"
-                    size="sm"
-                    onClick={() => {
-                      if ('docFilter' in nextAction) setDocFilter(nextAction.docFilter);
-                      setActiveTab(nextAction.tab);
-                    }}
-                  >
-                    <i className={`fa-solid ${nextAction.icon}`}></i>
-                    {nextAction.label}
-                  </ActionButton>
-                ) : (
-                  <ActionButton variant="primary" size="sm" onClick={() => setIsNewCaseModalOpen(true)}>
-                    <i className="fa-solid fa-circle-plus"></i>
-                    فتح ملف جديد
-                  </ActionButton>
-                )}
-                {activeCase && (
-                  <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('chat')}>
-                    <i className="fa-regular fa-comments"></i>
-                    تواصل
-                  </ActionButton>
-                )}
-              </div>
+      {activeCase && (
+        <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 text-right shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">القضية الحالية</p>
+              <h3 className="mt-1 truncate text-lg font-black text-brand-dark">{activeCase.title}</h3>
+              <p className="mt-1 text-xs font-bold text-slate-500">{activeCase.statusText} • {activeCase.progress}% مكتمل • {activeCase.documents.length.toLocaleString('ar-IQ')} وثائق</p>
             </div>
-            {activeCase && (
-              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
-                {activeCaseInsights.map((item) => (
-                  <button
-                    key={item.label}
-                    type="button"
-                    onClick={() => {
-                      if (item.label === 'الإجراءات' || item.label === 'الوثائق' || item.label === 'الموقعة') {
-                        setDocFilter(item.label === 'الموقعة' ? 'signed' : item.label === 'الإجراءات' ? 'pending' : 'all');
-                      }
-                      if (item.label === 'السداد') {
-                        setActiveTab('financials');
-                      }
-                    }}
-                    className={`rounded-2xl bg-white p-3 text-right shadow-sm ring-1 transition hover:-translate-y-0.5 hover:shadow-md ${item.tone}`}
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-[10px] font-black">{item.label}</span>
-                      <i className={`fa-solid ${item.icon} text-xs`}></i>
-                    </div>
-                    <p className="mt-2 text-xl font-black text-brand-dark">{item.value}</p>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-2">
-            {workspaceStats.map((stat) => (
-              <div key={stat.label} className={`rounded-[1.25rem] border bg-white p-4 shadow-sm ${stat.tone}`}>
-                <div className="mb-3 flex items-center justify-between gap-3">
-                  <span className="text-[10px] font-black text-slate-500">{stat.label}</span>
-                  <i className={`fa-solid ${stat.icon}`}></i>
-                </div>
-                <p className="text-2xl font-black text-brand-dark">{stat.value}</p>
-              </div>
-            ))}
+            <div className="flex flex-wrap gap-2">
+              {nextAction && (
+                <ActionButton
+                  variant="primary"
+                  size="sm"
+                  onClick={() => {
+                    if ('docFilter' in nextAction) setDocFilter(nextAction.docFilter);
+                    setActiveTab(nextAction.tab);
+                  }}
+                >
+                  <i className={`fa-solid ${nextAction.icon}`}></i>
+                  {nextAction.label}
+                </ActionButton>
+              )}
+              <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('chat')}>
+                <i className="fa-regular fa-comments"></i>
+                الرسائل
+              </ActionButton>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <div className={`grid min-h-[760px] w-full min-w-0 grid-cols-1 gap-5 2xl:h-[calc(100vh-285px)] ${isSidebarCollapsed ? '' : 'xl:grid-cols-[320px_minmax(0,1fr)]'}`}>
         {!isSidebarCollapsed && (
@@ -1754,12 +1726,12 @@ export default function MyCases() {
                 />
                 <i className="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
               </div>
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {SIDEBAR_FILTERS.map((filter) => (
+              <div className="mt-4 flex gap-2 overflow-x-auto no-scrollbar">
+                {SIDEBAR_FILTERS.filter((filter) => ['needs_action', 'in_progress', 'completed', 'all'].includes(filter.id)).map((filter) => (
                   <button
                     key={filter.id}
                     onClick={() => setSidebarStatusFilter(filter.id)}
-                    className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-[10px] font-black transition-all ${sidebarStatusFilter === filter.id ? 'border-brand-navy bg-brand-navy text-white shadow-md shadow-brand-navy/15' : 'border-slate-100 bg-white text-slate-500 hover:border-brand-navy/20 hover:text-brand-navy'}`}
+                    className={`flex shrink-0 items-center justify-center gap-1.5 rounded-2xl border px-3 py-2 text-[10px] font-black transition-all ${sidebarStatusFilter === filter.id ? 'border-brand-navy bg-brand-navy text-white shadow-md shadow-brand-navy/15' : 'border-slate-100 bg-white text-slate-500 hover:border-brand-navy/20 hover:text-brand-navy'}`}
                   >
                     <i className={`fa-solid ${filter.icon}`}></i>
                     {filter.label}
@@ -1964,7 +1936,7 @@ export default function MyCases() {
 
               <div className="flex-1 flex min-w-0 flex-col overflow-hidden 2xl:flex-row">
                 {/* Communication Area */}
-                <div className="flex min-w-0 flex-1 flex-col border-l border-slate-100">
+                <div className="flex min-h-0 min-w-0 flex-[1_1_auto] flex-col overflow-hidden border-l border-slate-100 2xl:min-w-[720px]">
 
                   {/* Reminders / Actions Alert Banner */}
                   {activeCase.documents.filter((d: any) => d.actionRequired || d.expiresAt).length > 0 && (
@@ -2005,7 +1977,7 @@ export default function MyCases() {
                     </div>
                   )}
 
-                  <div className="flex border-b border-slate-100 font-black text-sm text-brand-dark bg-slate-50/50 p-1">
+                  <div className="sticky top-0 z-20 flex border-b border-slate-100 font-black text-sm text-brand-dark bg-slate-50/80 p-1 backdrop-blur">
                     {[
                       { id: 'summary', label: 'الملخص', icon: 'fa-solid fa-rectangle-list', badge: `${activeCase.progress}%` },
                       { id: 'chat', label: 'التوجيهات', icon: 'fa-regular fa-comments', badge: activeCase.unreadCount ? activeCase.unreadCount.toLocaleString('ar-IQ') : undefined },
@@ -2039,13 +2011,13 @@ export default function MyCases() {
 
                   {activeTab === 'chat' ? (
                     <>
-                      <div className="flex-1 overflow-y-auto p-4 md:p-5 space-y-5 bg-slate-50/50 custom-scrollbar">
+                      <div className="min-h-[360px] flex-1 overflow-y-auto overscroll-contain bg-slate-50/50 px-4 py-5 custom-scrollbar sm:max-h-[62vh] sm:px-6 lg:px-8 2xl:max-h-none">
                         <div className="text-center w-full my-4">
                           <span className="bg-slate-100 text-slate-400 text-[9px] font-black px-3 py-1 rounded-full tracking-widest uppercase">اليوم</span>
                         </div>
 
                         {activeCase.messages.map((msg) => (
-                          <div key={msg.id} className={`flex gap-3 max-w-[85%] group ${msg.sender === 'user' ? 'mr-auto flex-row-reverse' : ''}`}>
+                          <div key={msg.id} className={`flex gap-3 max-w-[96%] group sm:max-w-[88%] lg:max-w-[76%] ${msg.sender === 'user' ? 'mr-auto flex-row-reverse' : ''}`}>
                             <div className="w-9 h-9 shrink-0 rounded-2xl overflow-hidden border border-slate-200 shadow-sm mt-1">
                               <img src={msg.sender === 'user' ? 'https://i.pravatar.cc/150?img=11' : activeCase.lawyer.img} className="w-full h-full object-cover" alt="avatar" />
                             </div>
@@ -2094,7 +2066,7 @@ export default function MyCases() {
 
                         {/* Lawyer Typing Indicator */}
                         {isLawyerTyping && (
-                          <div className="flex gap-3 max-w-[85%] fade-in">
+                          <div className="flex gap-3 max-w-[96%] fade-in sm:max-w-[88%] lg:max-w-[76%]">
                             <div className="w-9 h-9 shrink-0 rounded-2xl overflow-hidden border border-slate-200 shadow-sm mt-1">
                               <img src={activeCase.lawyer.img} className="w-full h-full object-cover" alt="avatar" />
                             </div>
@@ -2109,7 +2081,7 @@ export default function MyCases() {
 
                       {/* Chat Input */}
                       {activeCase.status !== 'closed' ? (
-                        <div className="p-4 bg-white border-t border-slate-100 flex flex-col gap-4">
+                        <div className="border-t border-slate-100 bg-white p-4 sm:px-6 lg:px-8 flex flex-col gap-4">
                           {/* Quick Replies */}
                           <div className="flex gap-2 overflow-x-auto no-scrollbar scroll-smooth w-full px-1">
                             {QUICK_REPLIES.map((reply, idx) => (
@@ -2135,7 +2107,7 @@ export default function MyCases() {
                             </div>
                           </div>
 
-                          <div className="flex items-end gap-3 bg-slate-50 border border-slate-200 rounded-3xl p-2 focus-within:bg-white focus-within:border-brand-navy transition-all relative">
+                          <div className="flex min-h-[76px] items-end gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-2 transition-all focus-within:border-brand-navy focus-within:bg-white relative">
                             <button
                               type="button"
                               onClick={() => fileInputRef.current?.click()}
@@ -2146,8 +2118,8 @@ export default function MyCases() {
                             </button>
                             <textarea
                               placeholder="اكتب رسالتك للمحامي..."
-                              className="w-full bg-transparent border-none focus:outline-none resize-none py-3.5 text-[15px] font-medium text-slate-700 max-h-32 min-h-[52px]"
-                              rows={1}
+                              className="w-full resize-none border-none bg-transparent py-3.5 text-[15px] font-medium text-slate-700 focus:outline-none min-h-[56px] max-h-40"
+                              rows={2}
                               value={newMessage}
                               onChange={(e) => setNewMessage(e.target.value)}
                               onKeyDown={(e) => {
@@ -2250,7 +2222,7 @@ export default function MyCases() {
                   ) : (
                     <FinancialsTab activeCase={activeCase} />
                   )}
-                  <div className="mt-auto pt-6">
+                  <div className="mt-auto border-t border-slate-100 bg-white p-4">
                     <button
                       type="button"
                       onClick={() => setActiveTab('ai')}
@@ -2264,23 +2236,32 @@ export default function MyCases() {
                   </div>
                 </div>
                 {/* Documents Area */}
-                <div className="flex w-full min-w-0 shrink-0 flex-col border-r border-slate-100 bg-white 2xl:w-80">
-                  <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 p-5 text-sm font-black text-brand-dark">
-                    {activeFolderId ? (
-                      <button
-                        onClick={() => { setActiveFolderId(null); setSelectedDocs(new Set()); }}
-                        className="flex items-center gap-2 hover:text-brand-navy transition"
-                      >
-                        <i className="fa-solid fa-arrow-right"></i>
-                        <span className="truncate max-w-[120px]">
-                          {activeCase.folders.find((f: any) => f.id === activeFolderId)?.name || 'الوثائق'}
-                        </span>
-                      </button>
-                    ) : (
-                      <span className="flex items-center gap-2"><i className="fa-solid fa-folder-tree text-brand-navy"></i> وثائق الملف</span>
-                    )}
+                <div className="flex w-full min-w-0 shrink-0 flex-col border-r border-slate-100 bg-white 2xl:w-72">
+                  <div className="border-b border-slate-100 bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(255,255,255,1))] p-5">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        {activeFolderId ? (
+                          <button
+                            onClick={() => { setActiveFolderId(null); setSelectedDocs(new Set()); }}
+                            className="flex min-w-0 items-center gap-2 text-sm font-black text-brand-dark transition hover:text-brand-navy"
+                          >
+                            <i className="fa-solid fa-arrow-right shrink-0"></i>
+                            <span className="truncate">
+                              {activeCase.folders.find((f: any) => f.id === activeFolderId)?.name || 'الوثائق'}
+                            </span>
+                          </button>
+                        ) : (
+                          <p className="flex items-center gap-2 text-sm font-black text-brand-dark">
+                            <i className="fa-solid fa-folder-tree text-brand-navy"></i>
+                            وثائق الملف
+                          </p>
+                        )}
+                        <p className="mt-1 text-[10px] font-bold text-slate-400">
+                          {filteredDocuments.length.toLocaleString('ar-IQ')} ظاهرة من {activeCase.documents.length.toLocaleString('ar-IQ')} وثائق
+                        </p>
+                      </div>
 
-                    <div className="flex gap-2">
+                      <div className="flex shrink-0 gap-2">
                       <button
                         onClick={handleExportAll}
                         disabled={isExporting || activeCase.documents.length === 0}
@@ -2299,7 +2280,19 @@ export default function MyCases() {
                       <span className="bg-brand-navy text-white text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center shadow-sm">
                         {activeCase.documents.length}
                       </span>
+                      </div>
                     </div>
+
+                    {documentHealth.needsAction > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setDocFilter('pending')}
+                        className="mt-4 flex w-full items-center justify-between rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-right text-xs font-black text-amber-800 transition hover:bg-amber-100"
+                      >
+                        <span>توجد وثائق تحتاج توقيعك</span>
+                        <span>{documentHealth.needsAction.toLocaleString('ar-IQ')}</span>
+                      </button>
+                    )}
                   </div>
 
                   <div className="border-b border-slate-100 bg-white px-4 py-3">
@@ -2345,13 +2338,21 @@ export default function MyCases() {
                   </AnimatePresence>
 
                   {/* Document Filters */}
-                  <div className="px-4 py-3 bg-white border-b border-slate-100 flex flex-row-reverse gap-2 overflow-x-auto no-scrollbar">
-                    <button onClick={() => setDocFilter('all')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'all' ? 'bg-brand-navy text-white shadow-md' : 'bg-slate-50 text-slate-500 hover:bg-white hover:shadow-sm'}`}>الكل</button>
-                    <button onClick={() => setDocFilter('pending')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'pending' ? 'bg-amber-500 text-white shadow-md' : 'bg-amber-50 text-amber-600 hover:bg-white hover:shadow-sm'}`}>للتوقيع</button>
-                    <button onClick={() => setDocFilter('contracts')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'contracts' ? 'bg-brand-gold text-brand-dark shadow-md' : 'bg-yellow-50 text-yellow-700 hover:bg-white hover:shadow-sm'}`}>العقود</button>
-                    <button onClick={() => setDocFilter('signed')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'signed' ? 'bg-emerald-500 text-white shadow-md' : 'bg-emerald-50 text-emerald-600 hover:bg-white hover:shadow-sm'}`}>موقعة</button>
-                    <button onClick={() => setDocFilter('expired')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'expired' ? 'bg-red-500 text-white shadow-md' : 'bg-red-50 text-red-600 hover:bg-white hover:shadow-sm'}`}>منتهية</button>
-                    <button onClick={() => setDocFilter('uploaded')} className={`px-3 py-2 rounded-xl text-[10px] font-black whitespace-nowrap transition-all ${docFilter === 'uploaded' ? 'bg-brand-gold text-brand-dark shadow-md' : 'bg-yellow-50 text-yellow-700 hover:bg-white hover:shadow-sm'}`}>مرفوعة</button>
+                  <div className="flex gap-2 overflow-x-auto border-b border-slate-100 bg-white px-4 py-3 no-scrollbar">
+                    {DOC_FILTERS.filter((filter) => ['all', 'pending', 'signed', 'expired'].includes(filter.id)).map((filter) => (
+                      <button
+                        key={filter.id}
+                        type="button"
+                        onClick={() => setDocFilter(filter.id)}
+                        className={`flex shrink-0 items-center justify-center gap-1.5 rounded-2xl px-3 py-2 text-[10px] font-black transition-all ${docFilter === filter.id ? filter.activeClass : filter.idleClass}`}
+                      >
+                        <i className={`fa-solid ${filter.icon}`}></i>
+                        {filter.label}
+                        <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${docFilter === filter.id ? 'bg-white/20 text-current' : 'bg-white text-slate-400 ring-1 ring-slate-100'}`}>
+                          {documentFilterCounts[filter.id].toLocaleString('ar-IQ')}
+                        </span>
+                      </button>
+                    ))}
                   </div>
 
 
@@ -2413,14 +2414,15 @@ export default function MyCases() {
                       </div>
                     )}
                     {filteredDocuments.map((doc) => (
-                      <div // Changed to a div to allow for checkbox interaction without triggering preview
+                      <motion.div
+                        layout
                         key={doc.id}
                         onClick={(e) => {
-                          // Only open preview if the click wasn't on the checkbox itself
-                          if (!(e.target as HTMLElement).closest('input[type="checkbox"]')) {
+                          if (!(e.target as HTMLElement).closest('input[type="checkbox"], button')) {
                             !doc.isUploading && setActivePreviewDoc(doc);
                           }
                         }}
+                        whileHover={{ y: -1 }}
                         className={`border p-4 rounded-2xl hover:border-brand-navy cursor-pointer transition group flex flex-col gap-2 relative bg-white shadow-sm hover:shadow-md ${doc.actionRequired || doc.expiresAt ? 'border-amber-100 bg-amber-50/30' : 'border-slate-100'}`}
                       >
                         <input
@@ -2530,7 +2532,7 @@ export default function MyCases() {
                             ></div>
                           </div>
                         )}
-                      </div>
+                      </motion.div>
                     ))}
                   </div>
 
@@ -2568,47 +2570,57 @@ export default function MyCases() {
         {activePreviewDoc && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-dark/90 backdrop-blur-md p-4 md:p-10"
+            className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-dark/90 p-3 backdrop-blur-md sm:p-5 md:p-8"
           >
             <button
               onClick={() => setActivePreviewDoc(null)}
-              className="absolute top-6 left-6 h-12 w-12 rounded-full bg-white/10 text-white hover:bg-white/20 transition flex items-center justify-center z-[210]"
+              className="absolute left-4 top-4 z-[210] flex h-10 w-10 items-center justify-center rounded-full bg-white/10 text-white transition hover:bg-white/20 md:left-6 md:top-6 md:h-12 md:w-12"
             >
               <i className="fa-solid fa-times text-xl"></i>
             </button>
 
-            <div className="absolute top-6 right-6 text-right hidden md:block">
-              <h3 className="text-white font-black text-lg">{activePreviewDoc.name}</h3>
+            <div className="absolute right-5 top-5 hidden max-w-md text-right md:block">
+              <h3 className="truncate text-base font-black text-white lg:text-lg">{activePreviewDoc.name}</h3>
               <p className="text-white/50 text-xs font-bold uppercase mt-1">{activePreviewDoc.size} • {activePreviewDoc.date}</p>
             </div>
 
             <motion.div
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-              className="relative w-full h-full max-w-5xl bg-white rounded-[2.5rem] overflow-hidden shadow-2xl flex flex-col"
+              className="relative flex h-[min(82vh,760px)] w-full max-w-4xl flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl md:rounded-[2rem]"
             >
-              <div className="flex-1 bg-slate-100 flex items-center justify-center overflow-hidden">
+              <div className="min-h-0 flex-1 bg-slate-100 p-3 sm:p-5">
                 {activePreviewDoc.type === 'image' ? (
-                  <img src={activePreviewDoc.previewUrl || 'https://via.placeholder.com/800'} className="max-w-full max-h-full object-contain" alt="" />
+                  <div className="flex h-full w-full items-center justify-center overflow-hidden rounded-2xl bg-white">
+                    <img
+                      src={activePreviewDoc.previewUrl || 'https://via.placeholder.com/800'}
+                      className="max-h-full max-w-full object-contain"
+                      alt=""
+                    />
+                  </div>
                 ) : (
-                  <div className="flex flex-col items-center gap-4 text-slate-400">
-                    <i className="fa-solid fa-file-pdf text-8xl"></i>
-                    <p className="font-black">معاينة ملفات PDF قيد التطوير</p>
+                  <div className="flex h-full flex-col items-center justify-center gap-4 rounded-2xl bg-white text-center text-slate-400">
+                    <i className="fa-solid fa-file-pdf text-6xl md:text-7xl"></i>
+                    <p className="text-sm font-black">معاينة ملفات PDF قيد التطوير</p>
                     <button
                       type="button"
                       onClick={() => downloadDocument(activePreviewDoc)}
-                      className="px-6 py-3 bg-brand-navy text-white rounded-xl font-bold"
+                      className="rounded-xl bg-brand-navy px-5 py-3 text-xs font-bold text-white"
                     >
                       تحميل لقراءته محلياً
                     </button>
                   </div>
                 )}
               </div>
-              <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-white">
-                <div className="flex gap-2">
+              <div className="flex flex-col gap-3 border-t border-slate-100 bg-white p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0 text-right md:hidden">
+                  <p className="truncate text-sm font-black text-brand-dark">{activePreviewDoc.name}</p>
+                  <p className="mt-1 text-[10px] font-bold uppercase text-slate-400">{activePreviewDoc.size} • {activePreviewDoc.date}</p>
+                </div>
+                <div className="flex flex-col gap-2 sm:flex-row">
                   <button
                     type="button"
                     onClick={() => downloadDocument(activePreviewDoc)}
-                    className="px-6 py-3 bg-slate-100 text-brand-navy rounded-xl font-black text-xs hover:bg-slate-200 transition"
+                    className="rounded-xl bg-slate-100 px-4 py-3 text-xs font-black text-brand-navy transition hover:bg-slate-200"
                   >
                     تحميل النسخة الأصلية
                   </button>
@@ -2618,12 +2630,12 @@ export default function MyCases() {
                       handleDocReply(activePreviewDoc);
                       setActivePreviewDoc(null);
                     }}
-                    className="px-6 py-3 bg-brand-navy text-white rounded-xl font-black text-xs shadow-lg shadow-brand-navy/20 transition"
+                    className="rounded-xl bg-brand-navy px-4 py-3 text-xs font-black text-white shadow-lg shadow-brand-navy/20 transition"
                   >
                     إرسال للمحامي
                   </button>
                 </div>
-                <div className="text-right">
+                <div className="hidden text-right sm:block">
                   <span className="text-[10px] font-black bg-brand-gold/10 text-brand-gold px-3 py-1 rounded-full uppercase">وثيقة معتمدة</span>
                 </div>
               </div>
