@@ -54,6 +54,8 @@ interface VaultDoc {
   name: string;
   size: string;
   type: 'pdf' | 'word' | 'image';
+  fileUrl?: string;
+  previewUrl?: string;
   date: string;
   status: 'Draft' | 'Reviewed' | 'Signed' | 'Needs Review';
   actionRequired?: string | null;
@@ -105,7 +107,7 @@ interface DeadlineReminder {
   governorate: string;
 }
 
-type DashboardTab = 'overview' | 'cases' | 'messages' | 'earnings' | 'account';
+type DashboardTab = 'overview' | 'cases' | 'messages' | 'documents' | 'operations' | 'earnings' | 'account';
 type CaseViewFilter = 'all' | 'urgent' | 'pinned' | 'billing';
 type VaultFilter = 'all' | 'needs-review' | 'signed' | 'confidential';
 type InboxFilter = 'all' | 'unread' | 'urgent' | 'waiting';
@@ -193,6 +195,8 @@ const tabs: Array<{ id: DashboardTab; label: string; icon: string; description: 
   { id: 'overview', label: 'نظرة عامة', icon: 'fa-grid-2', description: 'الأولويات، الدخل، والمهام الحالية' },
   { id: 'cases', label: 'القضايا', icon: 'fa-briefcase', description: 'إدارة الملفات النشطة والتاريخية' },
   { id: 'messages', label: 'الرسائل', icon: 'fa-inbox', description: 'تواصل العملاء وردودك السريعة' },
+  { id: 'documents', label: 'الوثائق', icon: 'fa-folder-tree', description: 'مراجعة الملفات والمستندات الحساسة' },
+  { id: 'operations', label: 'التشغيل', icon: 'fa-calendar-check', description: 'المواعيد والتنبيهات ومهام الفريق' },
   { id: 'earnings', label: 'الأرباح', icon: 'fa-wallet', description: 'الإيرادات والسحب والتحويلات' },
   { id: 'account', label: 'الحساب', icon: 'fa-user-gear', description: 'المتابعون والاشتراك والإعدادات' }
 ];
@@ -518,7 +522,7 @@ export default function ProDashboard() {
 
     const items = [
       ...cases.map((c) => ({ id: c.id, type: 'قضية', title: c.title, subtitle: c.client, icon: 'fa-briefcase', action: () => { setSelectedCaseId(c.id); setActiveTab('cases'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
-      ...vaultDocs.map((d) => ({ id: d.id, type: 'وثيقة', title: d.name, subtitle: d.caseTitle, icon: 'fa-file-lines', action: () => { setSelectedVaultDocId(d.id); setSelectedCaseId(cases.find(caseItem => caseItem.title === d.caseTitle)?.id ?? selectedCaseId); setActiveTab('cases'); setCaseViewMode('workbench'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
+      ...vaultDocs.map((d) => ({ id: d.id, type: 'وثيقة', title: d.name, subtitle: d.caseTitle, icon: 'fa-file-lines', action: () => { setSelectedVaultDocId(d.id); setSelectedCaseId(cases.find(caseItem => caseItem.title === d.caseTitle)?.id ?? selectedCaseId); setActiveTab('documents'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
       ...inboxMessages.map((m) => ({ id: m.id, type: 'رسالة', title: m.name, subtitle: m.text, icon: 'fa-envelope', action: () => { setActiveMessageId(m.id); setActiveTab('messages'); setIsCommandPaletteOpen(false); setCommandQuery(''); } })),
     ];
 
@@ -541,6 +545,11 @@ export default function ProDashboard() {
   const [replyDraft, setReplyDraft] = useState('');
   const [activeSavedView, setActiveSavedView] = useState<SavedViewId>('urgent-today');
   const [activeToast, setActiveToast] = useState<InlineToastNotification | null>(null);
+
+  const showToast = (title: string, message: string, link?: string) => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setActiveToast({ id, title, message, link });
+  };
 
   const selectedCase = useMemo(
     () => cases.find(caseItem => caseItem.id === selectedCaseId) ?? cases[0],
@@ -569,6 +578,10 @@ export default function ProDashboard() {
 
   const caseRelatedDocs = useMemo(() => vaultDocs.filter(d => d.caseTitle === selectedCase?.title), [vaultDocs, selectedCase]);
   const caseRelatedMessages = useMemo(() => inboxMessages.filter(m => m.caseTitle === selectedCase?.title), [inboxMessages, selectedCase]);
+
+  useEffect(() => {
+    setCaseNote(selectedCase?.privateNote || '');
+  }, [selectedCase?.id, selectedCase?.privateNote]);
 
   const selectedCaseTimeline = caseTimeline.filter(entry => entry.caseId === selectedCase?.id);
   const selectedCaseReminders = deadlineReminders.filter(reminder => reminder.caseId === selectedCase?.id);
@@ -716,23 +729,36 @@ export default function ProDashboard() {
   );
 
   const handleBulkStatusUpdate = async (newStatus: CaseRecord['status']) => {
-    await apiClient.bulkUpdateProCaseStatus(Array.from(selectedCases), newStatus);
-    setCases(prev => prev.map(c =>
-      selectedCases.has(c.id) ? { ...c, status: newStatus } : c
-    ));
-    setSelectedCases(new Set());
-    setIsBulkStatusModalOpen(false);
-    setQuickActionNote(`تم تحديث حالة ${selectedCases.size} قضية بنجاح.`);
+    const selectedCount = selectedCases.size;
+    if (selectedCount === 0) return;
+    try {
+      await apiClient.bulkUpdateProCaseStatus(Array.from(selectedCases), newStatus);
+      setCases(prev => prev.map(c =>
+        selectedCases.has(c.id) ? { ...c, status: newStatus } : c
+      ));
+      setSelectedCases(new Set());
+      setIsBulkStatusModalOpen(false);
+      setQuickActionNote(`تم تحديث حالة ${selectedCount} قضية بنجاح.`);
+    } catch (err) {
+      console.error("Failed to bulk update case status", err);
+      showToast('تعذر تحديث القضايا', 'لم يتم حفظ التغيير الجماعي. حاول مرة أخرى.');
+    }
   };
 
   const handleBulkDelete = async () => {
+    if (selectedCases.size === 0) return;
     const casesToDelete = cases.filter(c => selectedCases.has(c.id));
-    await apiClient.bulkDeleteProCases(Array.from(selectedCases));
-    setLastDeletedCases(casesToDelete);
-    setCases(prev => prev.filter(c => !selectedCases.has(c.id)));
-    setSelectedCases(new Set());
-    setShowUndoToast(true);
-    setTimeout(() => setShowUndoToast(false), 6000);
+    try {
+      await apiClient.bulkDeleteProCases(Array.from(selectedCases));
+      setLastDeletedCases(casesToDelete);
+      setCases(prev => prev.filter(c => !selectedCases.has(c.id)));
+      setSelectedCases(new Set());
+      setShowUndoToast(true);
+      setTimeout(() => setShowUndoToast(false), 6000);
+    } catch (err) {
+      console.error("Failed to bulk delete cases", err);
+      showToast('تعذر حذف القضايا', 'لم يتم حذف القضايا المختارة. حاول مرة أخرى.');
+    }
   };
 
   const handleUndoDelete = () => {
@@ -740,7 +766,7 @@ export default function ProDashboard() {
     setCases(prev => [...lastDeletedCases, ...prev]);
     setLastDeletedCases([]);
     setShowUndoToast(false);
-    recentActivities.shift(); // Remove the delete log
+    showToast('تمت الاستعادة محلياً', 'تمت إعادة القضايا إلى العرض الحالي. إذا أردت استعادتها نهائياً يلزم إنشاء الملفات مرة أخرى.');
   };
 
   useEffect(() => {
@@ -838,7 +864,7 @@ export default function ProDashboard() {
         setQuickActionNote('تم فتح طابور القضايا الأكثر احتياجاً لتدخلك الآن.');
         break;
       case 'مساعد AI':
-        setActiveTab('account');
+        setActiveTab('operations');
         setQuickActionNote('تم فتح قسم التشغيل حيث المساعد جاهز للتحليل وإنتاج المسودات.');
         break;
     }
@@ -882,7 +908,7 @@ export default function ProDashboard() {
       setInboxFilter('waiting');
       return;
     }
-    setActiveTab('cases');
+    setActiveTab('documents');
     setCaseViewMode('workbench');
   };
 
@@ -913,45 +939,82 @@ export default function ProDashboard() {
   };
 
   const handleAddCase = async () => {
-    if (!newCase.title || !newCase.client || !newCase.matter) return;
-    const response = await apiClient.createProCase(newCase);
-    applyWorkspaceData(response.data);
-    setSelectedCaseId(response.data?.cases?.[0]?.id ?? null);
-    setIsNewCaseModalOpen(false);
-    setNewCase({ title: '', client: '', matter: '', priority: 'Medium' });
-    setQuickActionNote('تم إنشاء قضية جديدة ويمكن متابعتها من جدول القضايا فوراً.');
+    if (!newCase.title.trim() || !newCase.client.trim() || !newCase.matter.trim()) {
+      showToast('بيانات غير مكتملة', 'أدخل اسم القضية والعميل وموضوع القضية قبل الإنشاء.');
+      return;
+    }
+    try {
+      const response = await apiClient.createProCase(newCase);
+      applyWorkspaceData(response.data);
+      setSelectedCaseId(response.data?.cases?.[0]?.id ?? null);
+      setIsNewCaseModalOpen(false);
+      setNewCase({ title: '', client: '', matter: '', priority: 'Medium' });
+      setQuickActionNote('تم إنشاء قضية جديدة ويمكن متابعتها من جدول القضايا فوراً.');
+      showToast('تم إنشاء القضية', 'يمكنك الآن متابعة الملف من تبويب القضايا.');
+    } catch (err) {
+      console.error("Failed to add case", err);
+      showToast('تعذر إنشاء القضية', 'راجع البيانات وحاول مرة أخرى.');
+    }
   };
 
   const handleAddAppointment = async () => {
-    if (!newAppt.title || !newAppt.time) return;
-    const response = await apiClient.createProAppointment(newAppt);
-    applyWorkspaceData(response.data);
-    setIsAddApptModalOpen(false);
-    setNewAppt({ title: '', time: '', client: '', type: 'video' });
+    if (!newAppt.title.trim() || !newAppt.time) {
+      showToast('بيانات غير مكتملة', 'أدخل عنوان الموعد والوقت قبل الحفظ.');
+      return;
+    }
+    try {
+      const response = await apiClient.createProAppointment(newAppt);
+      applyWorkspaceData(response.data);
+      setIsAddApptModalOpen(false);
+      setNewAppt({ title: '', time: '', client: '', type: 'video' });
+      showToast('تم حفظ الموعد', 'سيظهر الموعد في قسم التشغيل وجدول اليوم.');
+    } catch (err) {
+      console.error("Failed to add appointment", err);
+      showToast('تعذر حفظ الموعد', 'لم يتم حفظ الموعد. حاول مرة أخرى.');
+    }
   };
 
   const handleVaultUpload = async () => {
-    const response = await apiClient.uploadProVaultDocument(selectedCase?.id ?? null);
-    applyWorkspaceData(response.data);
-    setSelectedVaultDocId(response.data?.vaultDocs?.[0]?.id ?? null);
-    setActiveTab('cases');
-    setCaseViewMode('workbench');
+    if (!selectedCase && cases.length === 0) {
+      showToast('لا توجد قضية', 'أنشئ قضية أولاً حتى يمكن ربط المستند بها.');
+      return;
+    }
+    try {
+      const response = await apiClient.uploadProVaultDocument(selectedCase?.id ?? null);
+      applyWorkspaceData(response.data);
+      setSelectedVaultDocId(response.data?.vaultDocs?.[0]?.id ?? null);
+      setActiveTab('documents');
+      showToast('تم رفع المستند', 'تمت إضافة مستند تجريبي إلى طابور الوثائق.');
+    } catch (err) {
+      console.error("Failed to upload vault document", err);
+      showToast('تعذر رفع المستند', 'لم تتم إضافة المستند. حاول مرة أخرى.');
+    }
   };
 
   const handleMarkMessageRead = async (messageId: string) => {
-    await apiClient.updateProMessageState(messageId, { unread: false });
-    setInboxMessages(prev => prev.map(message => (message.id === messageId ? { ...message, unread: false } : message)));
+    try {
+      await apiClient.updateProMessageState(messageId, { unread: false });
+      setInboxMessages(prev => prev.map(message => (message.id === messageId ? { ...message, unread: false } : message)));
+    } catch (err) {
+      console.error("Failed to mark message read", err);
+      showToast('تعذر تحديث الرسالة', 'لم يتم تعليم الرسالة كمقروءة.');
+    }
   };
 
   const handleToggleAwaitingResponse = async (messageId: string) => {
     const target = inboxMessages.find(message => message.id === messageId);
-    await apiClient.updateProMessageState(messageId, {
-      awaitingResponse: !target?.awaitingResponse,
-      unread: false,
-    });
-    setInboxMessages(prev => prev.map(message => (
-      message.id === messageId ? { ...message, awaitingResponse: !message.awaitingResponse, unread: false } : message
-    )));
+    try {
+      await apiClient.updateProMessageState(messageId, {
+        awaitingResponse: !target?.awaitingResponse,
+        unread: false,
+      });
+      setInboxMessages(prev => prev.map(message => (
+        message.id === messageId ? { ...message, awaitingResponse: !message.awaitingResponse, unread: false } : message
+      )));
+    } catch (err) {
+      console.error("Failed to update message follow-up", err);
+      showToast('تعذر تحديث المتابعة', 'لم يتم تغيير حالة المتابعة لهذه الرسالة.');
+    }
   };
 
   const handleUseReplyTemplate = (template: string) => {
@@ -984,6 +1047,7 @@ export default function ProDashboard() {
 
   const handleUpdateCaseProgress = async (caseId: string, progress: number) => {
     try {
+      const normalizedProgress = Math.min(100, Math.max(0, progress));
       const token = localStorage.getItem('auth_token');
       await fetch(`/api/app/workspace/cases/${caseId}/progress`, {
         method: 'PATCH',
@@ -991,12 +1055,13 @@ export default function ProDashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ progress })
+        body: JSON.stringify({ progress: normalizedProgress })
       });
-      setCases(prev => prev.map(c => c.id === caseId ? { ...c, progress } : c));
-      setQuickActionNote(`تم حفظ نسبة الإنجاز الجديدة: ${progress}%.`);
+      setCases(prev => prev.map(c => c.id === caseId ? { ...c, progress: normalizedProgress } : c));
+      setQuickActionNote(`تم حفظ نسبة الإنجاز الجديدة: ${normalizedProgress}%.`);
     } catch (err) {
       console.error("Failed to persist progress", err);
+      showToast('تعذر حفظ التقدم', 'تم تغيير المؤشر محلياً لكن لم يتم حفظه في الخادم.');
     }
   };
 
@@ -1007,6 +1072,7 @@ export default function ProDashboard() {
       setQuickActionNote(`تم تغيير حالة الملف إلى: ${newStatus}.`);
     } catch (err) {
       console.error("Failed to update status", err);
+      showToast('تعذر تغيير الحالة', 'لم يتم حفظ حالة القضية الجديدة.');
     }
   };
 
@@ -1024,8 +1090,10 @@ export default function ProDashboard() {
       });
       setCases(prev => prev.map(c => c.id === selectedCase.id ? { ...c, privateNote: caseNote } : c));
       setQuickActionNote('تم حفظ الملاحظة الخاصة بنجاح.');
+      showToast('تم حفظ الملاحظة', 'الملاحظة الخاصة محفوظة داخل ملف القضية.');
     } catch (err) {
       console.error("Failed to save note", err);
+      showToast('تعذر حفظ الملاحظة', 'لم يتم حفظ الملاحظة الخاصة. حاول مرة أخرى.');
     }
   };
 
@@ -1048,8 +1116,10 @@ export default function ProDashboard() {
 
       setVaultDocs(prev => prev.map(d => d.id === selectedVaultDoc.id ? { ...d, status, actionRequired: note || null } : d));
       setQuickActionNote(status === 'Reviewed' ? 'تم تأكيد مراجعة المستند بنجاح.' : 'تم تمييز المستند كمحتاج للمراجعة.');
+      showToast(status === 'Reviewed' ? 'تمت مراجعة المستند' : 'تم طلب تعديل', status === 'Reviewed' ? 'تم اعتماد حالة المستند.' : 'تم حفظ ملاحظة التعديل على المستند.');
     } catch (err) {
       console.error("Failed to review document", err);
+      showToast('تعذر تحديث المستند', 'لم يتم حفظ حالة المراجعة.');
     }
   };
 
@@ -1060,12 +1130,63 @@ export default function ProDashboard() {
       await apiClient.addCaseMessage(selectedCase.id, outgoingText, 'lawyer');
       await fetchWorkspaceData(false);
       setWorkbenchReply('');
+      showToast('تم إرسال الرد', 'تمت إضافة الرسالة إلى محادثة القضية.');
     } catch (err) {
       console.error("Failed to send message", err);
+      showToast('تعذر إرسال الرد', 'لم يتم إرسال الرسالة. تحقق من حالة المحادثة وحاول مرة أخرى.');
     }
   };
 
-  const renderCaseWorkbench = () => (
+  const handleRequestWithdrawal = () => {
+    if (availableToWithdraw <= 0) {
+      showToast('لا يوجد رصيد متاح', 'لا يمكن طلب السحب قبل توفر رصيد قابل للتحويل.');
+      return;
+    }
+    setActiveTab('earnings');
+    setQuickActionNote(`طلب السحب جاهز للمراجعة بقيمة ${availableToWithdraw.toLocaleString()} د.ع.`);
+    showToast('طلب السحب جاهز', 'راجع وسيلة التحويل ثم أكد الطلب من قسم الأرباح.');
+  };
+
+  const handleOpenVaultDocument = () => {
+    if (!selectedVaultDoc) return;
+    const targetUrl = selectedVaultDoc.previewUrl || selectedVaultDoc.fileUrl;
+    if (targetUrl) {
+      window.open(targetUrl, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    showToast('لا توجد معاينة', 'هذا المستند لا يحتوي على رابط ملف أو معاينة حالياً.');
+  };
+
+  const handleAccountAction = (action: 'subscription' | 'payout' | 'profile' | 'invoices') => {
+    if (action === 'subscription' || action === 'invoices') {
+      navigate('/billing');
+      return;
+    }
+    if (action === 'payout') {
+      setActiveTab('earnings');
+      return;
+    }
+    navigate('/settings');
+  };
+
+  const renderCaseWorkbench = () => {
+    if (!selectedCase) {
+      return (
+        <div className="rounded-[2rem] border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-50 text-brand-navy">
+            <i className="fa-solid fa-folder-open text-xl"></i>
+          </div>
+          <h3 className="mt-4 text-lg font-black text-brand-dark">لا توجد قضية مفتوحة</h3>
+          <p className="mt-2 text-sm font-bold text-slate-500">أنشئ قضية جديدة أو اختر قضية من القائمة حتى تظهر مساحة العمل التفصيلية.</p>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <ActionButton variant="primary" onClick={() => setIsNewCaseModalOpen(true)}>قضية جديدة</ActionButton>
+            <ActionButton variant="secondary" onClick={() => { setCaseViewMode('list'); setActiveTab('cases'); }}>العودة للقائمة</ActionButton>
+          </div>
+        </div>
+      );
+    }
+
+    return (
     <div className="space-y-6">
       <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -1116,7 +1237,13 @@ export default function ProDashboard() {
               <i className={`fa-solid ${isTimerRunning && activeTimerCaseId === selectedCase.id ? 'fa-pause' : 'fa-play'} ml-2`}></i>
               {isTimerRunning && activeTimerCaseId === selectedCase.id ? 'إيقاف' : 'بدء التوقيت'}
             </button>
-            <button className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600 transition hover:border-brand-navy/20 hover:bg-slate-50 hover:text-brand-navy">تصدير التقرير</button>
+            <button
+              type="button"
+              onClick={() => showToast('تم تجهيز التقرير', `تقرير ${selectedCase.title} جاهز للمراجعة داخل مساحة العمل.`)}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-xs font-black text-slate-600 transition hover:border-brand-navy/20 hover:bg-slate-50 hover:text-brand-navy"
+            >
+              تصدير التقرير
+            </button>
           </div>
         </div>
 
@@ -1337,22 +1464,33 @@ export default function ProDashboard() {
       </div>
     </div>
   );
+  };
 
   const renderOverviewTab = () => (
     <div className="grid grid-cols-1 xl:grid-cols-[1.35fr_0.95fr] gap-5">
       <section className="space-y-5">
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          {[
-            { label: 'تحتاج إجراء الآن', value: urgentCases.length, note: 'ابدأ بالأعلى خطورة', tone: 'text-red-600' },
-            { label: 'رسائل غير مقروءة', value: unreadMessagesCount, note: `${waitingReplyCount} تنتظر ردك`, tone: 'text-brand-dark' },
-            { label: 'متاح للسحب', value: `${Math.round(availableToWithdraw / 1000)}k`, note: 'ألف د.ع', tone: 'text-emerald-600' },
-            { label: 'متابعون جدد', value: newFollowersThisWeek, note: `${followersCount} إجمالي المتابعين`, tone: 'text-brand-navy' }
-          ].map(item => (
-            <div key={item.label} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">{item.label}</p>
-              <p className={`mt-2 text-2xl font-bold ${item.tone}`}>{item.value}</p>
-              <p className="mt-2 text-xs text-gray-500">{item.note}</p>
-            </div>
+          {topStats.map(item => (
+            <button
+              key={item.label}
+              type="button"
+              onClick={() => handleStatClick(item.label)}
+              className="group rounded-2xl border border-gray-200 bg-white p-4 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-brand-navy/20 hover:shadow-md"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 ${item.tone} transition group-hover:bg-white group-hover:shadow-sm`}>
+                  <i className={item.icon}></i>
+                </div>
+                <div>
+                  <p className="text-[11px] font-black uppercase tracking-wide text-gray-400">{item.label}</p>
+                  <p className={`mt-2 text-2xl font-black ${item.tone}`}>{item.value}</p>
+                </div>
+              </div>
+              <p className="mt-2 text-xs font-bold text-gray-500">{item.note}</p>
+              <div className="mt-4 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div className={`h-full rounded-full ${item.color}`} style={{ width: `${item.progress}%` }}></div>
+              </div>
+            </button>
           ))}
         </div>
 
@@ -1681,7 +1819,17 @@ export default function ProDashboard() {
                 <>
                   <ActionButton variant="primary" size="sm" onClick={() => setCaseViewMode('workbench')}>فتح الملف</ActionButton>
                   <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('messages')}>فتح الرسائل</ActionButton>
-                  <ActionButton variant="secondary" size="sm" onClick={() => setCaseViewMode('workbench')}>عرض الوثائق</ActionButton>
+                  <ActionButton
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      const firstDoc = vaultDocs.find(doc => doc.caseTitle === selectedCase.title);
+                      setSelectedVaultDocId(firstDoc?.id ?? null);
+                      setActiveTab('documents');
+                    }}
+                  >
+                    عرض الوثائق
+                  </ActionButton>
                   <ActionButton variant="ghost" size="sm" onClick={() => setActiveTab('earnings')}>الفوترة</ActionButton>
                 </>
               }
@@ -1851,7 +1999,19 @@ export default function ProDashboard() {
                 >
                   {isSendingReply ? 'جارٍ الإرسال...' : 'إرسال الرد'}
                 </ActionButton>
-                <ActionButton variant="secondary" size="sm" onClick={() => linkedMessageCase && setSelectedCaseId(linkedMessageCase.id)}>فتح القضية</ActionButton>
+                <ActionButton
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    if (!linkedMessageCase) return;
+                    setSelectedCaseId(linkedMessageCase.id);
+                    setActiveTab('cases');
+                    setCaseViewMode('workbench');
+                  }}
+                  disabled={!linkedMessageCase}
+                >
+                  فتح القضية
+                </ActionButton>
                 <ActionButton variant="secondary" size="sm" onClick={() => handleToggleAwaitingResponse(selectedInboxMessage.id)}>
                   {selectedInboxMessage.awaitingResponse ? 'تمييز كمكتمل' : 'إعادة للمتابعة'}
                 </ActionButton>
@@ -1876,6 +2036,7 @@ export default function ProDashboard() {
                     onClick={() => {
                       setSelectedCaseId(linkedMessageCase.id);
                       setActiveTab('cases');
+                      setCaseViewMode('workbench');
                     }}
                     className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-brand-navy"
                   >
@@ -2007,7 +2168,7 @@ export default function ProDashboard() {
         <SurfaceCard
           title="ملخص الأرباح"
           description="فصل واضح بين المتاح للسحب، الإيراد المعلّق، والتحويلات السابقة."
-          actions={<ActionButton variant="primary" size="sm">طلب سحب</ActionButton>}
+          actions={<ActionButton variant="primary" size="sm" onClick={handleRequestWithdrawal}>طلب سحب</ActionButton>}
         >
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             {[
@@ -2070,6 +2231,14 @@ export default function ProDashboard() {
                     <button
                       key={ratio}
                       type="button"
+                      onClick={() => {
+                        if (amount <= 0) {
+                          showToast('لا يوجد رصيد متاح', 'لا يمكن تجهيز طلب سحب بقيمة صفر.');
+                          return;
+                        }
+                        setQuickActionNote(`تم اختيار مبلغ سحب: ${amount.toLocaleString()} د.ع.`);
+                        showToast('تم اختيار مبلغ السحب', `${amount.toLocaleString()} د.ع جاهزة للمراجعة قبل الإرسال.`);
+                      }}
                       className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-sm font-bold text-brand-dark transition hover:border-brand-navy hover:bg-white"
                     >
                       {amount.toLocaleString()} د.ع
@@ -2153,7 +2322,7 @@ export default function ProDashboard() {
           nextStep={<><span className="font-bold">الإجراء المقترح:</span> راجع القضايا ذات الرصيد المفتوح ثم انتقل مباشرة لتأكيد وسيلة السحب.</>}
           actions={
             <>
-              <ActionButton variant="primary" size="sm">طلب سحب</ActionButton>
+              <ActionButton variant="primary" size="sm" onClick={handleRequestWithdrawal}>طلب سحب</ActionButton>
               <ActionButton variant="secondary" size="sm" onClick={() => { setActiveTab('cases'); setCaseViewFilter('billing'); }}>
                 افتح القضايا المالية
               </ActionButton>
@@ -2224,10 +2393,10 @@ export default function ProDashboard() {
           description="اختصارات مباشرة للحساب، الاشتراك، ونمو الملف العام."
         >
           <div className="grid gap-3 sm:grid-cols-2">
-            <ActionButton variant="primary" className="w-full">إدارة الاشتراك</ActionButton>
-            <ActionButton variant="secondary" className="w-full">تحديث وسيلة السحب</ActionButton>
-            <ActionButton variant="ghost" className="w-full">تحسين الملف العام</ActionButton>
-            <ActionButton variant="ghost" className="w-full">عرض سجل الفواتير</ActionButton>
+            <ActionButton variant="primary" className="w-full" onClick={() => handleAccountAction('subscription')}>إدارة الاشتراك</ActionButton>
+            <ActionButton variant="secondary" className="w-full" onClick={() => handleAccountAction('payout')}>تحديث وسيلة السحب</ActionButton>
+            <ActionButton variant="ghost" className="w-full" onClick={() => handleAccountAction('profile')}>تحسين الملف العام</ActionButton>
+            <ActionButton variant="ghost" className="w-full" onClick={() => handleAccountAction('invoices')}>عرض سجل الفواتير</ActionButton>
           </div>
         </SurfaceCard>
       </section>
@@ -2253,7 +2422,7 @@ export default function ProDashboard() {
           nextStep={<><span className="font-bold">الإجراء المقترح:</span> حدّث الملف المهني إذا انخفض النمو، وراجع الاشتراك قبل الوصول إلى حدود الاستخدام.</>}
           actions={
             <>
-              <ActionButton variant="primary" size="sm">إدارة الاشتراك</ActionButton>
+              <ActionButton variant="primary" size="sm" onClick={() => handleAccountAction('subscription')}>إدارة الاشتراك</ActionButton>
               <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('earnings')}>الأرباح والسحب</ActionButton>
               <ActionButton variant="ghost" size="sm" onClick={() => setActiveTab('messages')}>العودة للرسائل</ActionButton>
               <ActionButton variant="ghost" size="sm" onClick={() => setActiveTab('cases')}>العودة للقضايا</ActionButton>
@@ -2375,8 +2544,17 @@ export default function ProDashboard() {
                     طلب تعديل
                   </ActionButton>
                 )}
-                <ActionButton variant="secondary" size="sm">فتح الملف</ActionButton>
-                <ActionButton variant="ghost" size="sm">إضافة ملاحظة</ActionButton>
+                <ActionButton variant="secondary" size="sm" onClick={handleOpenVaultDocument}>فتح الملف</ActionButton>
+                <ActionButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    const note = window.prompt('أدخل ملاحظة مرتبطة بالمستند:');
+                    if (note?.trim()) handleReviewDocument('Needs Review', note.trim());
+                  }}
+                >
+                  إضافة ملاحظة
+                </ActionButton>
               </>
             }
           />
@@ -2587,46 +2765,72 @@ export default function ProDashboard() {
 
   return (
     <div className="app-view fade-in w-full max-w-full space-y-5 overflow-x-hidden">
-      <section className="rounded-[32px] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/5 p-5 shadow-premium md:p-6">
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
-          <div className="min-w-0 text-right">
-            <div className="flex items-center justify-end gap-3 mb-4">
-              <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-100 shadow-sm">
-                <i className="fa-solid fa-sack-dollar text-brand-gold text-xs"></i>
-                <span className="text-xs font-black text-brand-dark">{(user?.accountBalance ?? 0).toLocaleString('ar-IQ')} د.ع</span>
-              </div>
-              <div className="inline-flex items-center rounded-full border border-brand-gold/20 bg-white/80 px-3 py-1 text-xs font-bold text-brand-navy">
-                <i className="fa-solid fa-briefcase ml-2"></i>
-                مساحة المحامي
+      {isInitialLoading && (
+        <div className="rounded-3xl border border-brand-navy/10 bg-white/80 p-4 text-right text-sm font-bold text-brand-navy shadow-sm">
+          <i className="fa-solid fa-circle-notch ml-2 animate-spin text-brand-gold"></i>
+          جارٍ تجهيز مساحة العمل وأولويات اليوم...
+        </div>
+      )}
+
+      <section className="overflow-hidden rounded-[32px] border border-brand-navy/10 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_52%,#eef4fb_100%)] shadow-premium">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_430px]">
+          <div className="p-5 md:p-6">
+            <div className="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+              <div className="min-w-0 text-right">
+                <div className="flex flex-wrap items-center justify-end gap-3 mb-4">
+                  <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-100 shadow-sm">
+                    <i className="fa-solid fa-sack-dollar text-brand-gold text-xs"></i>
+                    <span className="text-xs font-black text-brand-dark">{(user?.accountBalance ?? 0).toLocaleString('ar-IQ')} د.ع</span>
+                  </div>
+                  <div className="inline-flex items-center rounded-full border border-brand-gold/20 bg-white/80 px-3 py-1 text-xs font-bold text-brand-navy">
+                    <i className="fa-solid fa-briefcase ml-2"></i>
+                    مساحة المحامي
+                  </div>
+                  <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+                    <span className="ml-2 h-2 w-2 rounded-full bg-emerald-500"></span>
+                    متاح للعمل
+                  </div>
+                </div>
+                <p className="text-sm font-black text-brand-gold">{greeting}</p>
+                <h2 className="mt-2 text-3xl font-black leading-tight text-brand-dark">لوحة المحامي الاحترافية</h2>
+                <p className="mt-2 max-w-3xl text-sm font-bold leading-relaxed text-gray-600">
+                  مساحة عمل قانونية عالية الاستخدام اليومي، مصممة ليكون الرد على العملاء، إدارة القضايا، الأرباح، والاشتراك واضحاً وسريعاً بلا تشتيت.
+                </p>
+                {nextPriorityCase && (
+                  <div className="mt-4 flex flex-wrap justify-end gap-2">
+                    <StatusBadge tone="warning">الأولوية الآن: {nextPriorityCase.title}</StatusBadge>
+                    <StatusBadge tone="info">آخر موعد: {nextPriorityCase.nextDeadline}</StatusBadge>
+                  </div>
+                )}
               </div>
             </div>
-            <h2 className="mt-4 text-3xl font-bold leading-tight text-brand-dark">لوحة المحامي الاحترافية</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-gray-600">
-              مساحة عمل قانونية عالية الاستخدام اليومي، مصممة ليكون الرد على العملاء، إدارة القضايا، الأرباح، والاشتراك واضحاً وسريعاً بلا تشتيت.
-            </p>
-            {nextPriorityCase && (
-              <div className="mt-4 flex flex-wrap justify-end gap-2">
-                <StatusBadge tone="warning">الأولوية الآن: {nextPriorityCase.title}</StatusBadge>
-                <StatusBadge tone="info">آخر موعد: {nextPriorityCase.nextDeadline}</StatusBadge>
-              </div>
-            )}
           </div>
-          <div className="grid w-full grid-cols-2 gap-3 sm:grid-cols-4 xl:w-auto xl:grid-cols-2 xl:min-w-[360px]">
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">قضايا عاجلة</p>
-              <p className="mt-2 text-2xl font-bold text-brand-dark">{urgentCases.length}</p>
+
+          <div className="border-t border-brand-navy/10 bg-brand-navy p-5 text-white xl:border-r xl:border-t-0">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-right">
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-white/55">Today Focus</p>
+                <h3 className="mt-2 text-xl font-black">أولوية المكتب الآن</h3>
+              </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-brand-gold">
+                <i className="fa-solid fa-compass-drafting"></i>
+              </div>
             </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">رسائل جديدة</p>
-              <p className="mt-2 text-2xl font-bold text-red-600">{unreadMessagesCount}</p>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">وثائق معلقة</p>
-              <p className="mt-2 text-2xl font-bold text-brand-navy">{docsNeedingReviewCount}</p>
-            </div>
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-[11px] uppercase tracking-wide text-gray-400">مهام مفتوحة</p>
-              <p className="mt-2 text-2xl font-bold text-brand-dark">{openTasksCount}</p>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/10 p-4 text-right">
+              <p className="text-sm font-black text-white">{nextPriorityCase?.title || 'لا توجد أولوية حرجة حالياً'}</p>
+              <p className="mt-2 text-xs font-bold leading-6 text-white/70">
+                {nextPriorityCase
+                  ? `المخاطر ${nextPriorityCase.riskScore}%، والموعد التالي ${nextPriorityCase.nextDeadline}.`
+                  : 'استخدم العروض المحفوظة لاختيار طابور العمل المناسب.'}
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => { setActiveTab('cases'); setCaseViewFilter('urgent'); }} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-brand-navy">
+                  فتح الأولوية
+                </button>
+                <button type="button" onClick={() => setIsCommandPaletteOpen(true)} className="rounded-xl border border-white/20 px-3 py-2 text-xs font-black text-white">
+                  بحث سريع
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -2680,13 +2884,18 @@ export default function ProDashboard() {
               const badgeCount =
                 tab.id === 'cases' ? urgentCases.length :
                   tab.id === 'messages' ? unreadMessagesCount :
-                    tab.id === 'earnings' ? outstandingBillingCases.length :
-                      tab.id === 'account' ? newFollowersThisWeek : 0;
+                    tab.id === 'documents' ? docsNeedingReviewCount :
+                      tab.id === 'operations' ? deadlineReminders.filter(item => item.urgency === 'critical').length :
+                        tab.id === 'earnings' ? outstandingBillingCases.length :
+                          tab.id === 'account' ? newFollowersThisWeek : 0;
 
               return (
                 <button
                   key={tab.id}
+                  id={`tab-${tab.id}`}
                   onClick={() => setActiveTab(tab.id)}
+                  aria-selected={isActive}
+                  aria-controls={`panel-${tab.id}`}
                   className={`group relative flex min-w-[150px] items-center gap-3 rounded-[1.75rem] px-5 py-4 text-right transition-all duration-300 focus:outline-none ${isActive ? 'text-white' : 'text-slate-500 hover:text-brand-navy'
                     }`}
                 >
@@ -2749,6 +2958,8 @@ export default function ProDashboard() {
         {activeTab === 'overview' && renderOverviewTab()}
         {activeTab === 'cases' && (caseViewMode === 'list' ? renderCasesTab() : renderCaseWorkbench())}
         {activeTab === 'messages' && renderCommunicationsTab()}
+        {activeTab === 'documents' && renderDocumentsTab()}
+        {activeTab === 'operations' && renderOperationsTab()}
         {activeTab === 'earnings' && renderEarningsTab()}
         {activeTab === 'account' && renderAccountTab()}
       </section>

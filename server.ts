@@ -756,11 +756,27 @@ async function startServer() {
   app.patch('/api/app/workspace/cases/:id/private-note', authenticateToken, async (req, res) => {
     try {
       const { note } = req.body;
-      const updated = await prisma.case.update({
-        where: { id: req.params.id },
-        data: { privateNote: note }
+      const existing = await prisma.caseCustomField.findFirst({
+        where: {
+          caseId: req.params.id,
+          label: '__privateNote',
+        },
       });
-      res.json({ data: updated });
+
+      const saved = existing
+        ? await prisma.caseCustomField.update({
+          where: { id: existing.id },
+          data: { value: String(note || '') },
+        })
+        : await prisma.caseCustomField.create({
+          data: {
+            caseId: req.params.id,
+            label: '__privateNote',
+            value: String(note || ''),
+          },
+        });
+
+      res.json({ data: saved });
     } catch (error) {
       console.error('Update private note error:', error);
       res.status(500).json({ error: 'Failed to update private note' });

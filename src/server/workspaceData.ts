@@ -825,6 +825,7 @@ export async function addCaseMessage(caseId: string, userId: string, text: strin
 
 function mapProCase(item: any) {
   const outstandingInvoice = item.totalAgreedFee - item.paidAmount;
+  const privateNote = item.customFields?.find((field: any) => field.label === '__privateNote')?.value || '';
   return {
     id: item.id,
     title: item.title,
@@ -838,6 +839,7 @@ function mapProCase(item: any) {
     billableHours: Math.max(1, Math.round(item.progress / 10)),
     outstandingInvoice,
     isPinned: item.riskScore >= 70,
+    privateNote,
   } as const;
 }
 
@@ -854,6 +856,7 @@ export async function getProWorkspace(lawyerId: string) {
       include: {
         client: true,
         documents: true,
+        customFields: true,
         chatSessions: { include: { messages: { include: { sender: true }, orderBy: { createdAt: 'desc' } } } },
         timelineEntries: { orderBy: { createdAt: 'asc' } },
       },
@@ -921,6 +924,8 @@ export async function getProWorkspace(lawyerId: string) {
       name: doc.name,
       size: doc.size,
       type: doc.type.toLowerCase().includes('pdf') ? 'pdf' : doc.type.toLowerCase().includes('image') || doc.type.includes('صورة') ? 'image' : 'word',
+      fileUrl: doc.fileUrl,
+      previewUrl: doc.previewUrl,
       date: formatShortDateLabel(doc.createdAt),
       status: doc.status === 'Signed' ? 'Signed' : doc.status === 'Needs Review' ? 'Needs Review' : doc.status === 'Reviewed' ? 'Reviewed' : 'Draft',
       caseTitle: item.title,
