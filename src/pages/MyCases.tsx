@@ -9,7 +9,7 @@ import apiClient from '../api/client';
 type DocumentType = 'pdf' | 'image' | 'other';
 type CaseStatus = 'pending' | 'review' | 'active' | 'closed';
 
-type WorkspaceTab = 'summary' | 'chat' | 'docs' | 'ai' | 'financials';
+type WorkspaceTab = 'summary' | 'chat' | 'ai' | 'financials';
 type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded' | 'contracts';
 type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed' | 'drafts';
 
@@ -30,7 +30,8 @@ interface CaseMessage {
   sender: CaseMessageSender;
   text: string;
   awaitingResponse?: boolean;
-  time: string;
+  time?: string;
+  createdAt?: string;
   deliveryState?: MessageDeliveryState;
 }
 
@@ -153,6 +154,16 @@ const getCaseSignal = (legalCase: LegalCase) => {
     return { label: 'بانتظار المحامي', icon: 'fa-clock', tone: 'bg-slate-100 text-slate-600 ring-slate-200' };
   }
   return { label: 'مستقر', icon: 'fa-shield-check', tone: 'bg-emerald-50 text-emerald-700 ring-emerald-100' };
+};
+
+const getMessageTimeLabel = (message: CaseMessage) => {
+  if (message.time) return message.time;
+  if (!message.createdAt) return '';
+
+  const createdAt = new Date(message.createdAt);
+  if (Number.isNaN(createdAt.getTime())) return '';
+
+  return createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
 };
 
 // --- Sub-Components ---
@@ -439,8 +450,8 @@ const ChatTab = ({
               </div>
             )}
             <div className={`flex items-center justify-end gap-1.5 mt-2 text-[9px] font-black ${msg.sender === 'user' ? 'text-blue-200/70' : 'text-slate-400'}`}>
-              <span className="uppercase">{msg.time}</span>
-              {msg.sender === 'user' && <i className={`fa-solid fa-check-double ${msg.time === 'الآن' ? 'opacity-50' : 'text-blue-300'}`}></i>}
+              <span className="uppercase">{getMessageTimeLabel(msg)}</span>
+              {msg.sender === 'user' && <i className={`fa-solid fa-check-double ${getMessageTimeLabel(msg) === 'الآن' ? 'opacity-50' : 'text-blue-300'}`}></i>}
             </div>
           </div>
         </div>
@@ -870,7 +881,8 @@ export default function MyCases() {
       setActiveCaseId(state.activeCaseId);
     }
     if (state.focusArea === 'docs') {
-      setActiveTab('docs');
+      setActiveTab('summary');
+      setDocFilter('pending');
     }
     if (state.focusArea === 'messages') {
       setActiveTab('chat');
@@ -983,6 +995,57 @@ export default function MyCases() {
     }
   };
 
+  const copyText = async (value: string, successMessage = 'تم النسخ') => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value);
+      } else {
+        const input = document.createElement('textarea');
+        input.value = value;
+        input.setAttribute('readonly', 'true');
+        input.style.position = 'fixed';
+        input.style.opacity = '0';
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        input.remove();
+      }
+      alert(successMessage);
+    } catch {
+      alert('تعذر النسخ. يرجى المحاولة مرة أخرى.');
+    }
+  };
+
+  const downloadDocument = (doc: LegalDocument) => {
+    if (doc.previewUrl) {
+      const link = document.createElement('a');
+      link.href = doc.previewUrl;
+      link.download = doc.name;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      return;
+    }
+
+    const manifest = [
+      `Document: ${doc.name}`,
+      `Size: ${doc.size}`,
+      `Date: ${doc.date}`,
+      `Type: ${doc.type}`,
+      `Status: ${doc.isSigned ? 'signed' : doc.actionRequired || 'uploaded'}`,
+    ].join('\n');
+    const blob = new Blob([manifest], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${doc.name.replace(/\.[^/.]+$/, '') || 'document'}-details.txt`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   // Keyboard Shortcuts
   useEffect(() => {
     setSelectedDocs(new Set());
@@ -1009,13 +1072,26 @@ export default function MyCases() {
 
     setIsExporting(true);
     try {
-      // Real implementation would require: 
-      // import JSZip from 'jszip';
-      // import { saveAs } from 'file-saver';
-
-      // Simulating the packaging process for UI feedback
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      alert(`تم البدء في ضغط وتنزيل ${activeCase.documents.length} وثيقة للملف: ${activeCase.title}`);
+      const rows = [
+        'name,size,date,type,status,folder',
+        ...activeCase.documents.map((doc) => [
+          doc.name,
+          doc.size,
+          doc.date,
+          doc.type,
+          doc.isSigned ? 'signed' : doc.actionRequired || 'uploaded',
+          activeCase.folders.find((folder) => folder.id === doc.folderId)?.name || 'root',
+        ].map((value) => `"${String(value || '').replace(/"/g, '""')}"`).join(',')),
+      ];
+      const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${activeCase.title.replace(/\s+/g, '_')}-documents.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
     } catch (error) {
       console.error('Export failed:', error);
       alert('فشل تصدير الوثائق. يرجى المحاولة مرة أخرى.');
@@ -1227,8 +1303,14 @@ export default function MyCases() {
     }
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []) as File[];
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLElement>) => {
+    e.preventDefault?.();
+    e.stopPropagation?.();
+    setIsDragActive(false);
+
+    const files = Array.from(
+      'dataTransfer' in e ? e.dataTransfer.files || [] : e.target.files || []
+    ) as File[];
     if (!files.length || !activeCase) {
       alert('يرجى اختيار ملف واحد على الأقل.');
       return;
@@ -1298,7 +1380,7 @@ export default function MyCases() {
     e.preventDefault();
     e.stopPropagation();
     if (e.type === "dragenter" || e.type === "dragover") setIsDragActive(true);
-    else if (e.type === "dragleave") setIsDragActive(false);
+    else if (e.type === "dragleave" || e.type === "drop") setIsDragActive(false);
   };
 
   const updateMessageDeliveryState = useCallback((caseId: string, messageId: string, deliveryState: MessageDeliveryState) => {
@@ -1444,7 +1526,7 @@ export default function MyCases() {
 
   const nextAction = activeCase
     ? activeCase.documents.some((doc) => doc.actionRequired || doc.expiresAt)
-      ? { label: 'راجع المستندات المطلوبة', tab: 'docs' as WorkspaceTab, icon: 'fa-file-signature' }
+      ? { label: 'راجع المستندات المطلوبة', tab: 'summary' as WorkspaceTab, icon: 'fa-file-signature', docFilter: 'pending' as DocFilter }
       : activeCase.unreadCount
         ? { label: 'افتح التوجيهات الجديدة', tab: 'chat' as WorkspaceTab, icon: 'fa-comments' }
         : { label: 'راجع ملخص التقدم', tab: 'summary' as WorkspaceTab, icon: 'fa-rectangle-list' }
@@ -1470,7 +1552,7 @@ export default function MyCases() {
   }, [activeCase]);
 
   return (
-    <div className="app-view fade-in space-y-5">
+    <div className="app-view fade-in w-full max-w-full space-y-5 overflow-x-hidden">
       {/* Toast Notification for Reminders */}
       {notification && notification.show && (
         <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed top-24 right-8 z-[200] max-w-sm w-full bg-white rounded-2xl shadow-2xl shadow-brand-navy/10 border border-brand-navy/20 p-4">
@@ -1581,10 +1663,7 @@ export default function MyCases() {
                     variant="primary"
                     size="sm"
                     onClick={() => {
-                      if (nextAction.tab === 'docs') {
-                        setDocFilter('pending');
-                        return;
-                      }
+                      if ('docFilter' in nextAction) setDocFilter(nextAction.docFilter);
                       setActiveTab(nextAction.tab);
                     }}
                   >
@@ -1646,14 +1725,14 @@ export default function MyCases() {
         </div>
       </div>
 
-      <div className="grid min-h-[760px] grid-cols-1 gap-6 lg:grid-cols-12 xl:h-[calc(100vh-285px)]">
+      <div className={`grid min-h-[760px] w-full min-w-0 grid-cols-1 gap-5 2xl:h-[calc(100vh-285px)] ${isSidebarCollapsed ? '' : 'xl:grid-cols-[320px_minmax(0,1fr)]'}`}>
         {!isSidebarCollapsed && (
           <motion.div
             initial={{ opacity: 0, x: 24 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: 24 }}
             transition={{ type: 'spring', stiffness: 360, damping: 34 }}
-            className="lg:col-span-3 bg-white rounded-[2rem] shadow-sm border border-slate-200 flex flex-col overflow-hidden text-right"
+            className="min-w-0 bg-white rounded-[2rem] shadow-sm border border-slate-200 flex flex-col overflow-hidden text-right"
           >
             <div className="border-b border-slate-100 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(255,255,255,1))] p-5">
               <div className="mb-4 flex items-center justify-between gap-3">
@@ -1700,7 +1779,7 @@ export default function MyCases() {
         )}
 
         {/* Case Detail Workspace */}
-        <div className={`${isSidebarCollapsed ? 'lg:col-span-12' : 'lg:col-span-9'} flex flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white text-right shadow-premium`}>
+        <div className="min-w-0 flex flex-col overflow-hidden rounded-[2rem] border border-slate-200 bg-white text-right shadow-premium">
           {!activeCase ? (
             <div className="flex-1 p-8">
               <EmptyState
@@ -1883,9 +1962,9 @@ export default function MyCases() {
                 </div>
               </div>
 
-              <div className="flex-1 flex flex-col md:flex-row overflow-hidden">
+              <div className="flex-1 flex min-w-0 flex-col overflow-hidden 2xl:flex-row">
                 {/* Communication Area */}
-                <div className="flex-1 flex flex-col border-l border-slate-100">
+                <div className="flex min-w-0 flex-1 flex-col border-l border-slate-100">
 
                   {/* Reminders / Actions Alert Banner */}
                   {activeCase.documents.filter((d: any) => d.actionRequired || d.expiresAt).length > 0 && (
@@ -1997,9 +2076,9 @@ export default function MyCases() {
                                 </div>
                               )}
                               <div className={`flex items-center justify-end gap-1.5 mt-2 text-[9px] font-black ${msg.sender === 'user' ? 'text-blue-200/70' : 'text-slate-400'}`}>
-                                <span className="uppercase">{msg.time}</span>
+                                <span className="uppercase">{getMessageTimeLabel(msg)}</span>
                                 {msg.sender === 'user' && (
-                                  <i className={`fa-solid fa-check-double ${msg.time === 'الآن' ? 'opacity-50' : 'text-blue-300'}`}></i>
+                                  <i className={`fa-solid fa-check-double ${getMessageTimeLabel(msg) === 'الآن' ? 'opacity-50' : 'text-blue-300'}`}></i>
                                 )}
                               </div>
 
@@ -2057,7 +2136,12 @@ export default function MyCases() {
                           </div>
 
                           <div className="flex items-end gap-3 bg-slate-50 border border-slate-200 rounded-3xl p-2 focus-within:bg-white focus-within:border-brand-navy transition-all relative">
-                            <button className="p-3.5 text-slate-400 hover:text-brand-navy transition-colors rounded-2xl shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => fileInputRef.current?.click()}
+                              className="p-3.5 text-slate-400 hover:text-brand-navy transition-colors rounded-2xl shrink-0"
+                              title="إرفاق وثيقة"
+                            >
                               <i className="fa-solid fa-paperclip text-lg"></i>
                             </button>
                             <textarea
@@ -2077,8 +2161,8 @@ export default function MyCases() {
                             {!newMessage.trim() ? (
                               <button
                                 onClick={() => setIsRecording(!isRecording)}
-                                className="w-12 h-12 bg-slate-200/50 text-slate-400 rounded-2xl hover:bg-brand-navy/10 hover:text-brand-navy transition shrink-0 flex items-center justify-center shadow-sm"
-                                title="تسجيل رسالة صوتية"
+                                className={`w-12 h-12 rounded-2xl transition shrink-0 flex items-center justify-center shadow-sm ${isRecording ? 'bg-red-50 text-red-500 ring-2 ring-red-100' : 'bg-slate-200/50 text-slate-400 hover:bg-brand-navy/10 hover:text-brand-navy'}`}
+                                title={isRecording ? 'إيقاف التسجيل' : 'تسجيل رسالة صوتية'}
                               >
                                 <i className="fa-solid fa-microphone"></i>
                               </button>
@@ -2091,6 +2175,21 @@ export default function MyCases() {
                               </button>
                             )}
                           </div>
+                          {isRecording && (
+                            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-xs font-black text-red-700">
+                              <span className="flex items-center gap-2">
+                                <span className="h-2 w-2 animate-pulse rounded-full bg-red-500"></span>
+                                التسجيل الصوتي قيد التحضير. يمكنك إيقافه أو إرسال رسالة نصية الآن.
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setIsRecording(false)}
+                                className="rounded-xl bg-white px-3 py-1.5 text-[10px] font-black text-red-600 shadow-sm"
+                              >
+                                إيقاف
+                              </button>
+                            </div>
+                          )}
                           <div className="flex flex-wrap items-center justify-between gap-3 text-[11px] font-bold text-slate-400">
                             <span>اختصار مفيد: `Enter` للإرسال و `Shift + Enter` لسطر جديد.</span>
                             {newMessage.trim().length > 0 && (
@@ -2152,7 +2251,11 @@ export default function MyCases() {
                     <FinancialsTab activeCase={activeCase} />
                   )}
                   <div className="mt-auto pt-6">
-                    <button className="w-full py-4 border-2 border-dashed border-brand-navy/30 text-brand-navy rounded-[1.5rem] font-black text-sm hover:bg-brand-navy hover:text-white hover:border-brand-navy transition-all flex justify-center items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('ai')}
+                      className="w-full py-4 border-2 border-dashed border-brand-navy/30 text-brand-navy rounded-[1.5rem] font-black text-sm hover:bg-brand-navy hover:text-white hover:border-brand-navy transition-all flex justify-center items-center gap-3"
+                    >
                       <i className="fa-solid fa-link"></i> ربط استشارة ذكية جديدة
                     </button>
                     <Link to="/aichat" className="w-full mt-3 py-4 bg-brand-gold text-brand-dark rounded-[1.5rem] font-black text-sm hover:bg-yellow-500 transition-all flex justify-center items-center gap-3 shadow-lg shadow-brand-gold/20">
@@ -2161,7 +2264,7 @@ export default function MyCases() {
                   </div>
                 </div>
                 {/* Documents Area */}
-                <div className="flex w-full shrink-0 flex-col border-r border-slate-100 bg-white md:w-72 xl:w-80">
+                <div className="flex w-full min-w-0 shrink-0 flex-col border-r border-slate-100 bg-white 2xl:w-80">
                   <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 p-5 text-sm font-black text-brand-dark">
                     {activeFolderId ? (
                       <button
@@ -2409,7 +2512,11 @@ export default function MyCases() {
                               >
                                 <i className="fa-solid fa-folder-open"></i>
                               </button>
-                              <button onClick={(e) => e.stopPropagation()} className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-navy hover:bg-slate-100 transition shadow-sm">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); downloadDocument(doc); }}
+                                className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-navy hover:bg-slate-100 transition shadow-sm"
+                                title="تحميل الوثيقة"
+                              >
                                 <i className="fa-solid fa-download"></i>
                               </button>
                             </div>
@@ -2486,14 +2593,35 @@ export default function MyCases() {
                   <div className="flex flex-col items-center gap-4 text-slate-400">
                     <i className="fa-solid fa-file-pdf text-8xl"></i>
                     <p className="font-black">معاينة ملفات PDF قيد التطوير</p>
-                    <button className="px-6 py-3 bg-brand-navy text-white rounded-xl font-bold">تحميل لقراءته محلياً</button>
+                    <button
+                      type="button"
+                      onClick={() => downloadDocument(activePreviewDoc)}
+                      className="px-6 py-3 bg-brand-navy text-white rounded-xl font-bold"
+                    >
+                      تحميل لقراءته محلياً
+                    </button>
                   </div>
                 )}
               </div>
               <div className="p-6 border-t border-slate-100 flex justify-between items-center bg-white">
                 <div className="flex gap-2">
-                  <button className="px-6 py-3 bg-slate-100 text-brand-navy rounded-xl font-black text-xs hover:bg-slate-200 transition">تحميل النسخة الأصلية</button>
-                  <button className="px-6 py-3 bg-brand-navy text-white rounded-xl font-black text-xs shadow-lg shadow-brand-navy/20 transition">إرسال للمحامي</button>
+                  <button
+                    type="button"
+                    onClick={() => downloadDocument(activePreviewDoc)}
+                    className="px-6 py-3 bg-slate-100 text-brand-navy rounded-xl font-black text-xs hover:bg-slate-200 transition"
+                  >
+                    تحميل النسخة الأصلية
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleDocReply(activePreviewDoc);
+                      setActivePreviewDoc(null);
+                    }}
+                    className="px-6 py-3 bg-brand-navy text-white rounded-xl font-black text-xs shadow-lg shadow-brand-navy/20 transition"
+                  >
+                    إرسال للمحامي
+                  </button>
                 </div>
                 <div className="text-right">
                   <span className="text-[10px] font-black bg-brand-gold/10 text-brand-gold px-3 py-1 rounded-full uppercase">وثيقة معتمدة</span>
@@ -2548,7 +2676,7 @@ export default function MyCases() {
                 </button>
                 <div className="flex gap-3">
                   <button
-                    onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/cases/${activeCase.id}`); alert('تم نسخ الرابط'); }}
+                    onClick={() => copyText(`${window.location.origin}/cases/${activeCase.id}`, 'تم نسخ رابط الملف')}
                     className="flex-1 py-3.5 bg-slate-100 text-brand-navy rounded-2xl font-black text-[11px] hover:bg-slate-200 transition"
                   >
                     <i className="fa-regular fa-copy ml-2"></i> نسخ الرابط
@@ -2955,7 +3083,13 @@ export default function MyCases() {
 
                   <div className="bg-gray-50 border border-gray-200 p-3 rounded-xl mb-6 flex items-center gap-2">
                     <input type="text" readOnly value={shareLinkGenerated} className="bg-transparent flex-1 outline-none text-xs text-gray-500 font-mono text-left" dir="ltr" />
-                    <button className="text-brand-navy hover:text-brand-gold transition px-2 font-bold text-xs"><i className="fa-regular fa-copy"></i> نسخ</button>
+                    <button
+                      type="button"
+                      onClick={() => copyText(shareLinkGenerated, 'تم نسخ رابط المشاركة')}
+                      className="text-brand-navy hover:text-brand-gold transition px-2 font-bold text-xs"
+                    >
+                      <i className="fa-regular fa-copy"></i> نسخ
+                    </button>
                   </div>
 
                   <button
