@@ -121,6 +121,40 @@ const CASE_TYPES = [
   { id: 'commercial', label: 'تجارية' }
 ];
 
+const SIDEBAR_FILTERS: Array<{ id: SidebarFilter; label: string; icon: string }> = [
+  { id: 'needs_action', label: 'إجراء', icon: 'fa-bell' },
+  { id: 'drafts', label: 'مسودات', icon: 'fa-pen-ruler' },
+  { id: 'in_progress', label: 'نشطة', icon: 'fa-spinner' },
+  { id: 'waiting', label: 'انتظار', icon: 'fa-hourglass-half' },
+  { id: 'completed', label: 'منتهية', icon: 'fa-circle-check' },
+  { id: 'all', label: 'الكل', icon: 'fa-layer-group' },
+];
+
+const getCaseStatusTone = (status: CaseStatus) => {
+  if (status === 'closed') return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+  if (status === 'review') return 'bg-amber-50 text-amber-700 ring-amber-100';
+  if (status === 'pending') return 'bg-blue-50 text-blue-700 ring-blue-100';
+  return 'bg-brand-navy/5 text-brand-navy ring-brand-navy/10';
+};
+
+const getCaseSignal = (legalCase: LegalCase) => {
+  const pendingDocs = legalCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length;
+  const unread = legalCase.unreadCount ?? 0;
+  const latestClientMessage = [...legalCase.messages].reverse().find((message) => message.sender === 'user');
+  const awaitingLawyer = !!latestClientMessage?.awaitingResponse;
+
+  if (pendingDocs > 0) {
+    return { label: `${pendingDocs} وثائق`, icon: 'fa-file-signature', tone: 'bg-amber-50 text-amber-700 ring-amber-100' };
+  }
+  if (unread > 0) {
+    return { label: `${unread} رسائل`, icon: 'fa-comments', tone: 'bg-blue-50 text-blue-700 ring-blue-100' };
+  }
+  if (awaitingLawyer) {
+    return { label: 'بانتظار المحامي', icon: 'fa-clock', tone: 'bg-slate-100 text-slate-600 ring-slate-200' };
+  }
+  return { label: 'مستقر', icon: 'fa-shield-check', tone: 'bg-emerald-50 text-emerald-700 ring-emerald-100' };
+};
+
 // --- Sub-Components ---
 
 const CaseSidebar = ({
@@ -140,7 +174,8 @@ const CaseSidebar = ({
 }) => {
   const filtered = cases.filter((c) => {
     const matchesArchive = showArchived ? c.isArchived : !c.isArchived;
-    const matchesSearch = c.title.toLowerCase().includes(searchQuery.toLowerCase()) || c.lawyer.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const query = searchQuery.trim().toLowerCase();
+    const matchesSearch = !query || c.title.toLowerCase().includes(query) || c.lawyer.name.toLowerCase().includes(query) || c.client.toLowerCase().includes(query);
     const latestClientMessage = [...c.messages].reverse().find((message) => message.sender === 'user');
     const hasAction =
       c.status === 'pending' ||
@@ -157,65 +192,92 @@ const CaseSidebar = ({
     return matchesArchive && matchesSearch && matchesStatus;
   });
 
+  const actionCount = filtered.reduce((total, item) => total + item.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length + (item.unreadCount ?? 0), 0);
+
   return (
-    <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+    <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
+      <div className="mb-3 grid grid-cols-2 gap-2">
+        <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+          <p className="text-[9px] font-black text-slate-400">مطابقة</p>
+          <p className="mt-1 text-xl font-black text-brand-dark">{filtered.length.toLocaleString('ar-IQ')}</p>
+        </div>
+        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-3 shadow-sm">
+          <p className="text-[9px] font-black text-amber-600">تنبيهات</p>
+          <p className="mt-1 text-xl font-black text-amber-800">{actionCount.toLocaleString('ar-IQ')}</p>
+        </div>
+      </div>
+      <div className="space-y-2">
       {filtered.length === 0 ? (
         <EmptyState
           icon="folder-open"
           title="لا توجد قضايا مطابقة"
           description="جرّب تغيير البحث أو حالة الفلترة، أو بدّل بين القضايا النشطة والأرشيف."
         />
-      ) : filtered.map((c) => (
-        <div
+      ) : filtered.map((c) => {
+        const signal = getCaseSignal(c);
+        return (
+        <motion.div
+          layout
           key={c.id}
           onClick={() => setActiveCaseId(c.id)}
-          className={`p-4 rounded-2xl cursor-pointer transition-all border-2 relative group ${activeCaseId === c.id
-            ? 'border-brand-navy bg-brand-navy/5 shadow-lg' // More prominent active state
-            : 'border-transparent hover:border-slate-200 hover:bg-slate-50 hover:shadow-md' // Subtle hover shadow
+          whileHover={{ y: -2 }}
+          transition={{ type: 'spring', stiffness: 420, damping: 32 }}
+          className={`relative cursor-pointer overflow-hidden rounded-[1.35rem] border p-4 transition-all group ${activeCaseId === c.id
+            ? 'border-brand-navy/20 bg-[linear-gradient(135deg,rgba(27,54,93,0.08),rgba(255,255,255,0.98))] shadow-lg shadow-brand-navy/10'
+            : 'border-slate-100 bg-white hover:border-brand-navy/20 hover:shadow-md'
             }`}
         >
           {c.unreadCount ? (
-            <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-[10px] font-black text-white border-2 border-white shadow-sm animate-bounce">
+            <span className="absolute left-3 top-3 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1.5 text-[10px] font-black text-white shadow-sm">
               {c.unreadCount}
             </span>
           ) : null}
-          <div className="flex justify-between items-start mb-2">
-            <h4 className={`font-black text-sm transition-colors ${activeCaseId === c.id ? 'text-brand-navy' : 'text-brand-dark group-hover:text-brand-navy'}`}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h4 className={`truncate font-black text-sm transition-colors ${activeCaseId === c.id ? 'text-brand-navy' : 'text-brand-dark group-hover:text-brand-navy'}`}>
               {c.title}
             </h4>
-            <div className="flex flex-col items-end gap-1.5">
-              <span
-                className={`px-2 py-1 rounded-lg text-[9px] font-black shrink-0 uppercase tracking-widest ${c.status === 'closed' ? 'bg-emerald-50 text-emerald-600' : 'bg-brand-navy/10 text-brand-navy'
-                  }`}
-              >
+              <div className="mt-2 flex items-center gap-2">
+                <img src={c.lawyer.img} className="h-6 w-6 rounded-xl border border-white shadow-sm" alt={c.lawyer.name} />
+                <div className="min-w-0">
+                  <p className="truncate text-[11px] font-black text-slate-600">{c.lawyer.name}</p>
+                  <p className="truncate text-[9px] font-bold text-slate-400">{c.client}</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ring-1 ${getCaseStatusTone(c.status)}`}>
                 {c.statusText}
               </span>
               {c.isArchived && (
-                <span className="text-[8px] font-black text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded italic flex items-center gap-1">
-                  <i className="fa-solid fa-box-archive"></i> مؤرشف
+                <span className="flex items-center gap-1 rounded-full bg-slate-100 px-2 py-1 text-[8px] font-black text-slate-500">
+                  <i className="fa-solid fa-box-archive"></i>
+                  مؤرشف
                 </span>
-              )}
-              {c.documents.some(d => d.actionRequired) && (
-                <span className="flex h-2 w-2 rounded-full bg-amber-500 ring-4 ring-amber-500/20 animate-pulse" title="إجراء مطلوب"></span>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 mb-3">
-            <img src={c.lawyer.img} className="w-5 h-5 rounded-full border border-slate-200" alt={c.lawyer.name} />
-            <span className="text-[11px] font-bold text-slate-400">{c.lawyer.name}</span>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black ring-1 ${signal.tone}`}>
+              <i className={`fa-solid ${signal.icon}`}></i>
+              {signal.label}
+            </span>
+            <p className="text-[10px] font-black text-slate-400">{c.date}</p>
           </div>
-          <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
             <div
               className={`h-full rounded-full transition-all duration-1000 ${c.status === 'closed' ? 'bg-emerald-500' : 'bg-brand-gold'}`}
               style={{ width: `${c.progress}%` }}
             ></div>
           </div>
-          <div className="flex justify-between items-center mt-3">
-            <p className="text-[10px] font-black text-slate-300 uppercase">{c.date}</p>
-            <p className="text-[10px] font-black text-slate-400">{c.progress}%</p>
+          <div className="mt-2 flex items-center justify-between text-[10px] font-black text-slate-400">
+            <span>{c.progress}% مكتمل</span>
+            <span>{c.documents.length.toLocaleString('ar-IQ')} وثائق</span>
           </div>
-        </div>
-      ))}
+        </motion.div>
+        );
+      })}
+      </div>
     </div>
   );
 };
@@ -244,7 +306,12 @@ const SummaryTab = ({
           <button onClick={() => setIsNewFieldModalOpen(true)} className="text-[10px] font-black text-brand-navy hover:underline">تعديل البيانات</button>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          {activeCase.customFields.map((f) => (
+          {activeCase.customFields.length === 0 ? (
+            <div className="col-span-2 rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4 text-center">
+              <p className="text-xs font-black text-slate-500">لا توجد بيانات مخصصة بعد</p>
+              <p className="mt-1 text-[11px] font-bold text-slate-400">أضف رقم الدعوى أو المحكمة أو أي معلومة مهمة للرجوع السريع.</p>
+            </div>
+          ) : activeCase.customFields.map((f) => (
             <div key={f.id} className="flex flex-col">
               <span className="text-[10px] font-bold text-slate-400">{f.label}</span>
               <span className="text-sm font-black text-brand-dark">{f.value}</span>
@@ -1383,6 +1450,25 @@ export default function MyCases() {
         : { label: 'راجع ملخص التقدم', tab: 'summary' as WorkspaceTab, icon: 'fa-rectangle-list' }
     : null;
 
+  const activeCaseInsights = useMemo(() => {
+    if (!activeCase) {
+      return [];
+    }
+
+    const pendingDocs = activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length;
+    const signedDocs = activeCase.documents.filter((doc) => doc.isSigned).length;
+    const paidPercent = activeCase.financials.totalAgreed > 0
+      ? Math.round((activeCase.financials.paid / activeCase.financials.totalAgreed) * 100)
+      : 0;
+
+    return [
+      { label: 'الإجراءات', value: pendingDocs.toLocaleString('ar-IQ'), icon: 'fa-bell', tone: pendingDocs > 0 ? 'bg-amber-50 text-amber-700 ring-amber-100' : 'bg-emerald-50 text-emerald-700 ring-emerald-100' },
+      { label: 'الوثائق', value: activeCase.documents.length.toLocaleString('ar-IQ'), icon: 'fa-folder-open', tone: 'bg-blue-50 text-blue-700 ring-blue-100' },
+      { label: 'الموقعة', value: signedDocs.toLocaleString('ar-IQ'), icon: 'fa-signature', tone: 'bg-emerald-50 text-emerald-700 ring-emerald-100' },
+      { label: 'السداد', value: `${paidPercent}%`, icon: 'fa-wallet', tone: 'bg-brand-navy/5 text-brand-navy ring-brand-navy/10' },
+    ];
+  }, [activeCase]);
+
   return (
     <div className="app-view fade-in space-y-5">
       {/* Toast Notification for Reminders */}
@@ -1426,7 +1512,9 @@ export default function MyCases() {
       )}
 
       {/* Header section */}
-      <div className="flex flex-col gap-4 text-right xl:flex-row xl:items-center xl:justify-between">
+      <div className="relative overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-[linear-gradient(135deg,rgba(255,255,255,0.96),rgba(248,250,252,0.88))] p-5 text-right shadow-premium">
+        <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#D4AF37,#1B365D,#D4AF37)]"></div>
+        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
         <div className="flex items-start gap-4">
           <button
             onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
@@ -1444,8 +1532,16 @@ export default function MyCases() {
               <span className="rounded-xl border border-slate-100 bg-white px-3 py-1.5 text-xs font-black text-slate-500 shadow-sm">
                 {showArchived ? 'عرض الأرشيف' : 'القضايا النشطة'}
               </span>
+              {activeCaseActionCount > 0 && (
+                <span className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700 shadow-sm">
+                  {activeCaseActionCount.toLocaleString('ar-IQ')} إجراء في الملف الحالي
+                </span>
+              )}
             </div>
             <h2 className="mt-2 text-2xl font-black text-brand-dark sm:text-3xl">إدارة قضاياك وملفاتك</h2>
+            <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
+              مساحة عمل واحدة للرسائل، المستندات، المتابعة المالية، والإجراءات العاجلة لكل ملف قانوني.
+            </p>
           </div>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
@@ -1459,11 +1555,12 @@ export default function MyCases() {
             <i className="fa-solid fa-circle-plus"></i> فتح ملف جديد
           </ActionButton>
         </div>
+        </div>
       </div>
 
-      <div className="rounded-[2rem] border border-white/70 bg-white/75 p-4 shadow-premium backdrop-blur">
+      <div className="rounded-[2rem] border border-white/70 bg-white/80 p-4 shadow-premium backdrop-blur">
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
-          <div className="rounded-[1.5rem] border border-brand-navy/10 bg-white p-5 shadow-sm">
+          <div className="rounded-[1.5rem] border border-brand-navy/10 bg-[linear-gradient(135deg,rgba(27,54,93,0.05),rgba(255,255,255,1))] p-5 shadow-sm">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div className="min-w-0">
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">مركز المتابعة</p>
@@ -1486,7 +1583,6 @@ export default function MyCases() {
                     onClick={() => {
                       if (nextAction.tab === 'docs') {
                         setDocFilter('pending');
-                        setActiveTab('summary');
                         return;
                       }
                       setActiveTab(nextAction.tab);
@@ -1509,6 +1605,31 @@ export default function MyCases() {
                 )}
               </div>
             </div>
+            {activeCase && (
+              <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+                {activeCaseInsights.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => {
+                      if (item.label === 'الإجراءات' || item.label === 'الوثائق' || item.label === 'الموقعة') {
+                        setDocFilter(item.label === 'الموقعة' ? 'signed' : item.label === 'الإجراءات' ? 'pending' : 'all');
+                      }
+                      if (item.label === 'السداد') {
+                        setActiveTab('financials');
+                      }
+                    }}
+                    className={`rounded-2xl bg-white p-3 text-right shadow-sm ring-1 transition hover:-translate-y-0.5 hover:shadow-md ${item.tone}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10px] font-black">{item.label}</span>
+                      <i className={`fa-solid ${item.icon} text-xs`}></i>
+                    </div>
+                    <p className="mt-2 text-xl font-black text-brand-dark">{item.value}</p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-2">
@@ -1527,8 +1648,23 @@ export default function MyCases() {
 
       <div className="grid min-h-[760px] grid-cols-1 gap-6 lg:grid-cols-12 xl:h-[calc(100vh-285px)]">
         {!isSidebarCollapsed && (
-          <div className="lg:col-span-3 bg-white rounded-[2rem] shadow-sm border border-slate-200 flex flex-col overflow-hidden text-right animate-in slide-in-from-right duration-300">
-            <div className="p-5 border-b border-slate-100 bg-slate-50/50">
+          <motion.div
+            initial={{ opacity: 0, x: 24 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 24 }}
+            transition={{ type: 'spring', stiffness: 360, damping: 34 }}
+            className="lg:col-span-3 bg-white rounded-[2rem] shadow-sm border border-slate-200 flex flex-col overflow-hidden text-right"
+          >
+            <div className="border-b border-slate-100 bg-[linear-gradient(180deg,rgba(248,250,252,0.95),rgba(255,255,255,1))] p-5">
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-brand-dark">قائمة الملفات</p>
+                  <p className="mt-1 text-[10px] font-bold text-slate-400">فلترة سريعة حسب الإجراء والحالة</p>
+                </div>
+                <span className="rounded-full bg-brand-navy/5 px-3 py-1 text-[10px] font-black text-brand-navy">
+                  {visibleCases.length.toLocaleString('ar-IQ')}
+                </span>
+              </div>
               <div className="relative">
                 <input
                   type="text"
@@ -1539,24 +1675,15 @@ export default function MyCases() {
                 />
                 <i className="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
               </div>
-              <div className="flex gap-1 mt-4 overflow-x-auto no-scrollbar pb-1 flex-row-reverse">
-                {(['needs_action', 'drafts', 'in_progress', 'waiting', 'completed', 'all'] as const).map((f) => (
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {SIDEBAR_FILTERS.map((filter) => (
                   <button
-                    key={f}
-                    onClick={() => setSidebarStatusFilter(f)}
-                    className={`px-3 py-1.5 rounded-xl text-[9px] font-black whitespace-nowrap transition-all ${sidebarStatusFilter === f ? 'bg-brand-navy text-white shadow-md' : 'bg-white text-slate-500 border border-slate-100 hover:bg-slate-50'}`}
+                    key={filter.id}
+                    onClick={() => setSidebarStatusFilter(filter.id)}
+                    className={`flex min-h-12 flex-col items-center justify-center gap-1 rounded-2xl border px-2 py-2 text-[10px] font-black transition-all ${sidebarStatusFilter === filter.id ? 'border-brand-navy bg-brand-navy text-white shadow-md shadow-brand-navy/15' : 'border-slate-100 bg-white text-slate-500 hover:border-brand-navy/20 hover:text-brand-navy'}`}
                   >
-                    {f === 'needs_action'
-                      ? 'تحتاج إجراء'
-                      : f === 'drafts'
-                        ? 'المسودات'
-                        : f === 'in_progress'
-                          ? 'قيد التنفيذ'
-                          : f === 'waiting'
-                            ? 'بانتظار المحامي'
-                            : f === 'completed'
-                              ? 'مكتملة'
-                              : 'الكل'}
+                    <i className={`fa-solid ${filter.icon}`}></i>
+                    {filter.label}
                   </button>
                 ))}
               </div>
@@ -1569,7 +1696,7 @@ export default function MyCases() {
               searchQuery={sidebarSearch}
               statusFilter={sidebarStatusFilter}
             />
-          </div>
+          </motion.div>
         )}
 
         {/* Case Detail Workspace */}
@@ -1586,7 +1713,7 @@ export default function MyCases() {
           ) : (
             <>
               {/* Header */}
-              <div className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(248,250,252,0.9),rgba(255,255,255,0.98))] p-5 md:p-6">
+              <div className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(248,250,252,0.92),rgba(255,255,255,0.98))] p-5 md:p-6">
                 <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
                   <div className="min-w-0">
                   <div className="relative mb-2 flex flex-wrap items-center gap-2">
@@ -1654,7 +1781,7 @@ export default function MyCases() {
                   <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-400">
                     <span>رقم الملف: <span className="font-mono text-slate-600">#LXG-928{activeCase.id.split('-')[1]}</span></span>
                     <span className="h-1 w-1 rounded-full bg-slate-300"></span>
-                    <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-brand-navy ring-1 ring-slate-100">{activeCase.statusText}</span>
+                    <span className={`rounded-full px-3 py-1 text-[10px] font-black ring-1 ${getCaseStatusTone(activeCase.status)}`}>{activeCase.statusText}</span>
                     {activeCaseActionCount > 0 && (
                       <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700 ring-1 ring-amber-100">
                         {activeCaseActionCount.toLocaleString('ar-IQ')} إجراء
@@ -1680,6 +1807,29 @@ export default function MyCases() {
                       ))}
                     </div>
                   )}
+                  <div className="flex min-w-[150px] items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+                    <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-navy/5 text-brand-navy">
+                      <svg className="absolute inset-0 h-12 w-12 -rotate-90" viewBox="0 0 48 48" aria-hidden="true">
+                        <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="none" className="text-slate-100" />
+                        <circle
+                          cx="24"
+                          cy="24"
+                          r="20"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          fill="none"
+                          strokeDasharray={`${activeCase.progress * 1.26} 126`}
+                          strokeLinecap="round"
+                          className="text-brand-gold"
+                        />
+                      </svg>
+                      <span className="relative text-[10px] font-black">{activeCase.progress}%</span>
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-slate-400">تقدم الملف</p>
+                      <p className="mt-1 text-xs font-black text-brand-dark">{activeCase.progress >= 80 ? 'قريب من الإغلاق' : activeCase.progress >= 45 ? 'قيد المتابعة' : 'في البداية'}</p>
+                    </div>
+                  </div>
                   <button onClick={() => setIsShareAccessModalOpen(true)} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-navy hover:text-brand-navy">
                     <i className="fa-solid fa-user-plus"></i> مشاركة الوصول
                   </button>
@@ -1715,7 +1865,16 @@ export default function MyCases() {
                   </button>
                 </div>
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                  {activeCase.customFields.map((field: any) => (
+                  {activeCase.customFields.length === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => setIsNewFieldModalOpen(true)}
+                      className="col-span-2 min-h-[74px] rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-3 text-right transition hover:border-brand-navy hover:bg-white lg:col-span-4"
+                    >
+                      <span className="text-sm font-black text-brand-dark">أضف بيانات الملف المهمة</span>
+                      <span className="mt-1 block text-xs font-bold text-slate-400">مثل المحكمة، رقم الدعوى، أو موعد الجلسة القادمة.</span>
+                    </button>
+                  ) : activeCase.customFields.map((field: any) => (
                     <div key={field.id} className="flex min-h-[74px] flex-col rounded-xl border border-slate-100 bg-slate-50/50 p-3 shadow-inner transition hover:border-brand-gold/30">
                       <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400 mb-1">{field.label}</span>
                       <span className="text-sm font-black text-brand-dark truncate" title={field.value}>{field.value}</span>
@@ -1769,15 +1928,15 @@ export default function MyCases() {
 
                   <div className="flex border-b border-slate-100 font-black text-sm text-brand-dark bg-slate-50/50 p-1">
                     {[
-                      { id: 'summary', label: 'الملخص', icon: 'fa-solid fa-rectangle-list' },
-                      { id: 'chat', label: 'التوجيهات', icon: 'fa-regular fa-comments' },
-                      { id: 'ai', label: 'الذكاء الاصطناعي', icon: 'fa-solid fa-robot' },
-                      { id: 'financials', label: 'المالية', icon: 'fa-solid fa-file-invoice-dollar' },
+                      { id: 'summary', label: 'الملخص', icon: 'fa-solid fa-rectangle-list', badge: `${activeCase.progress}%` },
+                      { id: 'chat', label: 'التوجيهات', icon: 'fa-regular fa-comments', badge: activeCase.unreadCount ? activeCase.unreadCount.toLocaleString('ar-IQ') : undefined },
+                      { id: 'ai', label: 'الذكاء الاصطناعي', icon: 'fa-solid fa-robot', badge: activeCase.aiConsultations?.length ? activeCase.aiConsultations.length.toLocaleString('ar-IQ') : undefined },
+                      { id: 'financials', label: 'المالية', icon: 'fa-solid fa-file-invoice-dollar', badge: `${Math.round((activeCase.financials.paid / Math.max(activeCase.financials.totalAgreed, 1)) * 100)}%` },
                     ].map((tab) => (
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as WorkspaceTab)}
-                        className={`flex-1 py-3.5 flex items-center justify-center gap-2 transition relative rounded-2xl ${activeTab === tab.id ? 'text-brand-navy z-10' : 'text-slate-400 hover:text-brand-dark hover:bg-white/50'}`}
+                        className={`relative flex-1 rounded-2xl py-3.5 transition ${activeTab === tab.id ? 'z-10 text-brand-navy' : 'text-slate-400 hover:bg-white/50 hover:text-brand-dark'}`}
                       >
                         {activeTab === tab.id && (
                           <motion.div
@@ -1786,7 +1945,15 @@ export default function MyCases() {
                             transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                           />
                         )}
-                        <i className={tab.icon}></i> {tab.label}
+                        <span className="flex min-w-0 items-center justify-center gap-2 px-2">
+                          <i className={tab.icon}></i>
+                          <span className="truncate">{tab.label}</span>
+                          {tab.badge && (
+                            <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${activeTab === tab.id ? 'bg-brand-navy/5 text-brand-navy' : 'bg-white text-slate-400 ring-1 ring-slate-100'}`}>
+                              {tab.badge}
+                            </span>
+                          )}
+                        </span>
                       </button>
                     ))}
                   </div>

@@ -1,13 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, motion, useReducedMotion, useScroll } from 'framer-motion';
 import { useNotifications } from '../context/NotificationContext';
 
 export default function MainLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const prefersReducedMotion = useReducedMotion();
+  const { scrollYProgress } = useScroll();
   const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, deleteNotification, clearAllNotifications } = useNotifications();
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
@@ -23,6 +25,14 @@ export default function MainLayout() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [isScrolled, setIsScrolled] = useState(false);
+
+  const headerTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { type: 'spring' as const, stiffness: 360, damping: 34, mass: 0.8 };
+
+  const menuTransition = prefersReducedMotion
+    ? { duration: 0 }
+    : { type: 'spring' as const, stiffness: 420, damping: 32, mass: 0.7 };
 
   // Breadcrumb mapping
   const pathMap: Record<string, string> = {
@@ -220,61 +230,145 @@ export default function MainLayout() {
 
   return (
     <div className="flex min-h-screen w-full flex-col">
-      <header className={`sticky top-0 z-50 w-full border-b border-slate-200/60 bg-white/70 backdrop-blur-xl transition-all duration-300 ${isScrolled ? 'h-14 shadow-sm' : 'h-16'}`}>
+      <motion.header
+        initial={prefersReducedMotion ? false : { y: -18, opacity: 0 }}
+        animate={{
+          y: 0,
+          opacity: 1,
+          height: isScrolled ? 56 : 64,
+          backgroundColor: isScrolled ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.72)',
+          boxShadow: isScrolled ? '0 18px 40px rgba(15, 23, 42, 0.08)' : '0 0 0 rgba(15, 23, 42, 0)',
+        }}
+        transition={headerTransition}
+        className="sticky top-0 z-50 w-full overflow-visible border-b border-slate-200/60 backdrop-blur-xl"
+      >
+        <motion.div
+          aria-hidden="true"
+          style={{ scaleX: scrollYProgress }}
+          className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] origin-right bg-brand-gold/80"
+        />
         <div className="mx-auto flex h-full max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-8">
 
           {/* Brand & Logo */}
           <div className="flex items-center gap-3 lg:w-64">
-            <motion.div animate={{ scale: isScrolled ? 0.9 : 1 }} className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-navy text-brand-gold shadow-lg shadow-brand-navy/20">
-              <i className={`fa-solid fa-scale-balanced ${isScrolled ? 'text-xs' : 'text-sm'}`}></i>
+            <motion.div
+              animate={{
+                scale: isScrolled ? 0.9 : 1,
+                borderRadius: isScrolled ? 12 : 14,
+                rotate: isScrolled ? 0 : -2,
+              }}
+              whileHover={prefersReducedMotion ? undefined : { scale: 1.04, rotate: 2 }}
+              transition={headerTransition}
+              className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-xl bg-brand-navy text-brand-gold shadow-lg shadow-brand-navy/20"
+            >
+              <motion.span
+                aria-hidden="true"
+                animate={prefersReducedMotion ? undefined : { x: ['120%', '-120%'] }}
+                transition={{ duration: 2.8, repeat: Infinity, repeatDelay: 4, ease: 'easeInOut' }}
+                className="absolute inset-y-0 w-1/2 skew-x-[-18deg] bg-white/10"
+              />
+              <motion.i
+                animate={{ scale: isScrolled ? 0.9 : 1, rotate: isScrolled ? 0 : 4 }}
+                transition={headerTransition}
+                className={`fa-solid fa-scale-balanced relative z-10 ${isScrolled ? 'text-xs' : 'text-sm'}`}
+              />
             </motion.div>
-            <div className={`hidden text-right sm:block transition-all ${isScrolled ? 'opacity-0 scale-95 w-0' : 'opacity-100'}`}>
-              <p className="text-base font-black tracking-tight text-brand-navy leading-none">القسطاس</p>
-              <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Smart Legal Platform</p>
-            </div>
+            <AnimatePresence initial={false}>
+              {!isScrolled && (
+                <motion.div
+                  key="brand-copy"
+                  initial={prefersReducedMotion ? false : { opacity: 0, x: 10, width: 0 }}
+                  animate={{ opacity: 1, x: 0, width: 'auto' }}
+                  exit={prefersReducedMotion ? { display: 'none' } : { opacity: 0, x: 8, width: 0 }}
+                  transition={headerTransition}
+                  className="hidden overflow-hidden whitespace-nowrap text-right sm:block"
+                >
+                  <p className="text-base font-black leading-none tracking-tight text-brand-navy">القسطاس</p>
+                  <p className="mt-1 text-[9px] font-black uppercase tracking-widest text-slate-400">Smart Legal Platform</p>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Center Navigation */}
-          <nav className="hidden h-full items-center gap-1 xl:flex">
+          <motion.nav
+            initial={prefersReducedMotion ? false : 'hidden'}
+            animate="show"
+            variants={{
+              hidden: {},
+              show: {
+                transition: { staggerChildren: 0.035, delayChildren: 0.05 },
+              },
+            }}
+            className="hidden h-full items-center gap-1 xl:flex"
+          >
             {navItems.map((item) => {
               const isActive = location.pathname === item.path;
               return (
-                <Link
+                <motion.div
                   key={item.path}
-                  to={item.path}
-                  className={`group relative flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-bold transition-all ${isActive
-                    ? 'bg-brand-navy/5 text-brand-navy'
-                    : 'text-slate-500 hover:text-brand-navy hover:bg-slate-50'
-                    }`}
+                  variants={{
+                    hidden: { opacity: 0, y: -8 },
+                    show: { opacity: 1, y: 0 },
+                  }}
+                  transition={menuTransition}
+                  whileHover={prefersReducedMotion ? undefined : { y: -1 }}
                 >
-                  <i className={`fa-solid ${item.icon} text-xs ${isActive ? 'text-brand-navy' : 'text-slate-300 group-hover:text-brand-navy'}`}></i>
-                  {item.name}
-                  {isActive && (
-                    <motion.div layoutId="nav-pill" className="absolute inset-x-2 -bottom-3 h-1 rounded-t-full bg-brand-navy" />
-                  )}
-                </Link>
+                  <Link
+                    to={item.path}
+                    className={`group relative flex items-center gap-2 overflow-hidden rounded-xl px-4 py-2 text-sm font-bold transition-colors ${isActive
+                      ? 'bg-brand-navy/5 text-brand-navy'
+                      : 'text-slate-500 hover:text-brand-navy hover:bg-slate-50'
+                      }`}
+                  >
+                    {isActive && (
+                      <motion.span
+                        layoutId="nav-active-bg"
+                        transition={headerTransition}
+                        className="absolute inset-0 rounded-xl bg-brand-navy/5"
+                      />
+                    )}
+                    <motion.i
+                      animate={{ scale: isActive ? 1.08 : 1, y: isActive ? -1 : 0 }}
+                      transition={headerTransition}
+                      className={`fa-solid ${item.icon} relative z-10 text-xs ${isActive ? 'text-brand-navy' : 'text-slate-300 group-hover:text-brand-navy'}`}
+                    />
+                    <span className="relative z-10">{item.name}</span>
+                    {isActive && (
+                      <motion.div
+                        layoutId="nav-pill"
+                        transition={headerTransition}
+                        className="absolute inset-x-2 -bottom-3 h-1 rounded-t-full bg-brand-navy"
+                      />
+                    )}
+                  </Link>
+                </motion.div>
               );
             })}
-          </nav>
+          </motion.nav>
 
           {/* Right Actions */}
           <div className="flex items-center justify-end gap-2 lg:w-64">
-            <button
+            <motion.button
               onClick={() => setIsCommandPaletteOpen(true)}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+              animate={{ height: isScrolled ? 36 : 40, width: isScrolled ? 36 : 40 }}
+              transition={headerTransition}
               className={`flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 transition-all hover:border-brand-navy hover:text-brand-navy hover:shadow-sm ${isScrolled ? 'h-9 w-9' : 'h-10 w-10'}`}
               title="البحث السريع (Ctrl+K)"
             >
               <i className="fa-solid fa-magnifying-glass text-xs"></i>
-            </button>
+            </motion.button>
 
             <div className="relative">
               <NotificationBell />
               <AnimatePresence>
                 {isNotificationsOpen && (
                   <motion.div
-                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                    initial={prefersReducedMotion ? false : { opacity: 0, y: 14, scale: 0.96, filter: 'blur(8px)' }}
+                    animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                    exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 12, scale: 0.96, filter: 'blur(8px)' }}
+                    transition={menuTransition}
                     className="absolute left-0 top-full mt-3 w-80 overflow-hidden rounded-[2rem] border border-slate-200 bg-white text-right shadow-2xl z-50 origin-top-left"
                   >
                     <div className="flex items-center justify-between border-b border-slate-50 bg-slate-50/50 p-3 gap-2">
@@ -344,9 +438,13 @@ export default function MainLayout() {
                 onClick={() => setIsProfileOpen(!isProfileOpen)}
                 className={`flex items-center gap-2 rounded-xl p-1 transition-all ${isProfileOpen ? 'bg-slate-100' : 'hover:bg-slate-50'}`}
               >
-                <div className={`${isScrolled ? 'h-7 w-7' : 'h-8 w-8'} overflow-hidden rounded-lg border-2 border-white shadow-sm ring-1 ring-slate-200 transition-all`}>
+                <motion.div
+                  animate={{ height: isScrolled ? 28 : 32, width: isScrolled ? 28 : 32 }}
+                  transition={headerTransition}
+                  className={`${isScrolled ? 'h-7 w-7' : 'h-8 w-8'} overflow-hidden rounded-lg border-2 border-white shadow-sm ring-1 ring-slate-200 transition-all`}
+                >
                   <img src={user?.img || 'https://i.pravatar.cc/150'} alt="" className="h-full w-full object-cover" />
-                </div>
+                </motion.div>
                 <i className={`fa-solid fa-chevron-down text-[10px] text-slate-400 transition-transform duration-300 ${isProfileOpen ? 'rotate-180' : ''}`}></i>
               </button>
 
@@ -355,9 +453,10 @@ export default function MainLayout() {
                   <>
                     <div className="fixed inset-0 z-10" onClick={() => setIsProfileOpen(false)}></div>
                     <motion.div
-                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 12, scale: 0.96, filter: 'blur(8px)' }}
+                      animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 10, scale: 0.96, filter: 'blur(8px)' }}
+                      transition={menuTransition}
                       className="absolute left-0 mt-2 w-56 origin-top-left rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-20 text-right"
                     >
                       <div className="px-3 py-3 border-b border-slate-50 mb-1">
@@ -393,23 +492,34 @@ export default function MainLayout() {
             </div>
 
             {/* Mobile Nav Toggle */}
-            <button
+            <motion.button
               onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              whileTap={prefersReducedMotion ? undefined : { scale: 0.92 }}
               className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-600 xl:hidden transition-all hover:bg-brand-navy hover:text-white"
             >
-              <i className={`fa-solid ${mobileNavOpen ? 'fa-xmark' : 'fa-bars'}`}></i>
-            </button>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.i
+                  key={mobileNavOpen ? 'close' : 'menu'}
+                  initial={prefersReducedMotion ? false : { opacity: 0, rotate: -45, scale: 0.75 }}
+                  animate={{ opacity: 1, rotate: 0, scale: 1 }}
+                  exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, rotate: 45, scale: 0.75 }}
+                  transition={{ duration: 0.18 }}
+                  className={`fa-solid ${mobileNavOpen ? 'fa-xmark' : 'fa-bars'}`}
+                />
+              </AnimatePresence>
+            </motion.button>
           </div>
         </div>
-      </header>
+      </motion.header>
 
       {/* Enhanced Mobile Navigation Overlay */}
       <AnimatePresence>
         {mobileNavOpen && (
           <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
+            initial={prefersReducedMotion ? false : { opacity: 0, y: -18, filter: 'blur(8px)' }}
+            animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+            exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: -14, filter: 'blur(8px)' }}
+            transition={menuTransition}
             className="fixed inset-0 z-[45] flex flex-col bg-white/95 px-6 pt-24 backdrop-blur-md xl:hidden"
           >
             <nav className="flex flex-col gap-2">
