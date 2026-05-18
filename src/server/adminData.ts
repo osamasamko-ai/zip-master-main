@@ -32,6 +32,93 @@ function invalidateCache(...keys: string[]) {
     keys.forEach((key) => cacheStore.delete(key));
 }
 
+const DEFAULT_FEATURE_FLAGS: FeatureFlag[] = [
+    {
+        key: 'pro_workspace',
+        label: 'مساحة عمل المحامي',
+        description: 'تفعيل أدوات القضايا والرسائل والوثائق للمحامين.',
+        enabled: true,
+    },
+    {
+        key: 'digital_contracts',
+        label: 'العقود الرقمية',
+        description: 'السماح بإنشاء ومراجعة عقود البيع الرقمية.',
+        enabled: true,
+    },
+    {
+        key: 'ai_assistant',
+        label: 'مساعد الذكاء الاصطناعي',
+        description: 'إظهار مساعد AI داخل تجربة المستخدم والمحامي.',
+        enabled: true,
+    },
+    {
+        key: 'payments',
+        label: 'المدفوعات',
+        description: 'تشغيل بوابات الدفع ورصيد الحسابات.',
+        enabled: true,
+    },
+];
+
+const DEFAULT_POLICIES: PolicySetting[] = [
+    {
+        key: 'free_consults',
+        label: 'الاستشارات المجانية',
+        value: '3',
+        description: 'عدد الاستشارات المجانية المتاحة للحساب الجديد.',
+    },
+    {
+        key: 'platform_fee_percent',
+        label: 'عمولة المنصة',
+        value: '8',
+        description: 'النسبة المئوية التي تخصم من الخدمات المدفوعة.',
+    },
+    {
+        key: 'kyc_review_hours',
+        label: 'مهلة مراجعة KYC',
+        value: '24',
+        description: 'المدة المستهدفة لمراجعة طلبات اعتماد المحامين بالساعات.',
+    },
+    {
+        key: 'tax_enabled',
+        label: 'حساب الضريبة',
+        value: 'true',
+        description: 'تفعيل احتساب الضريبة على العمليات المالية المؤهلة.',
+    },
+];
+
+const DEFAULT_PAYMENT_GATEWAYS: PaymentGateway[] = [
+    { key: 'zain_cash', label: 'ZainCash', enabled: true, feePercent: 1.5 },
+    { key: 'bank_transfer', label: 'تحويل مصرفي', enabled: true, feePercent: 0 },
+    { key: 'card', label: 'بطاقات الدفع', enabled: false, feePercent: 2.5 },
+];
+
+const DEFAULT_NOTIFICATION_TEMPLATES: NotificationTemplate[] = [
+    {
+        key: 'kyc_approved',
+        label: 'قبول اعتماد المحامي',
+        value: 'تم قبول طلب اعتمادك ويمكنك الآن استقبال القضايا.',
+        active: true,
+    },
+    {
+        key: 'kyc_rejected',
+        label: 'رفض اعتماد المحامي',
+        value: 'تعذر قبول طلب الاعتماد. يرجى مراجعة الوثائق وإعادة الإرسال.',
+        active: true,
+    },
+    {
+        key: 'payment_received',
+        label: 'استلام دفعة',
+        value: 'تم استلام الدفعة وتحديث رصيد حسابك.',
+        active: true,
+    },
+    {
+        key: 'case_update',
+        label: 'تحديث قضية',
+        value: 'يوجد تحديث جديد على قضيتك داخل مساحة العمل.',
+        active: true,
+    },
+];
+
 export function clearAdminCache() {
     cacheStore.clear();
     return true;
@@ -401,13 +488,29 @@ export async function toggleUserBlock(id: string) {
 }
 
 export async function getFeatureFlags(): Promise<FeatureFlag[]> {
-    return getCached('feature-flags', async () => prisma.featureFlag.findMany() as any);
+    return getCached('feature-flags', async () => {
+        await Promise.all(DEFAULT_FEATURE_FLAGS.map((flag) =>
+            prisma.featureFlag.upsert({
+                where: { key: flag.key },
+                update: {},
+                create: flag,
+            })
+        ));
+        return prisma.featureFlag.findMany({ orderBy: { label: 'asc' } }) as any;
+    });
 }
 
 export async function updateFeatureFlag(key: string, enabled: boolean) {
-    const updated = await prisma.featureFlag.update({
+    const fallback = DEFAULT_FEATURE_FLAGS.find((flag) => flag.key === key);
+    const updated = await prisma.featureFlag.upsert({
         where: { key },
-        data: { enabled }
+        update: { enabled },
+        create: {
+            key,
+            label: fallback?.label || key,
+            description: fallback?.description || '',
+            enabled,
+        },
     }) as any;
     invalidateCache('feature-flags');
     return updated;
@@ -425,13 +528,29 @@ export async function updateSupportTicket(id: string, status: string) {
 }
 
 export async function getPolicies(): Promise<PolicySetting[]> {
-    return getCached('system-policies', async () => prisma.systemPolicy.findMany() as any);
+    return getCached('system-policies', async () => {
+        await Promise.all(DEFAULT_POLICIES.map((policy) =>
+            prisma.systemPolicy.upsert({
+                where: { key: policy.key },
+                update: {},
+                create: policy,
+            })
+        ));
+        return prisma.systemPolicy.findMany({ orderBy: { label: 'asc' } }) as any;
+    });
 }
 
 export async function updatePolicySetting(key: string, value: string) {
-    const updated = await prisma.systemPolicy.update({
+    const fallback = DEFAULT_POLICIES.find((policy) => policy.key === key);
+    const updated = await prisma.systemPolicy.upsert({
         where: { key },
-        data: { value }
+        update: { value },
+        create: {
+            key,
+            label: fallback?.label || key,
+            value,
+            description: fallback?.description || '',
+        },
     }) as any;
     invalidateCache('system-policies');
     return updated;
@@ -567,13 +686,29 @@ export async function updateAiSettings(settings: Partial<AiSettings>) {
 }
 
 export async function getPaymentGateways(): Promise<PaymentGateway[]> {
-    return getCached('payment-gateways', async () => prisma.paymentGateway.findMany() as any);
+    return getCached('payment-gateways', async () => {
+        await Promise.all(DEFAULT_PAYMENT_GATEWAYS.map((gateway) =>
+            prisma.paymentGateway.upsert({
+                where: { key: gateway.key },
+                update: {},
+                create: gateway,
+            })
+        ));
+        return prisma.paymentGateway.findMany({ orderBy: { label: 'asc' } }) as any;
+    });
 }
 
 export async function updatePaymentGateway(key: string, enabled: boolean, feePercent?: number) {
-    const updated = await prisma.paymentGateway.update({
+    const fallback = DEFAULT_PAYMENT_GATEWAYS.find((gateway) => gateway.key === key);
+    const updated = await prisma.paymentGateway.upsert({
         where: { key },
-        data: { enabled, feePercent }
+        update: { enabled, feePercent },
+        create: {
+            key,
+            label: fallback?.label || key,
+            enabled,
+            feePercent: feePercent ?? fallback?.feePercent ?? 0,
+        },
     }) as any;
     invalidateCache('payment-gateways');
     return updated;
@@ -614,13 +749,29 @@ export async function updateWorkflowSettings(settings: Partial<WorkflowSettings>
 }
 
 export async function getNotificationTemplates(): Promise<NotificationTemplate[]> {
-    return getCached('notification-templates', async () => prisma.notificationTemplate.findMany() as any);
+    return getCached('notification-templates', async () => {
+        await Promise.all(DEFAULT_NOTIFICATION_TEMPLATES.map((template) =>
+            prisma.notificationTemplate.upsert({
+                where: { key: template.key },
+                update: {},
+                create: template,
+            })
+        ));
+        return prisma.notificationTemplate.findMany({ orderBy: { label: 'asc' } }) as any;
+    });
 }
 
 export async function updateNotificationTemplate(key: string, partial: Partial<NotificationTemplate>) {
-    const updated = await prisma.notificationTemplate.update({
+    const fallback = DEFAULT_NOTIFICATION_TEMPLATES.find((template) => template.key === key);
+    const updated = await prisma.notificationTemplate.upsert({
         where: { key },
-        data: partial
+        update: partial,
+        create: {
+            key,
+            label: partial.label || fallback?.label || key,
+            value: partial.value || fallback?.value || '',
+            active: partial.active ?? fallback?.active ?? true,
+        },
     }) as any;
     invalidateCache('notification-templates');
     return updated;

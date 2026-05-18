@@ -191,6 +191,13 @@ type AdminMetrics = {
 
 type AdminTab = 'overview' | 'users' | 'financials' | 'contracts' | 'kyc' | 'support' | 'settings' | 'compliance' | 'system';
 
+type AdminToast = {
+  id: string;
+  title: string;
+  message: string;
+  tone?: 'success' | 'warning' | 'danger' | 'info';
+};
+
 const formatCurrency = (value: number) => new Intl.NumberFormat('ar-IQ').format(value) + ' د.ع';
 
 const statusToneMap = {
@@ -280,6 +287,10 @@ export default function AdminDashboard() {
   const [moderationSearch, setModerationSearch] = useState('');
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
   const navigate = useNavigate();
+  const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState(new Date());
+  const [activeToast, setActiveToast] = useState<AdminToast | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedReviewContract, setSelectedReviewContract] = useState<DigitalContract | null>(null);
   const [userSaveStatus, setUserSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -296,8 +307,18 @@ export default function AdminDashboard() {
   const [docToDelete, setDocToDelete] = useState<string | null>(null);
 
   const getAuthHeaders = () => {
-    const token = typeof window !== 'undefined' ? window.localStorage.getItem('lexigate_token') : null;
+    const token = typeof window !== 'undefined'
+      ? window.localStorage.getItem('auth_token') || window.localStorage.getItem('lexigate_token')
+      : null;
     return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const showToast = (title: string, message: string, tone: AdminToast['tone'] = 'info') => {
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    setActiveToast({ id, title, message, tone });
+    window.setTimeout(() => {
+      setActiveToast((current) => (current?.id === id ? null : current));
+    }, 4200);
   };
 
   const adminFetch = (url: string, init: RequestInit = {}) => {
@@ -532,52 +553,69 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     async function loadData() {
-      const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, servicesRes, contractRes] = await Promise.all([
-        adminFetch('/api/admin/metrics'),
-        adminFetch('/api/admin/kyc'),
-        adminFetch('/api/admin/users'),
-        adminFetch('/api/admin/feature-flags'),
-        adminFetch('/api/admin/support-tickets'),
-        adminFetch('/api/admin/alerts'),
-        adminFetch('/api/admin/audit-logs'),
-        adminFetch('/api/admin/transactions'),
-        adminFetch('/api/admin/policies'),
-        adminFetch('/api/admin/system-settings'),
-        adminFetch('/api/admin/ai-settings'),
-        adminFetch('/api/admin/payment-gateways'),
-        adminFetch('/api/admin/workflow-settings'),
-        adminFetch('/api/admin/notification-templates'),
-        adminFetch('/api/admin/moderation-rules'),
-        adminFetch('/api/admin/legal-docs'),
-        adminFetch('/api/admin/legal-services'),
-        adminFetch('/api/admin/contracts'),
-      ]);
+      setIsLoadingDashboard(true);
+      setLoadError(null);
+      try {
+        const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, servicesRes, contractRes] = await Promise.all([
+          adminFetch('/api/admin/metrics'),
+          adminFetch('/api/admin/kyc'),
+          adminFetch('/api/admin/users'),
+          adminFetch('/api/admin/feature-flags'),
+          adminFetch('/api/admin/support-tickets'),
+          adminFetch('/api/admin/alerts'),
+          adminFetch('/api/admin/audit-logs'),
+          adminFetch('/api/admin/transactions'),
+          adminFetch('/api/admin/policies'),
+          adminFetch('/api/admin/system-settings'),
+          adminFetch('/api/admin/ai-settings'),
+          adminFetch('/api/admin/payment-gateways'),
+          adminFetch('/api/admin/workflow-settings'),
+          adminFetch('/api/admin/notification-templates'),
+          adminFetch('/api/admin/moderation-rules'),
+          adminFetch('/api/admin/legal-docs'),
+          adminFetch('/api/admin/legal-services'),
+          adminFetch('/api/admin/contracts'),
+        ]);
 
-      if (metricRes.ok) setMetrics(await metricRes.json());
-      if (kycRes.ok) setKycApplications(await kycRes.json());
-      if (userRes.ok) setUsers(await userRes.json());
-      if (flagRes.ok) setFlags(await flagRes.json());
-      if (ticketRes.ok) setSupportTickets(await ticketRes.json());
-      if (alertRes.ok) setAlerts(await alertRes.json());
-      if (auditRes.ok) setAuditLogs(await auditRes.json());
-      if (txRes.ok) setTransactions(await txRes.json());
-      if (policyRes.ok) setPolicies(await policyRes.json());
-      if (systemRes.ok) setSystemSettings(await systemRes.json());
-      if (aiRes.ok) setAiSettings(await aiRes.json());
-      if (paymentRes.ok) setPaymentGateways(await paymentRes.json());
-      if (workflowRes.ok) setWorkflowSettings(await workflowRes.json());
-      if (notificationRes.ok) setNotificationTemplates(await notificationRes.json());
-      if (moderationRes.ok) setModerationRules(await moderationRes.json());
-      if (docsRes.ok) setLegalDocs(await docsRes.json());
-      if (servicesRes.ok) setLegalServices(await servicesRes.json());
-      if (contractRes.ok) {
-        const res = await contractRes.json();
-        setDigitalContracts(res.data || []);
+        if (metricRes.ok) setMetrics(await metricRes.json());
+        if (kycRes.ok) setKycApplications(await kycRes.json());
+        if (userRes.ok) setUsers(await userRes.json());
+        if (flagRes.ok) setFlags(await flagRes.json());
+        if (ticketRes.ok) setSupportTickets(await ticketRes.json());
+        if (alertRes.ok) setAlerts(await alertRes.json());
+        if (auditRes.ok) setAuditLogs(await auditRes.json());
+        if (txRes.ok) setTransactions(await txRes.json());
+        if (policyRes.ok) setPolicies(await policyRes.json());
+        if (systemRes.ok) setSystemSettings(await systemRes.json());
+        if (aiRes.ok) setAiSettings(await aiRes.json());
+        if (paymentRes.ok) setPaymentGateways(await paymentRes.json());
+        if (workflowRes.ok) setWorkflowSettings(await workflowRes.json());
+        if (notificationRes.ok) setNotificationTemplates(await notificationRes.json());
+        if (moderationRes.ok) setModerationRules(await moderationRes.json());
+        if (docsRes.ok) setLegalDocs(await docsRes.json());
+        if (servicesRes.ok) setLegalServices(await servicesRes.json());
+        if (contractRes.ok) {
+          const res = await contractRes.json();
+          setDigitalContracts(res.data || []);
+        }
+        setLastUpdatedAt(new Date());
+      } catch (error) {
+        console.error('Failed to load admin dashboard', error);
+        setLoadError('تعذر تحميل بعض بيانات الإدارة. تحقق من الاتصال أو صلاحيات الجلسة.');
+      } finally {
+        setIsLoadingDashboard(false);
       }
     }
 
     loadData();
   }, []);
+
+  useEffect(() => {
+    const taxPolicy = policies.find((policy) => policy.key === 'tax_enabled');
+    if (taxPolicy) {
+      setTaxEnabled(taxPolicy.value === 'true');
+    }
+  }, [policies]);
 
   // Simulate live log streaming
   useEffect(() => {
@@ -645,6 +683,7 @@ export default function AdminDashboard() {
 
     if (!response.ok) {
       setStatusLabel('error');
+      showToast('تعذر تحديث KYC', 'لم يتم حفظ حالة طلب الاعتماد.', 'danger');
       return;
     }
 
@@ -667,6 +706,7 @@ export default function AdminDashboard() {
       ...prev,
     ]);
     setStatusLabel('success');
+    showToast('تم تحديث طلب الاعتماد', `تم نقل الطلب إلى حالة ${status}.`, 'success');
     window.setTimeout(() => setStatusLabel('idle'), 1400);
   };
 
@@ -735,6 +775,7 @@ export default function AdminDashboard() {
     if (!response.ok) return;
     const flag = await response.json();
     setFlags((prev) => prev.map((item) => (item.key === flag.key ? flag : item)));
+    showToast('تم تحديث الميزة', `${flag.label} ${flag.enabled ? 'مفعلة' : 'معطلة'} الآن.`, 'success');
   };
 
   const updateSelectedUserField = <K extends keyof UserRecord>(field: K, value: UserRecord[K]) => {
@@ -754,6 +795,7 @@ export default function AdminDashboard() {
 
     if (!response.ok) {
       setUserSaveStatus('error');
+      showToast('تعذر حفظ المستخدم', 'لم يتم حفظ تعديلات ملف المستخدم.', 'danger');
       return;
     }
 
@@ -761,6 +803,7 @@ export default function AdminDashboard() {
     setUsers((prev) => prev.map((item) => (item.id === updatedUser.id ? updatedUser : item)));
     setSelectedUser(updatedUser);
     setUserSaveStatus('saved');
+    showToast('تم حفظ المستخدم', 'تم تحديث بيانات الحساب بنجاح.', 'success');
     window.setTimeout(() => setUserSaveStatus('idle'), 1400);
   };
 
@@ -779,9 +822,11 @@ export default function AdminDashboard() {
       const updated = await response.json();
       setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       setUserSaveStatus('saved');
+      showToast('تم تغيير الدور', `أصبح دور المستخدم ${updated.role}.`, 'success');
     } catch (err) {
       console.error(err);
       setUserSaveStatus('error');
+      showToast('تعذر تغيير الدور', 'لم يتم حفظ الدور الجديد.', 'danger');
     } finally {
       setTimeout(() => setUserSaveStatus('idle'), 2000);
     }
@@ -795,8 +840,10 @@ export default function AdminDashboard() {
       const updated = await response.json();
       setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       setUserSaveStatus('saved');
+      showToast(updated.blocked ? 'تم حظر المستخدم' : 'تم إلغاء الحظر', 'تم تحديث حالة الوصول للحساب.', updated.blocked ? 'warning' : 'success');
     } catch (err) {
       setUserSaveStatus('error');
+      showToast('تعذر تحديث الحظر', 'لم يتم حفظ حالة الحظر.', 'danger');
     } finally {
       setTimeout(() => setUserSaveStatus('idle'), 2000);
     }
@@ -824,6 +871,7 @@ export default function AdminDashboard() {
   const showKycDocuments = (application: KycApplication) => {
     if (application.attachments.length === 0) {
       setStatusLabel('error');
+      showToast('لا توجد وثائق', 'هذا الطلب لا يحتوي على مرفقات قابلة للعرض.', 'warning');
       window.setTimeout(() => setStatusLabel('idle'), 1400);
       return;
     }
@@ -833,6 +881,22 @@ export default function AdminDashboard() {
     });
   };
 
+  const openKycProfile = (application: KycApplication) => {
+    const matchedUser = users.find((item) =>
+      item.id === application.id ||
+      item.licenseNumber === application.license ||
+      item.name === application.name ||
+      item.email.toLowerCase().includes(application.name.toLowerCase().replace(/\s+/g, '.'))
+    );
+
+    if (!matchedUser) {
+      showToast('لا يوجد ملف مرتبط', 'لم يتم العثور على حساب مستخدم مطابق لهذا الطلب.', 'warning');
+      return;
+    }
+
+    navigate(`/profile/${matchedUser.id}`, { state: { lawyer: matchedUser } });
+  };
+
   const clearSystemCache = async () => {
     const response = await adminFetch('/api/admin/cache/clear', { method: 'POST' });
     if (!response.ok) return;
@@ -840,6 +904,7 @@ export default function AdminDashboard() {
       { id: `log-${Date.now()}`, time: new Date().toLocaleTimeString('en-GB'), level: 'info', msg: 'Admin cache cleared successfully.' },
       ...prev,
     ]);
+    showToast('تم تفريغ الذاكرة المؤقتة', 'تم تسجيل العملية في سجلات النظام.', 'success');
     forceSync();
   };
 
@@ -850,6 +915,7 @@ export default function AdminDashboard() {
       { id: `log-${Date.now()}`, time: new Date().toLocaleTimeString('en-GB'), level: 'warn', msg: 'AI services restart queued by admin.' },
       ...prev,
     ]);
+    showToast('تم جدولة إعادة تشغيل AI', 'تم إرسال الطلب إلى سجل النظام.', 'warning');
   };
 
   const handleActorClick = (actorName: string) => {
@@ -870,15 +936,21 @@ export default function AdminDashboard() {
     if (!response.ok) return;
     const updated = await response.json();
     setSupportTickets((prev) => prev.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
+    showToast('تم تحديث التذكرة', `تم نقل التذكرة إلى ${status}.`, 'success');
   };
 
   const updatePolicy = async (key: string, value: string) => {
     setPolicies((prev) => prev.map((policy) => (policy.key === key ? { ...policy, value } : policy)));
-    await adminFetch(`/api/admin/policies/${key}`, {
+    const response = await adminFetch(`/api/admin/policies/${key}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value }),
     });
+    if (!response.ok) {
+      showToast('تعذر تحديث السياسة', 'لم يتم حفظ قيمة السياسة الجديدة.', 'danger');
+      return;
+    }
+    showToast('تم تحديث السياسة', 'تم حفظ قيمة السياسة بنجاح.', 'success');
   };
 
   const updateSystemSetting = async (settings: Partial<SystemSettings>) => {
@@ -890,6 +962,7 @@ export default function AdminDashboard() {
     if (!response.ok) return;
     const updated = await response.json();
     setSystemSettings(updated);
+    showToast('تم تحديث النظام', 'تم حفظ إعدادات النظام.', 'success');
   };
 
   const updateAiSetting = async (settings: Partial<AiSettings>) => {
@@ -901,6 +974,7 @@ export default function AdminDashboard() {
     if (!response.ok) return;
     const updated = await response.json();
     setAiSettings(updated);
+    showToast('تم تحديث AI', 'تم حفظ إعدادات الذكاء الاصطناعي.', 'success');
   };
 
   const updatePaymentGatewayItem = async (key: string, enabled: boolean, feePercent?: number) => {
@@ -912,6 +986,7 @@ export default function AdminDashboard() {
     if (!response.ok) return;
     const updated = await response.json();
     setPaymentGateways((prev) => prev.map((gateway) => (gateway.key === updated.key ? updated : gateway)));
+    showToast('تم تحديث بوابة الدفع', 'تم حفظ إعدادات بوابة الدفع.', 'success');
   };
 
   const updateWorkflowSettingsHandler = async (settings: Partial<WorkflowSettings>) => {
@@ -923,6 +998,7 @@ export default function AdminDashboard() {
     if (!response.ok) return;
     const updated = await response.json();
     setWorkflowSettings(updated);
+    showToast('تم تحديث سير العمل', 'تم حفظ إعدادات القضايا والتوقيع.', 'success');
   };
 
   const updateNotificationTemplate = async (key: string, partial: Partial<NotificationTemplate>) => {
@@ -934,6 +1010,7 @@ export default function AdminDashboard() {
     if (!response.ok) return;
     const updated = await response.json();
     setNotificationTemplates((prev) => prev.map((template) => (template.key === updated.key ? updated : template)));
+    showToast('تم تحديث قالب الإشعار', 'تم حفظ قالب الإشعار.', 'success');
   };
 
   const toggleModerationRule = async (id: string, active: boolean) => {
@@ -945,6 +1022,7 @@ export default function AdminDashboard() {
     if (!response.ok) return;
     const updated = await response.json();
     setModerationRules((prev) => prev.map((rule) => (rule.id === updated.id ? updated : rule)));
+    showToast('تم تحديث قاعدة المراقبة', `القاعدة ${updated.active ? 'مفعلة' : 'معطلة'} الآن.`, 'success');
   };
 
   const addModerationRule = async () => {
@@ -959,12 +1037,14 @@ export default function AdminDashboard() {
     const created = await response.json();
     setModerationRules((prev) => [created, ...prev]);
     setNewBannedWord('');
+    showToast('تمت إضافة قاعدة مراقبة', 'أصبحت القاعدة مفعلة ضمن الامتثال.', 'success');
   };
 
   const deleteModerationRule = async (id: string) => {
     const response = await adminFetch(`/api/admin/moderation-rules/${id}`, { method: 'DELETE' });
     if (!response.ok) return;
     setModerationRules((prev) => prev.filter((rule) => rule.id !== id));
+    showToast('تم حذف القاعدة', 'تمت إزالة قاعدة المراقبة من النظام.', 'warning');
   };
 
   const addLegalDocument = async () => {
@@ -980,12 +1060,14 @@ export default function AdminDashboard() {
     const created = await response.json();
     setLegalDocs((prev) => [created, ...prev]);
     setNewDoc({ title: '', law: '', article: '', category: '', summary: '', source: '' });
+    showToast('تمت إضافة المرجع القانوني', 'أصبح المرجع متاحاً ضمن مصادر الامتثال.', 'success');
   };
 
   const deleteLegalDocument = async (id: string) => {
     const response = await adminFetch(`/api/admin/legal-docs/${id}`, { method: 'DELETE' });
     if (!response.ok) return;
     setLegalDocs((prev) => prev.filter((doc) => doc.id !== id));
+    showToast('تم حذف المرجع', 'تمت إزالة المرجع القانوني.', 'warning');
   };
 
   const addLegalService = async () => {
@@ -1012,17 +1094,23 @@ export default function AdminDashboard() {
       icon: 'fa-solid fa-scale-balanced',
       color: 'blue',
     });
+    showToast('تم نشر الخدمة', 'ستظهر الخدمة ضمن الخدمات القانونية المتاحة.', 'success');
   };
 
   const deleteLegalService = async (id: string) => {
     const response = await adminFetch(`/api/admin/legal-services/${id}`, { method: 'DELETE' });
     if (!response.ok) return;
     setLegalServices((prev) => prev.filter((service) => service.id !== id));
+    showToast('تم حذف الخدمة', 'تمت إزالة الخدمة القانونية من الواجهة.', 'warning');
   };
 
   const forceSync = () => {
     setSyncStatus('syncing');
-    window.setTimeout(() => setSyncStatus('updated'), 1200);
+    window.setTimeout(() => {
+      setSyncStatus('updated');
+      setLastUpdatedAt(new Date());
+      showToast('تمت المزامنة', 'تم تحديث حالة لوحة الإدارة.', 'success');
+    }, 1200);
   };
 
   const adminTabs: Array<{
@@ -1033,16 +1121,57 @@ export default function AdminDashboard() {
     count?: number;
     adminOnly?: boolean;
   }> = [
-      { id: 'overview', label: 'نظرة عامة', icon: 'fa-grid-2', description: 'صحة المنصة، التنبيهات، والقياسات', count: metrics?.openEscalations },
-      { id: 'users', label: 'المستخدمون', icon: 'fa-users', description: 'الحسابات، الأدوار، والرخص', count: users.length },
-      { id: 'financials', label: 'المالية', icon: 'fa-money-bill-transfer', description: 'سجل المعاملات والسيولة', adminOnly: true },
-      { id: 'contracts', label: 'العقود الرقمية', icon: 'fa-file-contract', description: 'مراقبة عقود البيع والتوثيق', count: digitalContracts.length },
-      { id: 'kyc', label: 'اعتماد المحامين', icon: 'fa-id-card', description: 'طلبات KYC والمراجعات', count: pendingCount },
-      { id: 'support', label: 'الدعم والسجلات', icon: 'fa-life-ring', description: 'التذاكر، الأثر التشغيلي، والتدقيق', count: filteredTickets.length },
-      { id: 'settings', label: 'الإعدادات', icon: 'fa-sliders', description: 'AI، المدفوعات، وسياسات النظام', adminOnly: true },
-      { id: 'compliance', label: 'الامتثال', icon: 'fa-shield-halved', description: 'القواعد، المستندات، والحوكمة', count: filteredAuditLogs.length, adminOnly: true },
-      { id: 'system', label: 'النظام', icon: 'fa-server', description: 'الصحة التقنية، الخوادم، وقاعدة البيانات', adminOnly: true }
+      { id: 'overview', label: 'المركز', icon: 'fa-grid-2', description: 'أولويات اليوم', count: pendingCount + escalatedTicketCount + urgentAlerts.length },
+      { id: 'users', label: 'الحسابات', icon: 'fa-users', description: 'أدوار وحظر', count: blockedCount },
+      { id: 'financials', label: 'الأموال', icon: 'fa-money-bill-transfer', description: 'سيولة ودفعات', count: transactions.length, adminOnly: true },
+      { id: 'contracts', label: 'العقود', icon: 'fa-file-contract', description: 'توقيع وتحقق', count: digitalContracts.filter((contract) => contract.status !== 'signed' && contract.status !== 'verified').length },
+      { id: 'kyc', label: 'الاعتماد', icon: 'fa-id-card', description: 'محامون جدد', count: pendingCount },
+      { id: 'support', label: 'الدعم', icon: 'fa-life-ring', description: 'تذاكر وتصعيد', count: escalatedTicketCount || openTicketCount },
+      { id: 'settings', label: 'الضبط', icon: 'fa-sliders', description: 'AI وسياسات', count: flags.filter((flag) => flag.enabled).length, adminOnly: true },
+      { id: 'compliance', label: 'الحوكمة', icon: 'fa-shield-halved', description: 'قواعد ومراجع', count: (metrics?.complianceFlags ?? 0) + activeModerationCount, adminOnly: true },
+      { id: 'system', label: 'الصحة', icon: 'fa-server', description: 'خوادم وسجلات', count: systemLogs.filter((log) => log.level === 'warn' || log.level === 'error').length, adminOnly: true }
     ];
+
+  const adminSavedViews = [
+    {
+      id: 'kyc',
+      label: 'طابور الاعتماد',
+      note: 'طلبات المحامين المعلقة',
+      count: pendingCount,
+      icon: 'fa-id-card',
+      action: () => {
+        setActiveTab('kyc');
+        setKycStatusFilter('pending');
+      },
+    },
+    {
+      id: 'support',
+      label: 'التصعيدات',
+      note: 'الدعم عالي الأولوية',
+      count: escalatedTicketCount,
+      icon: 'fa-life-ring',
+      action: () => {
+        setActiveTab('support');
+        setTicketFilter('escalated');
+      },
+    },
+    {
+      id: 'financials',
+      label: 'المعاملات',
+      note: 'السيولة والتقارير',
+      count: transactions.length,
+      icon: 'fa-money-bill-transfer',
+      action: () => setActiveTab('financials'),
+    },
+    {
+      id: 'compliance',
+      label: 'الامتثال',
+      note: 'القواعد والمراجع',
+      count: metrics?.complianceFlags ?? 0,
+      icon: 'fa-shield-halved',
+      action: () => setActiveTab('compliance'),
+    },
+  ];
 
   useEffect(() => {
     if (!isAdmin && (activeTab === 'settings' || activeTab === 'compliance')) {
@@ -1165,6 +1294,20 @@ export default function AdminDashboard() {
 
   return (
     <div className="app-view w-full max-w-full overflow-x-hidden text-right space-y-6">
+      {isLoadingDashboard && (
+        <div className="rounded-3xl border border-brand-navy/10 bg-white/85 p-4 text-sm font-bold text-brand-navy shadow-sm">
+          <i className="fa-solid fa-circle-notch ml-2 animate-spin text-brand-gold"></i>
+          جارٍ تحميل بيانات الإدارة والقياسات التشغيلية...
+        </div>
+      )}
+      {loadError && (
+        <NoticePanel
+          tone="warning"
+          title="تعذر تحميل كامل البيانات"
+          description={loadError}
+          action={<ActionButton variant="secondary" size="sm" onClick={() => window.location.reload()}>إعادة المحاولة</ActionButton>}
+        />
+      )}
       <NoticePanel
         title="الخطوة التالية"
         description={`ابدأ بمراجعة ${pendingCount} طلب KYC ${pendingCount > 0 ? 'معلّق' : 'ثم انتقل إلى'} التنبيهات الحرجة وسجلات الدعم للحفاظ على استقرار التشغيل.`}
@@ -1174,43 +1317,117 @@ export default function AdminDashboard() {
           </ActionButton>
         }
       />
-      <section className="rounded-[40px] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50/50 to-brand-navy/10 p-6 shadow-premium md:p-8">
-        <div className="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-3">
-              <div className="inline-flex items-center rounded-full border border-brand-gold/20 bg-white/80 px-3 py-1 text-xs font-bold text-brand-navy">
+      <section className="overflow-hidden rounded-[32px] border border-brand-navy/10 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_52%,#eef4fb_100%)] shadow-premium">
+        <div className="grid xl:grid-cols-[minmax(0,1fr)_430px]">
+          <div className="p-5 md:p-7">
+            <div className="flex flex-wrap items-center justify-end gap-3">
+              <div className="inline-flex items-center rounded-full border border-brand-gold/20 bg-white/80 px-3 py-1 text-xs font-black text-brand-navy">
                 <i className="fa-solid fa-server ml-2"></i>
                 مركز الإدارة
               </div>
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1 rounded-xl bg-white/50 border border-slate-100 shadow-sm backdrop-blur-sm">
-                <i className="fa-solid fa-building-columns text-brand-navy text-[10px]"></i>
-                <span className="text-[10px] font-black text-brand-dark">{(user?.accountBalance ?? 0).toLocaleString('ar-IQ')} د.ع</span>
+              <div className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700">
+                <span className="ml-2 h-2 w-2 rounded-full bg-emerald-500"></span>
+                {syncStatus === 'syncing' ? 'مزامنة جارية' : 'محدث'}
+              </div>
+              <div className="hidden sm:flex items-center gap-2 rounded-xl border border-slate-100 bg-white/80 px-3 py-2 shadow-sm">
+                <i className="fa-solid fa-clock text-brand-gold text-xs"></i>
+                <span className="text-[10px] font-black text-slate-500">
+                  آخر تحديث {lastUpdatedAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}
+                </span>
               </div>
             </div>
-            <h2 className="mt-4 text-3xl font-bold leading-tight text-brand-dark">مركز الإدارة التشغيلي</h2>
-            <p className="mt-2 text-sm leading-relaxed text-gray-600">
-              واجهة تبويبية عالية الكثافة لإدارة المستخدمين، الامتثال، الدعم، والسياسات من نقطة تشغيل واحدة سريعة ومستقرة.
+            <h2 className="mt-4 text-3xl font-black leading-tight text-brand-dark">مركز الإدارة التشغيلي</h2>
+            <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-gray-600">
+              مساحة قيادة يومية لإدارة الاعتمادات، المستخدمين، الدعم، الأموال، والامتثال من نقطة واحدة واضحة.
             </p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 xl:min-w-[380px]">
-            {[
-              { label: 'المستخدمون النشطون', value: metrics?.activeUsers, icon: 'fa-users', color: 'text-brand-navy' },
-              { label: 'تصعيدات مفتوحة', value: metrics?.openEscalations, icon: 'fa-triangle-exclamation', color: 'text-red-600' },
-              { label: 'طلبات KYC', value: pendingCount, icon: 'fa-id-card', color: 'text-brand-dark' },
-              { label: 'أحداث مشتبه بها', value: metrics?.suspiciousEvents, icon: 'fa-shield-halved', color: 'text-brand-navy' },
-            ].map((stat) => (
-              <div
-                key={stat.label}
-                className="rounded-3xl border border-slate-100 bg-white p-5 shadow-sm"
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`h-8 w-8 rounded-xl flex items-center justify-center bg-slate-50 ${stat.color}`}>
-                    <i className={`fa-solid ${stat.icon} text-sm`}></i>
+            <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-4">
+              {[
+                { label: 'مستخدمون', value: metrics?.activeUsers, icon: 'fa-users', color: 'text-brand-navy', tab: 'users' as AdminTab },
+                { label: 'تصعيدات', value: metrics?.openEscalations, icon: 'fa-triangle-exclamation', color: 'text-red-600', tab: 'support' as AdminTab },
+                { label: 'KYC', value: pendingCount, icon: 'fa-id-card', color: 'text-amber-700', tab: 'kyc' as AdminTab },
+                { label: 'تنبيهات', value: metrics?.suspiciousEvents, icon: 'fa-shield-halved', color: 'text-brand-dark', tab: 'compliance' as AdminTab },
+              ].map((stat) => (
+                <button
+                  key={stat.label}
+                  type="button"
+                  onClick={() => setActiveTab(stat.tab)}
+                  className="rounded-2xl border border-slate-100 bg-white p-4 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-brand-navy/20 hover:shadow-md"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className={`flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 ${stat.color}`}>
+                      <i className={`fa-solid ${stat.icon}`}></i>
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{stat.label}</p>
                   </div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{stat.label}</p>
-                </div>
-                <p className={`text-2xl font-black ${stat.color}`}>{stat.value ?? '...'}</p>
+                  <p className={`mt-3 text-2xl font-black ${stat.color}`}>{stat.value ?? '...'}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="border-t border-brand-navy/10 bg-brand-navy p-5 text-white xl:border-r xl:border-t-0">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[11px] font-black uppercase tracking-[0.22em] text-white/55">Admin Focus</p>
+                <h3 className="mt-2 text-xl font-black">قرار المنصة الآن</h3>
               </div>
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-brand-gold">
+                <i className="fa-solid fa-compass-drafting"></i>
+              </div>
+            </div>
+            <div className="mt-5 rounded-2xl border border-white/10 bg-white/10 p-4">
+              <p className="text-sm font-black text-white">
+                {pendingCount > 0 ? 'اعتماد المحامين أولاً' : escalatedTicketCount > 0 ? 'راجع تصعيدات الدعم' : 'راجع صحة النظام'}
+              </p>
+              <p className="mt-2 text-xs font-bold leading-6 text-white/70">
+                {pendingCount > 0
+                  ? `${pendingCount} طلبات KYC تنتظر قراراً.`
+                  : escalatedTicketCount > 0
+                    ? `${escalatedTicketCount} تذاكر مصعدة تحتاج متابعة.`
+                    : 'لا توجد أولوية حرجة ظاهرة حالياً.'}
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab(pendingCount > 0 ? 'kyc' : escalatedTicketCount > 0 ? 'support' : 'system')}
+                  className="rounded-xl bg-white px-3 py-2 text-xs font-black text-brand-navy"
+                >
+                  فتح الأولوية
+                </button>
+                <button
+                  type="button"
+                  onClick={forceSync}
+                  className="rounded-xl border border-white/20 px-3 py-2 text-xs font-black text-white"
+                >
+                  مزامنة
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-[2rem] border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="px-2">
+            <h3 className="text-sm font-black text-brand-dark">عروض الإدارة السريعة</h3>
+            <p className="mt-1 text-xs font-bold text-slate-500">اختصر الوصول إلى أكثر الطوابير حساسية في التشغيل اليومي.</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {adminSavedViews.map((view) => (
+              <button
+                key={view.id}
+                type="button"
+                onClick={view.action}
+                className={`rounded-2xl border px-4 py-3 text-right transition ${activeTab === view.id ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/15' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy/30 hover:bg-white'}`}
+              >
+                <div className="flex items-center gap-2">
+                  <i className={`fa-solid ${view.icon} text-xs`}></i>
+                  <p className="text-sm font-black">{view.label}</p>
+                  <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${activeTab === view.id ? 'bg-white/10 text-white' : 'bg-white text-brand-navy'}`}>{view.count}</span>
+                </div>
+                <p className={`mt-1 text-[10px] font-bold ${activeTab === view.id ? 'text-white/70' : 'text-slate-400'}`}>{view.note}</p>
+              </button>
             ))}
           </div>
         </div>
@@ -1270,12 +1487,22 @@ export default function AdminDashboard() {
         </div>
       </section>
 
-      <section className="sticky top-24 z-20 w-full rounded-[2.5rem] border border-slate-200 bg-white/95 p-2 shadow-lg backdrop-blur">
-        <div
-          role="tablist"
-          aria-label="Admin dashboard sections"
-          className="flex items-center gap-1 overflow-x-auto no-scrollbar p-1"
-        >
+      <section className="sticky top-20 z-20 w-full overflow-hidden rounded-[2rem] border border-slate-200 bg-white/90 p-2 shadow-[0_18px_55px_-38px_rgba(15,23,42,0.65)] backdrop-blur-xl">
+        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+          <div className="hidden shrink-0 items-center gap-2 px-3 text-right xl:flex">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-brand-navy text-brand-gold shadow-sm">
+              <i className="fa-solid fa-sliders text-sm"></i>
+            </div>
+            <div>
+              <p className="text-xs font-black text-brand-dark">أقسام الإدارة</p>
+              <p className="mt-0.5 text-[10px] font-bold text-slate-400">تنقل سريع</p>
+            </div>
+          </div>
+          <div
+            role="tablist"
+            aria-label="Admin dashboard sections"
+            className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto rounded-[1.55rem] bg-slate-50/90 p-1 shadow-inner no-scrollbar"
+          >
           {adminTabs
             .filter((tab) => !tab.adminOnly || isAdmin)
             .map((tab) => (
@@ -1287,26 +1514,49 @@ export default function AdminDashboard() {
                 aria-controls={`admin-panel-${tab.id}`}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
-                className={`group relative flex min-w-[160px] items-center gap-3 rounded-[1.75rem] border px-5 py-4 text-right focus:outline-none ${activeTab === tab.id ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/20' : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-slate-50 hover:text-brand-navy'}`}
+                className={`group relative flex min-w-[132px] items-center gap-2 rounded-[1.25rem] border px-3 py-3 text-right transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-brand-gold/40 sm:min-w-[148px] ${activeTab === tab.id ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/20' : 'border-transparent text-slate-500 hover:border-slate-200 hover:bg-white hover:text-brand-navy'}`}
               >
-                <div className="flex items-start gap-3">
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${activeTab === tab.id ? 'bg-white/15' : 'bg-slate-50 group-hover:bg-white group-hover:shadow-sm'}`}>
-                    <i className={`fa-solid ${tab.icon}`}></i>
+                {activeTab === tab.id && (
+                  <motion.span
+                    layoutId="admin-tab-glow"
+                    className="absolute inset-x-3 -bottom-1 h-1 rounded-t-full bg-brand-gold"
+                  />
+                )}
+                <div className="relative z-10 flex min-w-0 items-center gap-2">
+                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition ${activeTab === tab.id ? 'bg-white/15 text-brand-gold' : 'bg-white text-slate-400 shadow-sm group-hover:text-brand-navy'}`}>
+                    <i className={`fa-solid ${tab.icon} text-sm`}></i>
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-black whitespace-nowrap">{tab.label}</p>
                       {typeof tab.count === 'number' && (
-                        <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${activeTab === tab.id ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-500'}`}>
-                          {tab.count}
+                        <span
+                          title={`${tab.count.toLocaleString('ar-IQ')} عنصر يحتاج متابعة`}
+                          className={`flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[9px] font-black ${activeTab === tab.id ? 'bg-brand-gold text-brand-dark' : tab.count > 0 ? 'bg-red-500 text-white' : 'bg-slate-200 text-slate-500'}`}
+                        >
+                          {tab.count > 99 ? '+99' : tab.count}
                         </span>
                       )}
                     </div>
-                    <p className={`truncate mt-1 text-[10px] font-bold ${activeTab === tab.id ? 'text-white/70' : 'text-slate-400'}`}>{tab.description}</p>
+                    <p className={`mt-1 hidden max-w-[105px] truncate text-[10px] font-bold sm:block ${activeTab === tab.id ? 'text-white/70' : 'text-slate-400'}`}>{tab.description}</p>
                   </div>
                 </div>
               </button>
             ))}
+          </div>
+          <div className="hidden shrink-0 items-center gap-2 px-2 xl:flex">
+            <button
+              type="button"
+              onClick={forceSync}
+              className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 transition hover:border-brand-navy/30 hover:text-brand-navy"
+              title="مزامنة الآن"
+            >
+              <i className={`fa-solid fa-rotate text-xs ${syncStatus === 'syncing' ? 'animate-spin' : ''}`}></i>
+            </button>
+            <span className={`rounded-full px-3 py-2 text-[10px] font-black ${syncStatus === 'syncing' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+              {syncStatus === 'syncing' ? 'مزامنة' : 'محدث'}
+            </span>
+          </div>
         </div>
       </section>
 
@@ -1829,7 +2079,7 @@ export default function AdminDashboard() {
                             <div className="flex flex-col md:block">
                               <span className="md:hidden text-xs font-bold text-slate-400 mb-1">المصدر</span>
                               <span className="inline-flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-1.5 text-[11px] font-black text-slate-600">
-                                <i className={`fa-solid ${tx.source === 'ZainCash' ? 'fa-mobile-screen' : 'fa-building-columns'} text-[10px]'`}></i>
+                                <i className={`fa-solid ${tx.source === 'ZainCash' ? 'fa-mobile-screen' : 'fa-building-columns'} text-[10px]`}></i>
                                 {tx.source}
                               </span>
                             </div>
@@ -1966,7 +2216,7 @@ export default function AdminDashboard() {
                             <span className="sm:hidden text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">المحامي</span>
                             <button
                               type="button"
-                              onClick={() => navigate(`/profile/${application.id}`, { state: { lawyer: application } })}
+                              onClick={() => openKycProfile(application)}
                               className="text-left text-sm font-semibold text-brand-navy underline-offset-4 transition hover:text-brand-dark hover:underline"
                             >
                               <HighlightText text={application.name} highlight={searchTerm} />
@@ -2303,8 +2553,9 @@ export default function AdminDashboard() {
           )}
 
           {activeTab === 'settings' && (
-            <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
-              <section className="rounded-3xl bg-gray-50 p-6 border border-gray-200">
+            <div className="space-y-6">
+              <div className="grid gap-6 xl:grid-cols-[1fr_0.95fr]">
+                <section className="rounded-3xl bg-gray-50 p-6 border border-gray-200">
                 <div className="flex items-center justify-between gap-3 mb-5">
                   <div>
                     <h4 className="text-lg font-bold text-brand-dark">إعدادات النظام</h4>
@@ -2361,7 +2612,21 @@ export default function AdminDashboard() {
                     placeholder="اكتب رسالة الإعلان هنا..."
                     className="w-full rounded-2xl border-none bg-white/10 p-4 text-sm text-white placeholder:text-white/40 focus:ring-2 focus:ring-brand-gold outline-none mb-4"
                   />
-                  <button onClick={() => updateSystemSetting({ announcement: broadcastMessage })} className="w-full py-3 rounded-xl bg-brand-gold text-brand-dark font-black text-sm hover:bg-yellow-500 transition">إرسال الإعلان الآن</button>
+                  <button
+                    onClick={() => {
+                      const message = broadcastMessage.trim();
+                      if (!message) {
+                        showToast('اكتب رسالة أولاً', 'لا يمكن إرسال إعلان فارغ للمستخدمين.', 'warning');
+                        return;
+                      }
+                      updateSystemSetting({ announcement: message });
+                      setBroadcastMessage('');
+                    }}
+                    className="w-full py-3 rounded-xl bg-brand-gold text-brand-dark font-black text-sm hover:bg-yellow-500 transition disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={!broadcastMessage.trim()}
+                  >
+                    إرسال الإعلان الآن
+                  </button>
                 </div>
               </section>
               <section className="rounded-3xl bg-gray-50 p-6 border border-gray-200">
@@ -2495,6 +2760,181 @@ export default function AdminDashboard() {
                   </div>
                 </div>
               </section>
+              </div>
+              <div className="grid gap-6 xl:grid-cols-[1fr_1fr]">
+                <section className="rounded-3xl bg-gray-50 p-6 border border-gray-200">
+                  <div className="mb-5 flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-lg font-bold text-brand-dark">بوابات الدفع والميزات</h4>
+                      <p className="text-sm text-gray-500">تفعيل أدوات المنصة والتحكم برسوم بوابات الدفع من مكان واحد.</p>
+                    </div>
+                    <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                      {flags.filter((flag) => flag.enabled).length}/{flags.length} ميزات
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="rounded-3xl border border-gray-200 bg-white p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-brand-dark">بوابات الدفع</p>
+                        <span className="text-xs font-bold text-gray-500">{paymentGateways.filter((gateway) => gateway.enabled).length} مفعلة</span>
+                      </div>
+                      <div className="space-y-3">
+                        {paymentGateways.length === 0 ? (
+                          <EmptyState icon="credit-card" title="لا توجد بوابات دفع" description="لم تصل إعدادات بوابات الدفع من الخادم بعد." />
+                        ) : (
+                          paymentGateways.map((gateway) => (
+                            <div key={gateway.key} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                  <p className="text-sm font-bold text-brand-dark">{gateway.label}</p>
+                                  <p className="text-xs text-gray-500">رسوم العملية الحالية {gateway.feePercent}%</p>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => updatePaymentGatewayItem(gateway.key, !gateway.enabled, gateway.feePercent)}
+                                  className={`rounded-2xl px-4 py-2 text-xs font-black transition ${gateway.enabled ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                >
+                                  {gateway.enabled ? 'مفعلة' : 'معطلة'}
+                                </button>
+                              </div>
+                              <label className="mt-3 block text-xs font-bold text-gray-500">
+                                نسبة الرسوم
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={0.1}
+                                  value={gateway.feePercent}
+                                  onChange={(event) => {
+                                    const nextValue = Number(event.target.value);
+                                    setPaymentGateways((prev) => prev.map((item) => (
+                                      item.key === gateway.key ? { ...item, feePercent: nextValue } : item
+                                    )));
+                                  }}
+                                  onBlur={(event) => updatePaymentGatewayItem(gateway.key, gateway.enabled, Number(event.currentTarget.value))}
+                                  className="mt-2 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700"
+                                />
+                              </label>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-3xl border border-gray-200 bg-white p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <p className="text-sm font-black text-brand-dark">مفاتيح الميزات</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextTaxEnabled = !taxEnabled;
+                            setTaxEnabled(nextTaxEnabled);
+                            updatePolicy('tax_enabled', String(nextTaxEnabled));
+                          }}
+                          className={`rounded-2xl px-3 py-2 text-xs font-black transition ${taxEnabled ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                        >
+                          الضريبة {taxEnabled ? 'مفعلة' : 'معطلة'}
+                        </button>
+                      </div>
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {flags.length === 0 ? (
+                          <div className="md:col-span-2">
+                            <EmptyState icon="toggle-on" title="لا توجد ميزات" description="لم تصل مفاتيح الميزات من الخادم بعد." />
+                          </div>
+                        ) : (
+                          flags.map((flag) => (
+                            <button
+                              key={flag.key}
+                              type="button"
+                              onClick={() => toggleFlag(flag.key, !flag.enabled)}
+                              className={`rounded-2xl border p-4 text-right transition ${flag.enabled ? 'border-green-200 bg-green-50 text-green-800' : 'border-gray-200 bg-gray-50 text-gray-600 hover:bg-white'}`}
+                            >
+                              <span className="block text-sm font-black">{flag.label}</span>
+                              <span className="mt-1 block text-xs font-semibold leading-5">{flag.description}</span>
+                              <span className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-black">
+                                {flag.enabled ? 'مفعلة' : 'معطلة'}
+                              </span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+                <section className="rounded-3xl bg-gray-50 p-6 border border-gray-200">
+                  <div className="mb-5 flex items-center justify-between gap-3">
+                    <div>
+                      <h4 className="text-lg font-bold text-brand-dark">السياسات والإشعارات</h4>
+                      <p className="text-sm text-gray-500">تحكم بالقيم التشغيلية ونصوص الإشعارات التي تظهر للمستخدمين.</p>
+                    </div>
+                    <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                      {notificationTemplates.filter((template) => template.active).length} قوالب نشطة
+                    </span>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="rounded-3xl border border-gray-200 bg-white p-4">
+                      <p className="mb-3 text-sm font-black text-brand-dark">سياسات المنصة</p>
+                      <div className="space-y-3">
+                        {policies.length === 0 ? (
+                          <EmptyState icon="sliders" title="لا توجد سياسات" description="لم تصل إعدادات السياسات من الخادم بعد." />
+                        ) : (
+                          policies.map((policy) => (
+                            <label key={policy.key} className="block rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                              <span className="block text-sm font-bold text-brand-dark">{policy.label}</span>
+                              <span className="mt-1 block text-xs text-gray-500">{policy.description}</span>
+                              <input
+                                type="text"
+                                value={policy.value}
+                                onChange={(event) => {
+                                  const nextValue = event.target.value;
+                                  setPolicies((prev) => prev.map((item) => (
+                                    item.key === policy.key ? { ...item, value: nextValue } : item
+                                  )));
+                                }}
+                                onBlur={(event) => updatePolicy(policy.key, event.currentTarget.value)}
+                                className="mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700"
+                              />
+                            </label>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    <div className="rounded-3xl border border-gray-200 bg-white p-4">
+                      <p className="mb-3 text-sm font-black text-brand-dark">قوالب الإشعارات</p>
+                      <div className="space-y-3">
+                        {notificationTemplates.length === 0 ? (
+                          <EmptyState icon="bell" title="لا توجد قوالب إشعار" description="لم تصل قوالب الإشعارات من الخادم بعد." />
+                        ) : (
+                          notificationTemplates.map((template) => (
+                            <div key={template.key} className="rounded-2xl border border-gray-100 bg-gray-50 p-3">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="text-sm font-bold text-brand-dark">{template.label}</p>
+                                <button
+                                  type="button"
+                                  onClick={() => updateNotificationTemplate(template.key, { active: !template.active })}
+                                  className={`rounded-2xl px-3 py-2 text-xs font-black transition ${template.active ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                >
+                                  {template.active ? 'نشط' : 'متوقف'}
+                                </button>
+                              </div>
+                              <textarea
+                                rows={3}
+                                value={template.value}
+                                onChange={(event) => {
+                                  const nextValue = event.target.value;
+                                  setNotificationTemplates((prev) => prev.map((item) => (
+                                    item.key === template.key ? { ...item, value: nextValue } : item
+                                  )));
+                                }}
+                                onBlur={(event) => updateNotificationTemplate(template.key, { value: event.currentTarget.value })}
+                                className="mt-3 w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-700"
+                              />
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+              </div>
             </div>
           )}
 
@@ -2655,7 +3095,7 @@ export default function AdminDashboard() {
                         <p className="text-[11px] text-gray-500 mt-1">{doc.law} • {doc.article}</p>
                       </div>
                       <button
-                        onClick={() => deleteLegalDocument(doc.id)}
+                        onClick={() => setDocToDelete(doc.id)}
                         className="rounded-full border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 hover:bg-red-100 transition"
                       >
                         حذف
@@ -2994,6 +3434,43 @@ export default function AdminDashboard() {
           )}
         </AnimatePresence>
       </section>
+
+      <AnimatePresence>
+        {activeToast && (
+          <motion.div
+            initial={{ opacity: 0, y: 28, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 18, scale: 0.96 }}
+            className="fixed bottom-6 right-6 z-[700] w-[calc(100%-3rem)] max-w-sm"
+          >
+            <div className={`rounded-[1.75rem] border p-4 text-right shadow-2xl backdrop-blur-xl ${activeToast.tone === 'success'
+              ? 'border-emerald-200 bg-emerald-50 text-emerald-900'
+              : activeToast.tone === 'warning'
+                ? 'border-amber-200 bg-amber-50 text-amber-900'
+                : activeToast.tone === 'danger'
+                  ? 'border-red-200 bg-red-50 text-red-900'
+                  : 'border-brand-navy/10 bg-white text-brand-dark'
+              }`}>
+              <div className="flex items-start justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={() => setActiveToast(null)}
+                  className="rounded-xl p-1 text-current opacity-45 transition hover:opacity-100"
+                >
+                  <i className="fa-solid fa-xmark"></i>
+                </button>
+                <div className="flex-1">
+                  <p className="text-sm font-black">{activeToast.title}</p>
+                  <p className="mt-1 text-xs font-bold leading-6 opacity-80">{activeToast.message}</p>
+                </div>
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/70 shadow-sm">
+                  <i className={`fa-solid ${activeToast.tone === 'success' ? 'fa-circle-check text-emerald-600' : activeToast.tone === 'danger' ? 'fa-circle-exclamation text-red-600' : activeToast.tone === 'warning' ? 'fa-triangle-exclamation text-amber-600' : 'fa-bell text-brand-navy'}`}></i>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
