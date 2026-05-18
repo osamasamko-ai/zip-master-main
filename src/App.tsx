@@ -24,6 +24,7 @@ import Billing from './pages/Billing';
 import Support from './pages/Support';
 import ContractWizard from './pages/ContractWizard';
 import NotFound from './pages/NotFound';
+import Verify from './pages/Verify';
 
 function getDefaultRoute(role: 'user' | 'pro' | 'admin' | null) {
   if (role === 'admin') return '/admin';
@@ -68,6 +69,7 @@ export default function App() {
         <NotificationProvider> {/* NotificationProvider must be inside Router to use useNavigate */}
           <Routes>
             <Route path="/auth" element={<Auth />} />
+            <Route path="/verify/:id" element={<Verify />} />
             <Route
               path="/"
               element={

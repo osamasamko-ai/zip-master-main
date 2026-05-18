@@ -1,16 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence, Variants, motion } from 'framer-motion';
 import { Role, useAuth } from '../context/AuthContext';
-
-const HERO_PARTICLES = [
-  { top: '14%', left: '18%', size: 'h-2 w-2', delay: 0.2, duration: 7 },
-  { top: '24%', left: '72%', size: 'h-1.5 w-1.5', delay: 0.8, duration: 6.4 },
-  { top: '42%', left: '16%', size: 'h-2.5 w-2.5', delay: 1.2, duration: 8.1 },
-  { top: '58%', left: '80%', size: 'h-1 w-1', delay: 0.4, duration: 5.8 },
-  { top: '74%', left: '26%', size: 'h-2 w-2', delay: 1.6, duration: 7.5 },
-  { top: '82%', left: '62%', size: 'h-1.5 w-1.5', delay: 0.9, duration: 6.8 },
-];
 
 const VALUE_POINTS = [
   'محامون يفهمون الواقع القانوني العراقي.',
@@ -19,9 +10,14 @@ const VALUE_POINTS = [
 ];
 
 const TRUST_SIGNALS = [
-  { icon: 'fa-landmark', title: 'للقانون العراقي', text: 'خدمات رقمية تناسب طبيعة السوق والإجراءات.' },
-  { icon: 'fa-file-signature', title: 'تنظيم أفضل', text: 'ملفاتك ورسائلك في مساحة واحدة واضحة.' },
-  { icon: 'fa-user-shield', title: 'ثقة أعلى', text: 'خصوصية مهنية وتجربة أكثر اطمئناناً.' },
+  { icon: 'fa-landmark', title: 'للقانون العراقي', text: 'تجربة مصممة لطبيعة الإجراءات المحلية.' },
+  { icon: 'fa-user-shield', title: 'خصوصية مهنية', text: 'ملفات ورسائل قانونية في مساحة واضحة.' },
+];
+
+const DEMO_ACCOUNTS = [
+  { label: 'عميل تجريبي', email: 'user@example.com', password: 'password123', icon: 'fa-user' },
+  { label: 'محامي تجريبي', email: 'lawyer@example.com', password: 'password123', icon: 'fa-user-tie' },
+  { label: 'مدير', email: 'admin@example.com', password: 'password123', icon: 'fa-user-shield' },
 ];
 
 const PASSWORD_HINTS = [
@@ -33,9 +29,9 @@ const PASSWORD_HINTS = [
 
 type PasswordRequirementKey = (typeof PASSWORD_HINTS)[number]['key'];
 
-const authPanelVariants = {
+const authPanelVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
-  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: 'easeOut' } },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } },
   exit: { opacity: 0, y: -12, transition: { duration: 0.2 } },
 };
 
@@ -63,6 +59,7 @@ export default function Auth() {
   const [forgotPasswordLoading, setForgotPasswordLoading] = useState(false);
   const [documentIdInput, setDocumentIdInput] = useState('');
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [authUtilityTab, setAuthUtilityTab] = useState<'account' | 'verify'>('account');
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
@@ -144,6 +141,19 @@ export default function Auth() {
     [password],
   );
 
+  const registerChecklist = [
+    { label: 'الاسم الكامل', met: name.trim().length > 1 },
+    { label: 'بريد صحيح', met: emailLooksValid },
+    { label: 'كلمة مرور قوية', met: passwordStrength >= 3 },
+    { label: 'تأكيد مطابق', met: passwordsMatch },
+  ];
+
+  const canSubmitLogin = emailLooksValid && password.length > 0 && !loading;
+  const canSubmitRegister = registerChecklist.every((item) => item.met) && !loading;
+  const destinationPreview = isRegisterMode
+    ? selectedRole === 'pro' ? 'سيتم توجيهك إلى لوحة المحامي بعد إنشاء الحساب.' : 'سيتم توجيهك إلى لوحة العميل بعد إنشاء الحساب.'
+    : 'سيتم توجيهك تلقائياً إلى لوحة التحكم المناسبة لحسابك.';
+
   const getFieldError = (fieldName: string) => {
     if (!error) return false;
 
@@ -189,6 +199,14 @@ export default function Auth() {
     }
   };
 
+  const handleDemoLogin = (demo: (typeof DEMO_ACCOUNTS)[number]) => {
+    switchMode('login');
+    setAuthUtilityTab('account');
+    setEmail(demo.email);
+    setPassword(demo.password);
+    setError(null);
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -222,7 +240,7 @@ export default function Auth() {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       setForgotPasswordMessage({
         type: 'success',
-        text: `تم إرسال رابط إعادة تعيين كلمة المرور إلى ${forgotEmailPreview}. يرجى التحقق من بريدك الإلكتروني.`,
+        text: `تم تسجيل طلب الاستعادة للبريد ${forgotEmailPreview}. خدمة إرسال رابط فعلي تحتاج ربط API البريد في الخادم.`,
       });
 
       setTimeout(() => {
@@ -247,28 +265,11 @@ export default function Auth() {
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(197,160,89,0.22),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(27,54,93,0.12),transparent_32%)]" />
 
       <div className="relative z-10 mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
-        <section className="relative flex w-full overflow-hidden px-6 py-12 sm:px-8 lg:w-[54%] lg:px-12 lg:py-16">
+        <section className="relative order-2 flex w-full overflow-hidden px-6 py-10 sm:px-8 lg:order-1 lg:w-[54%] lg:px-12 lg:py-16">
           <div className="absolute inset-0 bg-[linear-gradient(160deg,#091224_0%,#0c1730_38%,#16345c_100%)]" />
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_32%)]" />
-          <div className="absolute -left-24 top-12 h-72 w-72 rounded-full bg-brand-gold/20 blur-3xl" />
-          <div className="absolute bottom-0 right-0 h-80 w-80 translate-x-20 translate-y-12 rounded-full bg-sky-400/10 blur-3xl" />
 
-          {HERO_PARTICLES.map((particle, index) => (
-            <motion.span
-              key={index}
-              className={`absolute ${particle.size} rounded-full bg-white/40`}
-              style={{ top: particle.top, left: particle.left }}
-              animate={{ y: [0, -18, 0], opacity: [0.15, 0.55, 0.15], scale: [1, 1.15, 1] }}
-              transition={{
-                duration: particle.duration,
-                delay: particle.delay,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
-            />
-          ))}
-
-          <div className="relative z-10 flex w-full flex-col justify-center gap-10 lg:gap-12">
+          <div className="relative z-10 flex w-full flex-col justify-center gap-8 lg:gap-10">
             <motion.div
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
@@ -309,12 +310,12 @@ export default function Auth() {
               </p>
             </motion.div>
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1.1fr)_minmax(320px,0.9fr)] xl:items-start">
+            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)] xl:items-start">
               <motion.div
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.12 }}
-                className="rounded-[2rem] border border-white/12 bg-white/8 p-6 text-right shadow-2xl backdrop-blur-2xl"
+                className="rounded-2xl border border-white/12 bg-white/8 p-5 text-right shadow-2xl backdrop-blur-2xl"
               >
                 <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
                   <p className="text-xs font-black text-brand-lightgold">لماذا القسطاس؟</p>
@@ -322,8 +323,8 @@ export default function Auth() {
                 </div>
                 <div className="mt-5 space-y-4">
                   {VALUE_POINTS.map((point, index) => (
-                    <div key={point} className="flex flex-row-reverse items-start gap-4 rounded-[1.4rem] border border-white/8 bg-white/[0.03] px-4 py-4">
-                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-gold/16 text-brand-gold">
+                    <div key={point} className="flex flex-row-reverse items-start gap-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-gold/16 text-brand-gold">
                         <span className="text-sm font-black">{index + 1}</span>
                       </div>
                       <p className="pt-1 text-sm font-bold leading-6 text-slate-100">{point}</p>
@@ -341,10 +342,10 @@ export default function Auth() {
                 {TRUST_SIGNALS.map((item) => (
                   <div
                     key={item.title}
-                    className="rounded-[1.6rem] border border-white/10 bg-slate-950/20 p-5 text-right backdrop-blur-xl"
+                    className="rounded-2xl border border-white/10 bg-slate-950/20 p-5 text-right backdrop-blur-xl"
                   >
                     <div className="flex flex-row-reverse items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/10 text-brand-gold">
+                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-brand-gold">
                         <i className={`fa-solid ${item.icon}`} />
                       </div>
                       <div className="pt-0.5">
@@ -359,7 +360,7 @@ export default function Auth() {
           </div>
         </section>
 
-        <section className="relative flex w-full items-center justify-center px-5 py-8 sm:px-8 sm:py-10 lg:w-[46%] lg:px-10 lg:py-14">
+        <section className="relative order-1 flex w-full items-center justify-center px-5 py-6 sm:px-8 sm:py-8 lg:order-2 lg:w-[46%] lg:px-10 lg:py-14">
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
@@ -391,7 +392,10 @@ export default function Auth() {
                 <div className="grid grid-cols-2 gap-1">
                   <button
                     type="button"
-                    onClick={() => switchMode('login')}
+                    onClick={() => {
+                      setAuthUtilityTab('account');
+                      switchMode('login');
+                    }}
                     className={`relative rounded-[1.1rem] px-4 py-3 text-sm font-black transition ${!isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
                       }`}
                   >
@@ -405,7 +409,10 @@ export default function Auth() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => switchMode('register')}
+                    onClick={() => {
+                      setAuthUtilityTab('account');
+                      switchMode('register');
+                    }}
                     className={`relative rounded-[1.1rem] px-4 py-3 text-sm font-black transition ${isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
                       }`}
                   >
@@ -420,7 +427,30 @@ export default function Auth() {
                 </div>
               </div>
 
-              <AnimatePresence mode="wait">
+              <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-slate-100 bg-white p-1">
+                <button
+                  type="button"
+                  onClick={() => setAuthUtilityTab('account')}
+                  className={`rounded-xl px-3 py-2 text-xs font-black transition ${authUtilityTab === 'account' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'}`}
+                >
+                  <i className="fa-solid fa-user-lock ml-2"></i>
+                  الحساب
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthUtilityTab('verify');
+                    setError(null);
+                  }}
+                  className={`rounded-xl px-3 py-2 text-xs font-black transition ${authUtilityTab === 'verify' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'}`}
+                >
+                  <i className="fa-solid fa-qrcode ml-2"></i>
+                  تحقق مستند
+                </button>
+              </div>
+
+              {authUtilityTab === 'account' && (
+                <AnimatePresence mode="wait">
                 {error && (
                   <motion.div
                     key={error}
@@ -446,10 +476,60 @@ export default function Auth() {
                     </div>
                   </motion.div>
                 )}
-              </AnimatePresence>
+                </AnimatePresence>
+              )}
 
               <AnimatePresence mode="wait">
-                {loading ? (
+                {authUtilityTab === 'verify' ? (
+                  <motion.div
+                    key="verify-document"
+                    variants={authPanelVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    className="space-y-4"
+                  >
+                    <div className="rounded-2xl border border-brand-navy/10 bg-brand-navy/[0.03] px-4 py-4 text-right">
+                      <div className="flex flex-row-reverse items-start gap-3">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white text-brand-navy shadow-sm">
+                          <i className="fa-solid fa-shield-halved"></i>
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-brand-navy">التحقق دون تسجيل دخول</p>
+                          <p className="mt-1 text-xs font-bold leading-6 text-slate-600">
+                            أدخل رقم المستند أو رمز QR للتحقق من صحة عقد أو مستند رقمي صادر من القسطاس.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label className="mb-2 block text-right text-[11px] font-black tracking-widest text-slate-500">
+                        رقم المستند
+                      </label>
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder="مثال: contract-123"
+                          value={documentIdInput}
+                          onChange={(e) => setDocumentIdInput(e.target.value)}
+                          className="w-full rounded-[1.2rem] border border-slate-200 bg-slate-50/80 px-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:border-brand-navy focus:ring-4 focus:ring-brand-navy/10"
+                        />
+                        <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-300">
+                          <i className="fa-solid fa-qrcode" />
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/verify/${encodeURIComponent(documentIdInput.trim())}`)}
+                      disabled={!documentIdInput.trim()}
+                      className="flex w-full items-center justify-center gap-2 rounded-[1.3rem] bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] px-4 py-4 text-sm font-black text-white shadow-xl shadow-brand-navy/20 transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-60"
+                    >
+                      <i className="fa-solid fa-shield-check"></i>
+                      تحقق الآن
+                    </button>
+                  </motion.div>
+                ) : loading ? (
                   <motion.div
                     key="loading-skeleton"
                     variants={authPanelVariants}
@@ -688,13 +768,30 @@ export default function Auth() {
                     <div className="rounded-[1.3rem] border border-brand-gold/20 bg-brand-gold/10 px-4 py-3 text-right">
                       <p className="text-xs font-black text-brand-dark">نقطة مهمة</p>
                       <p className="mt-1 text-xs font-bold leading-6 text-slate-600">
-                        استخدم بريداً فعّالاً حتى نتمكن من إرسال الإشعارات أو تعليمات استعادة الحساب عند الحاجة.
+                        {selectedRole === 'pro'
+                          ? 'حساب المحامي يبدأ فوراً، وقد تحتاج لاحقاً إلى بيانات الترخيص لتفعيل الظهور واستقبال العملاء.'
+                          : 'استخدم بريداً فعّالاً حتى نتمكن من إرسال الإشعارات أو تعليمات استعادة الحساب عند الحاجة.'}
                       </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
+                      <div className="mb-3 flex items-center justify-between text-[11px] font-black">
+                        <span className="text-brand-navy">{registerChecklist.filter((item) => item.met).length}/{registerChecklist.length}</span>
+                        <span className="text-slate-500">جاهزية الحساب</span>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {registerChecklist.map((item) => (
+                          <div key={item.label} className={`flex flex-row-reverse items-center justify-end gap-2 rounded-xl px-3 py-2 text-[11px] font-bold ${item.met ? 'bg-emerald-50 text-emerald-700' : 'bg-white text-slate-500'}`}>
+                            <span>{item.label}</span>
+                            <i className={`fa-solid ${item.met ? 'fa-circle-check' : 'fa-circle'} text-[12px]`} />
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     <button
                       type="submit"
-                      disabled={loading}
+                      disabled={!canSubmitRegister}
                       className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] px-4 py-4 text-sm font-black text-white shadow-xl shadow-brand-navy/20 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-brand-navy/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent_15%,rgba(255,255,255,0.24)_50%,transparent_85%)] opacity-0 transition group-hover:translate-x-full group-hover:opacity-100" />
@@ -703,6 +800,7 @@ export default function Auth() {
                         فتح الحساب
                       </span>
                     </button>
+                    <p className="text-center text-[11px] font-bold text-slate-500">{destinationPreview}</p>
                   </motion.form>
                 ) : (
                   <motion.form
@@ -719,6 +817,26 @@ export default function Auth() {
                       <p className="mt-1 text-xs font-bold leading-6 text-slate-600">
                         أدخل بريدك وكلمة المرور، وسنعيدك مباشرة إلى لوحة التحكم المناسبة لدورك.
                       </p>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                      <div className="mb-2 flex items-center justify-between">
+                        <span className="text-[10px] font-black text-slate-400">للتجربة السريعة</span>
+                        <span className="text-[10px] font-black text-brand-navy">حسابات جاهزة</span>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        {DEMO_ACCOUNTS.map((demo) => (
+                          <button
+                            key={demo.email}
+                            type="button"
+                            onClick={() => handleDemoLogin(demo)}
+                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-600 transition hover:border-brand-navy/30 hover:text-brand-navy"
+                          >
+                            <i className={`fa-solid ${demo.icon} ml-1.5`}></i>
+                            {demo.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
 
                     <div>
@@ -799,7 +917,7 @@ export default function Auth() {
 
                     <button
                       type="submit"
-                      disabled={loading}
+                      disabled={!canSubmitLogin}
                       className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] px-4 py-4 text-sm font-black text-white shadow-xl shadow-brand-navy/20 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-brand-navy/25 disabled:cursor-not-allowed disabled:opacity-60"
                     >
                       <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent_15%,rgba(255,255,255,0.24)_50%,transparent_85%)] opacity-0 transition group-hover:translate-x-full group-hover:opacity-100" />
@@ -808,36 +926,10 @@ export default function Auth() {
                         دخول للمنصة
                       </span>
                     </button>
+                    <p className="text-center text-[11px] font-bold text-slate-500">{destinationPreview}</p>
                   </motion.form>
                 )}
               </AnimatePresence>
-
-              {/* Verification Section for both Login and Register */}
-              <motion.div key="verify-section" variants={authPanelVariants} initial="hidden" animate="visible" exit="exit" className="mt-6 pt-6 border-t border-slate-100 text-center">
-                <label className="mb-3 block text-right text-[11px] font-black tracking-widest text-slate-500">
-                  التحقق من مستند رقمي
-                </label>
-                <div className="relative mb-4">
-                  <input
-                    type="text"
-                    placeholder="أدخل رقم المستند (ID)"
-                    value={documentIdInput}
-                    onChange={(e) => setDocumentIdInput(e.target.value)}
-                    className="w-full rounded-[1.2rem] border px-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:border-brand-navy focus:ring-4 focus:ring-brand-navy/10"
-                  />
-                  <div className="pointer-events-none absolute inset-y-0 left-4 flex items-center text-slate-300">
-                    <i className="fa-solid fa-qrcode" />
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate(`/verify/${documentIdInput}`)}
-                  disabled={!documentIdInput.trim()}
-                  className="text-xs font-black text-brand-navy transition hover:text-brand-dark hover:underline disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  التحقق من مستند رقمي (بدون تسجيل دخول)
-                </button>
-              </motion.div>
             </div>
           </motion.div>
         </section>
@@ -874,7 +966,7 @@ export default function Auth() {
                   </div>
                   <h3 className="mt-3 text-xl font-black text-brand-dark">إعادة تعيين كلمة المرور</h3>
                   <p className="mt-2 text-sm font-bold leading-7 text-slate-500">
-                    أدخل بريدك الإلكتروني وسنرسل لك رابطاً لمتابعة استعادة الحساب.
+                    أدخل بريدك الإلكتروني لتسجيل طلب الاستعادة. إرسال الرابط الفعلي يحتاج تفعيل خدمة البريد في الخادم.
                   </p>
                 </div>
               </div>
