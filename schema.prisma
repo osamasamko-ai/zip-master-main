@@ -54,6 +54,9 @@ model User {
   notifications          Notification[]
   legalServices          LegalService[]     @relation("ServiceLawyer")
   uploads                Upload[]
+  feedPosts              FeedPost[]
+  feedComments           FeedComment[]
+  feedLikes              FeedLike[]
   contractTemplatesOwned ContractTemplate[]
   contractClausesOwned   ContractClause[]
   contractsOwned         Contract[]         @relation("ContractOwner")
@@ -343,6 +346,50 @@ model Review {
   lawyer User @relation("ReviewLawyer", fields: [lawyerId], references: [id])
 
   @@index([lawyerId, createdAt])
+}
+
+model FeedPost {
+  id        String   @id @default(uuid())
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  mediaUrl  String?
+  mediaType String?
+  status    String   @default("published")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  comments FeedComment[]
+  likes    FeedLike[]
+
+  @@index([authorId, createdAt])
+  @@index([status, createdAt])
+  @@index([mediaType, createdAt])
+}
+
+model FeedComment {
+  id        String   @id @default(uuid())
+  postId    String
+  post      FeedPost @relation(fields: [postId], references: [id])
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([postId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model FeedLike {
+  postId    String
+  post      FeedPost @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@id([postId, userId])
+  @@index([userId, createdAt])
 }
 
 model UserSession {

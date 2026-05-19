@@ -18,6 +18,7 @@ import Settings from './pages/Settings';
 import MyCases from './pages/MyCases';
 import LegalDocs from './pages/LegalDocs';
 import Following from './pages/Following';
+import Feed from './pages/Feed';
 import Lawyers from './pages/Lawyers';
 import Messages from './pages/Messages';
 import Billing from './pages/Billing';
@@ -90,6 +91,7 @@ export default function App() {
               <Route path="aichat" element={<AiChat />} />
               <Route path="legal" element={<LegalDocs />} />
               <Route path="following" element={<Following />} />
+              <Route path="feed" element={<Feed />} />
               <Route path="profile/:id" element={<Profile />} />
               <Route
                 path="pro"

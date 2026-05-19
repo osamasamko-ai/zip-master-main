@@ -334,6 +334,41 @@ class ApiClient {
         const response = await this.client.post('/api/support/request', data);
         return response.data;
     }
+
+    async getFeedPosts(filter: string = 'all'): Promise<ApiResponse<any[]>> {
+        const response = await this.client.get('/api/app/feed', { params: { filter } });
+        return response.data;
+    }
+
+    async createFeedPost(data: { content: string; media?: File | null }): Promise<ApiResponse<any>> {
+        const formData = new FormData();
+        formData.append('content', data.content);
+        if (data.media) formData.append('media', data.media);
+        const response = await this.client.post('/api/app/feed', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    }
+
+    async updateFeedPost(id: string, data: { content?: string; status?: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.put(`/api/app/feed/${id}`, data);
+        return response.data;
+    }
+
+    async deleteFeedPost(id: string): Promise<ApiResponse<any>> {
+        const response = await this.client.delete(`/api/app/feed/${id}`);
+        return response.data;
+    }
+
+    async likeFeedPost(id: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/feed/${id}/like`);
+        return response.data;
+    }
+
+    async addFeedComment(id: string, content: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/feed/${id}/comments`, { content });
+        return response.data;
+    }
 }
 
 export default new ApiClient();

@@ -1238,7 +1238,7 @@ export async function deletePageBlock(blockId: string, pageId?: string) {
 const DEFAULT_PERMISSIONS = [
     'users.read', 'users.create', 'users.update', 'users.delete',
     'cases.read', 'cases.create', 'cases.update', 'cases.reassign', 'cases.delete',
-    'content.manage', 'uploads.manage', 'settings.manage', 'billing.manage',
+    'content.manage', 'feed.manage', 'uploads.manage', 'settings.manage', 'billing.manage',
     'roles.manage', 'audit.read', 'kyc.manage', 'support.manage',
 ];
 
@@ -1253,6 +1253,7 @@ const PERMISSION_LABELS: Record<string, { label: string; group: string }> = {
     'cases.reassign': { label: 'إسناد القضايا', group: 'القضايا' },
     'cases.delete': { label: 'حذف القضايا', group: 'القضايا' },
     'content.manage': { label: 'إدارة المحتوى', group: 'المحتوى' },
+    'feed.manage': { label: 'إدارة المجتمع القانوني', group: 'المحتوى' },
     'uploads.manage': { label: 'إدارة الملفات', group: 'المحتوى' },
     'settings.manage': { label: 'إدارة الإعدادات', group: 'النظام' },
     'billing.manage': { label: 'إدارة الأموال', group: 'الأموال' },

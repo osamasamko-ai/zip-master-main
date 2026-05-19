@@ -42,6 +42,7 @@ export default function MainLayout() {
     'messages': 'الرسائل',
     'billing': 'المدفوعات',
     'following': 'المحفوظون',
+    'feed': 'المجتمع القانوني',
     'legal': 'المكتبة',
     'aichat': 'المساعد',
     'pro': 'المكتب',
@@ -123,10 +124,11 @@ export default function MainLayout() {
       { id: 'n3', type: 'ملاحة', title: 'المحامون', subtitle: 'ابحث وتواصل وافتح قضية بسرعة', icon: 'fa-scale-balanced', path: '/lawyers' },
       { id: 'n4', type: 'ملاحة', title: 'العقود', subtitle: 'إنشاء ومراجعة عقود البيع والشراء', icon: 'fa-file-contract', path: '/contracts' },
       { id: 'n5', type: 'ملاحة', title: 'الرسائل', subtitle: 'جميع المحادثات القانونية في مكان واحد', icon: 'fa-comments', path: '/messages' },
-      { id: 'n6', type: 'ملاحة', title: 'المكتبة', subtitle: 'مراجع ووثائق قانونية جاهزة للبحث', icon: 'fa-book-open', path: '/legal' },
-      { id: 'n7', type: 'ملاحة', title: 'مستشارك الذكي', subtitle: 'اسأل واحصل على تلخيص وتحليل قانوني سريع', icon: 'fa-robot', path: '/aichat' },
-      { id: 'n8', type: 'ملاحة', title: 'المدفوعات', subtitle: 'الرصيد والفواتير والمعاملات', icon: 'fa-wallet', path: '/billing' },
-      { id: 'n9', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
+      { id: 'n6', type: 'ملاحة', title: 'المجتمع القانوني', subtitle: 'منشورات وفيديوهات من المحامين الموثقين', icon: 'fa-users-rectangle', path: '/feed' },
+      { id: 'n7', type: 'ملاحة', title: 'المكتبة', subtitle: 'مراجع ووثائق قانونية جاهزة للبحث', icon: 'fa-book-open', path: '/legal' },
+      { id: 'n8', type: 'ملاحة', title: 'مستشارك الذكي', subtitle: 'اسأل واحصل على تلخيص وتحليل قانوني سريع', icon: 'fa-robot', path: '/aichat' },
+      { id: 'n9', type: 'ملاحة', title: 'المدفوعات', subtitle: 'الرصيد والفواتير والمعاملات', icon: 'fa-wallet', path: '/billing' },
+      { id: 'n10', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
     ];
 
     if (user?.role === 'admin') {
@@ -152,7 +154,10 @@ export default function MainLayout() {
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const response = await fetch('/api/admin/system-settings');
+        const token = window.localStorage.getItem('auth_token') || window.localStorage.getItem('lexigate_token');
+        const response = await fetch('/api/admin/system-settings', {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
         if (!response.ok) return;
         setSystemSettings(await response.json());
       } catch {
@@ -219,6 +224,7 @@ export default function MainLayout() {
         { name: 'المحامون', icon: 'fa-scale-balanced', path: '/lawyers' },
         { name: 'العقود', icon: 'fa-file-contract', path: '/contracts' },
         { name: 'الرسائل', icon: 'fa-comments', path: '/messages' },
+        { name: 'المجتمع القانوني', icon: 'fa-users-rectangle', path: '/feed' },
         { name: 'المكتبة', icon: 'fa-book-open', path: '/legal' },
         { name: 'المساعد', icon: 'fa-robot', path: '/aichat' },
         { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },

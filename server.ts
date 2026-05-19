@@ -132,6 +132,14 @@ import {
   updateProMessageState,
   uploadProVaultDocument,
 } from './src/server/workspaceData';
+import {
+  addFeedComment,
+  createFeedPost,
+  deleteFeedPost,
+  listFeedPosts,
+  toggleFeedLike,
+  updateFeedPost,
+} from './src/server/feedData';
 
 // Constants for Legal Fees
 const CONTRACT_CREATION_FEE = 25000;
@@ -246,11 +254,10 @@ async function startServer() {
   });
 
   const fileFilter = (req: express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-    const allowedMimes = ['image/jpeg', 'image/png', 'application/pdf'];
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'video/mp4', 'video/webm', 'video/quicktime'];
 
     if (!allowedMimes.includes(file.mimetype)) {
-      return cb(new Error('نوع الملف غير مدعوم. استخدم JPG, PNG, أو PDF فقط.'));
+      return cb(new Error('نوع الملف غير مدعوم. استخدم صورة، PDF، أو فيديو MP4/WebM فقط.'));
     }
 
     cb(null, true);
@@ -259,7 +266,7 @@ async function startServer() {
   const upload = multer({
     storage,
     fileFilter,
-    limits: { fileSize: 5 * 1024 * 1024 },
+    limits: { fileSize: 50 * 1024 * 1024 },
   });
 
   // Socket.io Connection Logic
@@ -759,6 +766,90 @@ async function startServer() {
     } catch (error) {
       console.error('Start consultation error:', error);
       res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to start consultation' });
+    }
+  });
+
+  app.get('/api/app/feed', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const filter = typeof req.query.filter === 'string' ? req.query.filter : 'all';
+      const allowedFilters = ['all', 'videos', 'lawyers', 'admins'];
+      const posts = await listFeedPosts(currentUser.userId, allowedFilters.includes(filter) ? filter as any : 'all');
+      res.json({ data: posts });
+    } catch (error) {
+      console.error('Feed list error:', error);
+      res.status(500).json({ error: 'تعذر تحميل المجتمع القانوني' });
+    }
+  });
+
+  app.post('/api/app/feed', authenticateToken, upload.single('media'), async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const mediaType = req.file
+        ? req.file.mimetype.startsWith('video/')
+          ? 'video'
+          : req.file.mimetype.startsWith('image/')
+            ? 'image'
+            : null
+        : null;
+      if (req.file && !mediaType) {
+        return res.status(400).json({ error: 'منشورات المجتمع تقبل الصور أو الفيديو فقط.' });
+      }
+      const post = await createFeedPost(currentUser.userId, {
+        content: req.body.content,
+        mediaUrl: req.file ? `/uploads/${req.file.filename}` : null,
+        mediaType,
+      });
+      res.status(201).json({ data: post });
+    } catch (error: any) {
+      console.error('Feed create error:', error);
+      res.status(403).json({ error: error.message || 'تعذر نشر المنشور' });
+    }
+  });
+
+  app.put('/api/app/feed/:id', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      if (currentUser.role === 'admin' && req.body.status === 'hidden' && !(await roleHasPermission(currentUser.role, 'feed.manage'))) {
+        return res.status(403).json({ error: 'Missing permission: feed.manage' });
+      }
+      const post = await updateFeedPost(currentUser.userId, req.params.id, req.body);
+      res.json({ data: post });
+    } catch (error: any) {
+      res.status(403).json({ error: error.message || 'تعذر تعديل المنشور' });
+    }
+  });
+
+  app.delete('/api/app/feed/:id', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      if (currentUser.role === 'admin' && !(await roleHasPermission(currentUser.role, 'feed.manage'))) {
+        return res.status(403).json({ error: 'Missing permission: feed.manage' });
+      }
+      await deleteFeedPost(currentUser.userId, req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(403).json({ error: error.message || 'تعذر حذف المنشور' });
+    }
+  });
+
+  app.post('/api/app/feed/:id/like', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const post = await toggleFeedLike(currentUser.userId, req.params.id);
+      res.json({ data: post });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'تعذر تحديث الإعجاب' });
+    }
+  });
+
+  app.post('/api/app/feed/:id/comments', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const post = await addFeedComment(currentUser.userId, req.params.id, req.body.content);
+      res.status(201).json({ data: post });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'تعذر إضافة التعليق' });
     }
   });
 
