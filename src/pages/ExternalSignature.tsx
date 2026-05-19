@@ -324,9 +324,9 @@ export default function ExternalSignature() {
             const opt = {
                 margin: 10,
                 filename: `final_contract_${id}.pdf`,
-                image: { type: 'jpeg', quality: 0.98 },
+                image: { type: 'jpeg' as const, quality: 0.98 },
                 html2canvas: { scale: 2, useCORS: true },
-                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                jsPDF: { unit: 'mm' as const, format: 'a4' as const, orientation: 'portrait' as const }
             };
 
             // 2. توليد الـ PDF كـ Blob ورفعه للخادم
@@ -364,7 +364,7 @@ export default function ExternalSignature() {
             const res = await fetch('/api/legal/email-contract', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, pdfUrl: finalPdfUrl, name: data.buyerName })
+                body: JSON.stringify({ email, pdfUrl: finalPdfUrl, name: draftData?.buyerName })
             });
             if (res.ok) {
                 setEmailSent(true);

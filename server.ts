@@ -52,7 +52,37 @@ import {
   deleteLegalDoc,
   getLegalServices,
   addLegalService,
+  updateLegalService,
   deleteLegalService,
+  getCategories,
+  addCategory,
+  updateCategory,
+  deleteCategory,
+  reorderCategories,
+  getUploads,
+  addUploadRecord,
+  updateUploadRecord,
+  deleteUploadRecord,
+  getPages,
+  addPage,
+  updatePage,
+  deletePage,
+  addPageBlock,
+  updatePageBlock,
+  deletePageBlock,
+  getRoles,
+  getPermissions,
+  addRole,
+  updateRole,
+  updateRolePermissions,
+  deleteRole,
+  getAdminCases,
+  getAdminCase,
+  updateAdminCase,
+  addAdminCaseTimelineEntry,
+  updateAdminCaseTimelineEntry,
+  deleteAdminCaseTimelineEntry,
+  getContractsAdmin,
   clearAdminCache,
 } from './src/server/adminData';
 import {
@@ -895,6 +925,18 @@ async function startServer() {
         },
       });
 
+      await addUploadRecord({
+        ownerId: currentUser.userId,
+        resourceType: 'case_document',
+        resourceId: document.id,
+        purpose: 'case_document',
+        originalName: req.file.originalname,
+        filename: req.file.filename,
+        url: fileUrl,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
+      });
+
       // Automatically send a message about the new document
       const updatedCase = await addCaseMessage(caseId, currentUser.userId, `رفع ${senderRole === 'lawyer' ? 'المحامي' : 'العميل'} وثيقة جديدة: ${req.file.originalname}`, senderRole);
 
@@ -1173,6 +1215,7 @@ async function startServer() {
       await prisma.auditLog.create({
         data: {
           type: 'system',
+          action: 'admin_create_user',
           category: 'إدارة المستخدمين',
           actor: (req as any).user.email,
           message: `قام المسؤول بإنشاء حساب جديد: ${newUser.name} (${newUser.email}) برتبة ${newUser.role}`,
@@ -1397,6 +1440,165 @@ async function startServer() {
     return res.json({ success: true });
   });
 
+  app.put('/api/admin/legal-services/:id', authenticateToken, adminOnly, async (req, res) => {
+    const updated = await updateLegalService(req.params.id, req.body);
+    return res.json(updated);
+  });
+
+  app.get('/api/admin/categories', authenticateToken, adminOnly, async (req, res) => {
+    const type = typeof req.query.type === 'string' ? req.query.type : undefined;
+    res.json(await getCategories(type));
+  });
+
+  app.post('/api/admin/categories', authenticateToken, adminOnly, async (req, res) => {
+    try {
+      res.status(201).json(await addCategory(req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to create category' });
+    }
+  });
+
+  app.put('/api/admin/categories/:id', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await updateCategory(req.params.id, req.body));
+  });
+
+  app.delete('/api/admin/categories/:id', authenticateToken, adminOnly, async (req, res) => {
+    await deleteCategory(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/categories/reorder', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await reorderCategories(Array.isArray(req.body.items) ? req.body.items : []));
+  });
+
+  app.get('/api/admin/uploads', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await getUploads());
+  });
+
+  app.post('/api/admin/uploads', authenticateToken, adminOnly, upload.single('file'), async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    const record = await addUploadRecord({
+      ownerId: (req as any).user.userId,
+      resourceType: req.body.resourceType || 'media',
+      resourceId: req.body.resourceId || null,
+      purpose: req.body.purpose || 'admin_media',
+      originalName: req.file.originalname,
+      filename: req.file.filename,
+      url: `/uploads/${req.file.filename}`,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+    });
+    res.status(201).json(record);
+  });
+
+  app.put('/api/admin/uploads/:id', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await updateUploadRecord(req.params.id, req.body));
+  });
+
+  app.delete('/api/admin/uploads/:id', authenticateToken, adminOnly, async (req, res) => {
+    await deleteUploadRecord(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/pages', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await getPages());
+  });
+
+  app.post('/api/admin/pages', authenticateToken, adminOnly, async (req, res) => {
+    try {
+      res.status(201).json(await addPage(req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to create page' });
+    }
+  });
+
+  app.put('/api/admin/pages/:id', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await updatePage(req.params.id, req.body));
+  });
+
+  app.delete('/api/admin/pages/:id', authenticateToken, adminOnly, async (req, res) => {
+    await deletePage(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/pages/:id/blocks', authenticateToken, adminOnly, async (req, res) => {
+    res.status(201).json(await addPageBlock(req.params.id, req.body));
+  });
+
+  app.put('/api/admin/pages/:pageId/blocks/:blockId', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await updatePageBlock(req.params.blockId, req.body));
+  });
+
+  app.delete('/api/admin/pages/:pageId/blocks/:blockId', authenticateToken, adminOnly, async (req, res) => {
+    await deletePageBlock(req.params.blockId);
+    res.json({ success: true });
+  });
+
+  app.get('/api/admin/roles', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await getRoles());
+  });
+
+  app.get('/api/admin/permissions', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await getPermissions());
+  });
+
+  app.post('/api/admin/roles', authenticateToken, adminOnly, async (req, res) => {
+    try {
+      res.status(201).json(await addRole(req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to create role' });
+    }
+  });
+
+  app.put('/api/admin/roles/:id', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await updateRole(req.params.id, req.body));
+  });
+
+  app.put('/api/admin/roles/:id/permissions', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await updateRolePermissions(req.params.id, Array.isArray(req.body.permissions) ? req.body.permissions : []));
+  });
+
+  app.delete('/api/admin/roles/:id', authenticateToken, adminOnly, async (req, res) => {
+    try {
+      await deleteRole(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to delete role' });
+    }
+  });
+
+  app.get('/api/admin/cases', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await getAdminCases());
+  });
+
+  app.get('/api/admin/cases/:id', authenticateToken, adminOnly, async (req, res) => {
+    const item = await getAdminCase(req.params.id);
+    if (!item) return res.status(404).json({ error: 'case not found' });
+    res.json(item);
+  });
+
+  app.put('/api/admin/cases/:id', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await updateAdminCase(req.params.id, req.body));
+  });
+
+  app.delete('/api/admin/cases/:id', authenticateToken, adminOnly, async (req, res) => {
+    await deleteCaseWorkspace(req.params.id);
+    res.json({ success: true });
+  });
+
+  app.post('/api/admin/cases/:id/timeline', authenticateToken, adminOnly, async (req, res) => {
+    res.status(201).json(await addAdminCaseTimelineEntry(req.params.id, req.body));
+  });
+
+  app.put('/api/admin/cases/:caseId/timeline/:entryId', authenticateToken, adminOnly, async (req, res) => {
+    res.json(await updateAdminCaseTimelineEntry(req.params.entryId, req.body));
+  });
+
+  app.delete('/api/admin/cases/:caseId/timeline/:entryId', authenticateToken, adminOnly, async (req, res) => {
+    await deleteAdminCaseTimelineEntry(req.params.entryId);
+    res.json({ success: true });
+  });
+
   app.post('/api/admin/cache/clear', authenticateToken, adminOnly, async (req, res) => {
     clearAdminCache();
     res.json({ success: true, message: 'cache cleared' });
@@ -1459,7 +1661,7 @@ async function startServer() {
 
 
     // في بيئة الإنتاج، يتم التحقق من التوكن مقابل قاعدة البيانات أو فك تشفيره
-    if (!token || token.length < 20) {
+    if (typeof token !== 'string' || token.length < 20) {
       return res.status(403).json({ error: 'رابط غير صالِح أو انتهت صلاحيته.' });
     }
 
@@ -1643,7 +1845,20 @@ ${additionalConditions}
   // نقطة نهاية لرفع العقد المولد كملف
   app.post('/api/legal/upload-contract-pdf', optionalAuthenticateToken, upload.single('pdf'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
-    res.json({ data: { url: `/uploads/${req.file.filename}` } });
+    const currentUser = (req as any).user;
+    const fileUrl = `/uploads/${req.file.filename}`;
+    await addUploadRecord({
+      ownerId: currentUser?.userId || null,
+      resourceType: 'contract',
+      resourceId: null,
+      purpose: 'contract_pdf',
+      originalName: req.file.originalname,
+      filename: req.file.filename,
+      url: fileUrl,
+      mimeType: req.file.mimetype,
+      size: req.file.size,
+    });
+    res.json({ data: { url: fileUrl } });
   });
 
   app.post('/api/legal/save-contract', authenticateToken, async (req, res) => {
@@ -1686,30 +1901,7 @@ ${additionalConditions}
   // --- Admin Contracts Monitoring ---
   app.get('/api/admin/contracts', authenticateToken, adminOnly, async (req, res) => {
     try {
-      const contracts = await prisma.case.findMany({
-        where: { matter: 'عقد بيع مركبة' },
-        orderBy: { createdAt: 'desc' },
-        include: { client: { select: { name: true, email: true } } }
-      });
-
-      const processed = contracts.map(c => {
-        const details = JSON.parse(c.privateNote || '{}');
-        return {
-          id: c.id,
-          title: c.title,
-          status: c.status === 'pending' && details.status === 'waiting_buyer_signature' ? 'waiting_buyer' :
-            c.status === 'pending' ? 'draft' : 'signed',
-          sellerName: details.sellerName || c.client.name,
-          buyerName: details.buyerName || 'غير محدد',
-          carModel: details.carModel || 'غير محدد',
-          vinNumber: details.vinNumber || 'غير متوفر',
-          reviewNotes: details.reviewNotes || [],
-          price: details.price || '0',
-          createdAt: c.createdAt
-        };
-      });
-
-      res.json({ data: processed });
+      res.json({ data: await getContractsAdmin() });
     } catch (error) {
       res.status(500).json({ error: 'فشل جلب سجل العقود' });
     }
@@ -1854,10 +2046,18 @@ ${additionalConditions}
   // --- Contract Template Sync Routes ---
   app.get('/api/app/contract-templates', authenticateToken, async (req, res) => {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: (req as any).user.userId }
+      const userId = (req as any).user.userId;
+      const templates = await prisma.contractTemplate.findMany({
+        where: {
+          active: true,
+          OR: [
+            { ownerId: userId },
+            { ownerId: null, scope: 'global' },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
       });
-      res.json({ data: (user as any)?.contractTemplates || [] });
+      res.json({ data: templates.map((template) => ({ name: template.name, text: template.text })) });
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch templates' });
     }
@@ -1867,17 +2067,19 @@ ${additionalConditions}
     try {
       const { name, text } = req.body;
       const userId = (req as any).user.userId;
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      const templates = (user as any).contractTemplates || [];
-
-      const updated = [{ name, text }, ...templates.filter((t: any) => t.name !== name)].slice(0, 10);
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: { contractTemplates: updated } as any
+      if (!name || !text) {
+        return res.status(400).json({ error: 'Template name and text are required' });
+      }
+      await prisma.contractTemplate.deleteMany({ where: { ownerId: userId, name } });
+      await prisma.contractTemplate.create({
+        data: { ownerId: userId, scope: 'user', name, text, active: true },
       });
-
-      res.json({ data: updated });
+      const templates = await prisma.contractTemplate.findMany({
+        where: { ownerId: userId, active: true },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+      res.json({ data: templates.map((template) => ({ name: template.name, text: template.text })) });
     } catch (error) {
       res.status(500).json({ error: 'Failed to sync template' });
     }
@@ -1887,17 +2089,19 @@ ${additionalConditions}
     try {
       const { index } = req.body;
       const userId = (req as any).user.userId;
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      const templates = (user as any).contractTemplates || [];
-
-      const updated = templates.filter((_: any, i: number) => i !== index);
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: { contractTemplates: updated } as any
+      const templates = await prisma.contractTemplate.findMany({
+        where: { ownerId: userId, active: true },
+        orderBy: { createdAt: 'desc' },
       });
-
-      res.json({ data: updated });
+      const selected = templates[index];
+      if (selected) {
+        await prisma.contractTemplate.delete({ where: { id: selected.id } });
+      }
+      const updated = await prisma.contractTemplate.findMany({
+        where: { ownerId: userId, active: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json({ data: updated.map((template) => ({ name: template.name, text: template.text })) });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete template' });
     }
@@ -1906,10 +2110,18 @@ ${additionalConditions}
   // --- Contract Clause Library Routes ---
   app.get('/api/app/contract-clauses', authenticateToken, async (req, res) => {
     try {
-      const user = await prisma.user.findUnique({
-        where: { id: (req as any).user.userId }
+      const userId = (req as any).user.userId;
+      const clauses = await prisma.contractClause.findMany({
+        where: {
+          active: true,
+          OR: [
+            { ownerId: userId },
+            { ownerId: null, scope: 'global' },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
       });
-      res.json({ data: (user as any)?.savedClauses || [] });
+      res.json({ data: clauses.map((clause) => clause.text) });
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch clauses' });
     }
@@ -1919,16 +2131,19 @@ ${additionalConditions}
     try {
       const { text } = req.body;
       const userId = (req as any).user.userId;
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      const clauses = (user as any).savedClauses || [];
-
-      const updated = [text, ...clauses.filter((c: string) => c !== text)].slice(0, 20);
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: { savedClauses: updated } as any
+      if (!text) {
+        return res.status(400).json({ error: 'Clause text is required' });
+      }
+      await prisma.contractClause.deleteMany({ where: { ownerId: userId, text } });
+      await prisma.contractClause.create({
+        data: { ownerId: userId, scope: 'user', text, active: true },
       });
-      res.json({ data: updated });
+      const clauses = await prisma.contractClause.findMany({
+        where: { ownerId: userId, active: true },
+        orderBy: { createdAt: 'desc' },
+        take: 20,
+      });
+      res.json({ data: clauses.map((clause) => clause.text) });
     } catch (error) {
       res.status(500).json({ error: 'Failed to save clause' });
     }
@@ -1938,15 +2153,19 @@ ${additionalConditions}
     try {
       const { index } = req.body;
       const userId = (req as any).user.userId;
-      const user = await prisma.user.findUnique({ where: { id: userId } });
-      const clauses = (user as any).savedClauses || [];
-      const updated = clauses.filter((_: any, i: number) => i !== index);
-
-      await prisma.user.update({
-        where: { id: userId },
-        data: { savedClauses: updated } as any
+      const clauses = await prisma.contractClause.findMany({
+        where: { ownerId: userId, active: true },
+        orderBy: { createdAt: 'desc' },
       });
-      res.json({ data: updated });
+      const selected = clauses[index];
+      if (selected) {
+        await prisma.contractClause.delete({ where: { id: selected.id } });
+      }
+      const updated = await prisma.contractClause.findMany({
+        where: { ownerId: userId, active: true },
+        orderBy: { createdAt: 'desc' },
+      });
+      res.json({ data: updated.map((clause) => clause.text) });
     } catch (error) {
       res.status(500).json({ error: 'Failed to delete clause' });
     }
@@ -2261,16 +2480,29 @@ ${additionalConditions}
       }
 
       const user = (req as any).user;
+      const ownerId = user.userId || user.id;
       const fileUrl = `/uploads/${req.file.filename}`;
 
       const lawyerProfile = await prisma.lawyerProfile.upsert({
-        where: { userId: user.id },
+        where: { userId: ownerId },
         update: { nationalIdUrl: fileUrl, nationalIdVerified: false },
         create: {
-          userId: user.id,
+          userId: ownerId,
           nationalIdUrl: fileUrl,
           nationalIdVerified: false,
         },
+      });
+
+      await addUploadRecord({
+        ownerId,
+        resourceType: 'lawyer_profile',
+        resourceId: lawyerProfile.userId,
+        purpose: 'national_id',
+        originalName: req.file.originalname,
+        filename: req.file.filename,
+        url: fileUrl,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
       });
 
       res.json({
@@ -2292,16 +2524,29 @@ ${additionalConditions}
       }
 
       const user = (req as any).user;
+      const ownerId = user.userId || user.id;
       const fileUrl = `/uploads/${req.file.filename}`;
 
       const lawyerProfile = await prisma.lawyerProfile.upsert({
-        where: { userId: user.id },
+        where: { userId: ownerId },
         update: { lawyerLicenseUrl: fileUrl, lawyerLicenseVerified: false },
         create: {
-          userId: user.id,
+          userId: ownerId,
           lawyerLicenseUrl: fileUrl,
           lawyerLicenseVerified: false,
         },
+      });
+
+      await addUploadRecord({
+        ownerId,
+        resourceType: 'lawyer_profile',
+        resourceId: lawyerProfile.userId,
+        purpose: 'lawyer_license',
+        originalName: req.file.originalname,
+        filename: req.file.filename,
+        url: fileUrl,
+        mimeType: req.file.mimetype,
+        size: req.file.size,
       });
 
       res.json({

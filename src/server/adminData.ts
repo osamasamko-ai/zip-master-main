@@ -198,6 +198,12 @@ export interface AiSettings {
     topK: number;
     fallbackMode: boolean;
     maxTokens: number;
+    jpegQuality: number;
+    forceLocalMode: boolean;
+    pricePerRequest: number;
+    pricePerToken: number;
+    freeRequestsPerUser: number;
+    freeTokensPerUser: number;
 }
 
 export interface WorkflowSettings {
@@ -245,6 +251,66 @@ export interface LegalService {
     lawyerSpecialty?: string | null;
     lawyerAvatar?: string | null;
     active: boolean;
+    sortOrder?: number;
+    categoryId?: string | null;
+}
+
+export interface CategoryRecord {
+    id: string;
+    type: string;
+    name: string;
+    slug: string;
+    description: string;
+    icon: string;
+    color: string;
+    active: boolean;
+    sortOrder: number;
+}
+
+export interface UploadRecord {
+    id: string;
+    ownerId?: string | null;
+    ownerName?: string | null;
+    resourceType: string;
+    resourceId?: string | null;
+    purpose: string;
+    originalName: string;
+    filename: string;
+    url: string;
+    mimeType: string;
+    size: number;
+    status: string;
+    createdAt: Date;
+}
+
+export interface PageRecord {
+    id: string;
+    slug: string;
+    route: string;
+    title: string;
+    status: string;
+    seoTitle?: string | null;
+    seoDescription?: string | null;
+    blocks?: Array<{
+        id: string;
+        key: string;
+        type: string;
+        title: string;
+        body: string;
+        mediaUploadId?: string | null;
+        sortOrder: number;
+        active: boolean;
+    }>;
+}
+
+export interface RoleRecord {
+    id: string;
+    key: string;
+    label: string;
+    description: string;
+    system: boolean;
+    active: boolean;
+    permissions?: string[];
 }
 
 export interface SecurityAlert {
@@ -901,6 +967,459 @@ export async function deleteLegalService(id: string) {
     await ensureLegalServicesTable();
     await prisma.$executeRaw`DELETE FROM "LegalService" WHERE "id" = ${id}`;
     return true;
+}
+
+export async function updateLegalService(id: string, service: Partial<LegalService>) {
+    const updated = await prisma.legalService.update({
+        where: { id },
+        data: {
+            title: service.title,
+            description: service.description,
+            icon: service.icon,
+            price: service.price,
+            time: service.time,
+            color: service.color,
+            category: service.category,
+            categoryId: service.categoryId ?? undefined,
+            lawyerId: service.lawyerId === undefined ? undefined : service.lawyerId,
+            active: service.active,
+            sortOrder: service.sortOrder,
+        },
+        include: {
+            lawyer: { include: { lawyerProfile: true } },
+        },
+    });
+
+    return mapLegalService({
+        ...updated,
+        lawyerName: updated.lawyer?.name,
+        lawyerSpecialty: updated.lawyer?.lawyerProfile?.specialty,
+        lawyerAvatar: updated.lawyer?.lawyerProfile?.avatar || updated.lawyer?.img,
+    });
+}
+
+function slugify(value: string) {
+    return value
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^\u0600-\u06FF\w-]/g, '')
+        .slice(0, 80) || crypto.randomUUID();
+}
+
+export async function getCategories(type?: string): Promise<CategoryRecord[]> {
+    return prisma.category.findMany({
+        where: type ? { type } : undefined,
+        orderBy: [{ type: 'asc' }, { sortOrder: 'asc' }, { name: 'asc' }],
+    }) as any;
+}
+
+export async function addCategory(payload: Partial<CategoryRecord>): Promise<CategoryRecord> {
+    if (!payload.type || !payload.name) {
+        throw new Error('type and name are required');
+    }
+    return prisma.category.create({
+        data: {
+            type: payload.type,
+            name: payload.name,
+            slug: payload.slug || slugify(payload.name),
+            description: payload.description || '',
+            icon: payload.icon || 'fa-solid fa-layer-group',
+            color: payload.color || 'blue',
+            active: payload.active !== false,
+            sortOrder: payload.sortOrder ?? 0,
+        },
+    }) as any;
+}
+
+export async function updateCategory(id: string, payload: Partial<CategoryRecord>): Promise<CategoryRecord> {
+    return prisma.category.update({
+        where: { id },
+        data: {
+            type: payload.type,
+            name: payload.name,
+            slug: payload.slug,
+            description: payload.description,
+            icon: payload.icon,
+            color: payload.color,
+            active: payload.active,
+            sortOrder: payload.sortOrder,
+        },
+    }) as any;
+}
+
+export async function deleteCategory(id: string) {
+    await prisma.category.delete({ where: { id } });
+    return true;
+}
+
+export async function reorderCategories(items: Array<{ id: string; sortOrder: number }>) {
+    await prisma.$transaction(items.map((item) =>
+        prisma.category.update({ where: { id: item.id }, data: { sortOrder: item.sortOrder } })
+    ));
+    return getCategories();
+}
+
+export async function getUploads(): Promise<UploadRecord[]> {
+    const rows = await prisma.upload.findMany({
+        include: { owner: { select: { name: true } } },
+        orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row: any) => ({
+        ...row,
+        ownerName: row.owner?.name || null,
+    }));
+}
+
+export async function addUploadRecord(payload: {
+    ownerId?: string | null;
+    resourceType: string;
+    resourceId?: string | null;
+    purpose: string;
+    originalName: string;
+    filename: string;
+    url: string;
+    mimeType: string;
+    size: number;
+}) {
+    return prisma.upload.create({
+        data: {
+            ownerId: payload.ownerId || null,
+            resourceType: payload.resourceType,
+            resourceId: payload.resourceId || null,
+            purpose: payload.purpose,
+            originalName: payload.originalName,
+            filename: payload.filename,
+            url: payload.url,
+            mimeType: payload.mimeType,
+            size: payload.size,
+        },
+    });
+}
+
+export async function updateUploadRecord(id: string, payload: Partial<UploadRecord>) {
+    return prisma.upload.update({
+        where: { id },
+        data: {
+            ownerId: payload.ownerId,
+            resourceType: payload.resourceType,
+            resourceId: payload.resourceId,
+            purpose: payload.purpose,
+            status: payload.status,
+        },
+    });
+}
+
+export async function deleteUploadRecord(id: string) {
+    await prisma.upload.delete({ where: { id } });
+    return true;
+}
+
+export async function getPages(): Promise<PageRecord[]> {
+    return prisma.page.findMany({
+        include: { blocks: { orderBy: [{ sortOrder: 'asc' }, { createdAt: 'asc' }] } },
+        orderBy: { updatedAt: 'desc' },
+    }) as any;
+}
+
+export async function addPage(payload: Partial<PageRecord>): Promise<PageRecord> {
+    if (!payload.title || !payload.route) throw new Error('title and route are required');
+    return prisma.page.create({
+        data: {
+            title: payload.title,
+            route: payload.route,
+            slug: payload.slug || slugify(payload.route.replace(/^\//, '') || payload.title),
+            status: payload.status || 'draft',
+            seoTitle: payload.seoTitle,
+            seoDescription: payload.seoDescription,
+        },
+        include: { blocks: true },
+    }) as any;
+}
+
+export async function updatePage(id: string, payload: Partial<PageRecord>): Promise<PageRecord> {
+    return prisma.page.update({
+        where: { id },
+        data: {
+            title: payload.title,
+            route: payload.route,
+            slug: payload.slug,
+            status: payload.status,
+            seoTitle: payload.seoTitle,
+            seoDescription: payload.seoDescription,
+        },
+        include: { blocks: { orderBy: { sortOrder: 'asc' } } },
+    }) as any;
+}
+
+export async function deletePage(id: string) {
+    await prisma.siteContentBlock.deleteMany({ where: { pageId: id } });
+    await prisma.page.delete({ where: { id } });
+    return true;
+}
+
+export async function addPageBlock(pageId: string, payload: any) {
+    return prisma.siteContentBlock.create({
+        data: {
+            pageId,
+            key: payload.key || slugify(payload.title || payload.type || 'block'),
+            type: payload.type || 'text',
+            title: payload.title || '',
+            body: payload.body || '',
+            mediaUploadId: payload.mediaUploadId || null,
+            sortOrder: payload.sortOrder ?? 0,
+            active: payload.active !== false,
+        },
+    });
+}
+
+export async function updatePageBlock(blockId: string, payload: any) {
+    return prisma.siteContentBlock.update({
+        where: { id: blockId },
+        data: {
+            key: payload.key,
+            type: payload.type,
+            title: payload.title,
+            body: payload.body,
+            mediaUploadId: payload.mediaUploadId,
+            sortOrder: payload.sortOrder,
+            active: payload.active,
+        },
+    });
+}
+
+export async function deletePageBlock(blockId: string) {
+    await prisma.siteContentBlock.delete({ where: { id: blockId } });
+    return true;
+}
+
+const DEFAULT_PERMISSIONS = [
+    'users.read', 'users.create', 'users.update', 'users.delete',
+    'cases.read', 'cases.create', 'cases.update', 'cases.reassign', 'cases.delete',
+    'content.manage', 'uploads.manage', 'settings.manage', 'billing.manage',
+    'roles.manage', 'audit.read', 'kyc.manage', 'support.manage',
+];
+
+export async function ensureRolesAndPermissions() {
+    await Promise.all(DEFAULT_PERMISSIONS.map((key) => {
+        const [resource, action] = key.split('.');
+        return prisma.permission.upsert({
+            where: { key },
+            update: {},
+            create: { key, resource, action, description: key },
+        });
+    }));
+
+    const adminRole = await prisma.role.upsert({
+        where: { key: 'admin' },
+        update: { label: 'Admin', system: true, active: true },
+        create: { key: 'admin', label: 'Admin', description: 'Full platform access', system: true },
+    });
+
+    const permissions = await prisma.permission.findMany();
+    await Promise.all(permissions.map((permission) =>
+        prisma.rolePermission.upsert({
+            where: { roleId_permissionId: { roleId: adminRole.id, permissionId: permission.id } },
+            update: {},
+            create: { roleId: adminRole.id, permissionId: permission.id },
+        })
+    ));
+}
+
+export async function getRoles(): Promise<RoleRecord[]> {
+    await ensureRolesAndPermissions();
+    const rows = await prisma.role.findMany({
+        include: { permissions: { include: { permission: true } } },
+        orderBy: { label: 'asc' },
+    });
+    return rows.map((role) => ({
+        id: role.id,
+        key: role.key,
+        label: role.label,
+        description: role.description,
+        system: role.system,
+        active: role.active,
+        permissions: role.permissions.map((item) => item.permission.key),
+    }));
+}
+
+export async function getPermissions() {
+    await ensureRolesAndPermissions();
+    return prisma.permission.findMany({ orderBy: [{ resource: 'asc' }, { action: 'asc' }] });
+}
+
+export async function addRole(payload: Partial<RoleRecord>) {
+    if (!payload.key || !payload.label) throw new Error('key and label are required');
+    return prisma.role.create({
+        data: {
+            key: payload.key,
+            label: payload.label,
+            description: payload.description || '',
+            active: payload.active !== false,
+            system: false,
+        },
+    });
+}
+
+export async function updateRole(id: string, payload: Partial<RoleRecord>) {
+    return prisma.role.update({
+        where: { id },
+        data: {
+            label: payload.label,
+            description: payload.description,
+            active: payload.active,
+        },
+    });
+}
+
+export async function updateRolePermissions(id: string, permissionKeys: string[]) {
+    const permissions = await prisma.permission.findMany({ where: { key: { in: permissionKeys } } });
+    await prisma.rolePermission.deleteMany({ where: { roleId: id } });
+    await prisma.rolePermission.createMany({
+        data: permissions.map((permission) => ({ roleId: id, permissionId: permission.id })),
+    });
+    return getRoles();
+}
+
+export async function deleteRole(id: string) {
+    const role = await prisma.role.findUnique({ where: { id } });
+    if (role?.system) throw new Error('system roles cannot be deleted');
+    await prisma.rolePermission.deleteMany({ where: { roleId: id } });
+    await prisma.role.delete({ where: { id } });
+    return true;
+}
+
+export async function getAdminCases() {
+    return prisma.case.findMany({
+        include: {
+            client: { select: { id: true, name: true, email: true } },
+            lawyer: { select: { id: true, name: true, email: true } },
+            documents: true,
+            timelineEntries: { orderBy: { createdAt: 'asc' } },
+            invoices: true,
+            chatSessions: { include: { messages: { orderBy: { createdAt: 'asc' } } } },
+        },
+        orderBy: { updatedAt: 'desc' },
+    });
+}
+
+export async function getAdminCase(id: string) {
+    return prisma.case.findUnique({
+        where: { id },
+        include: {
+            client: true,
+            lawyer: true,
+            documents: true,
+            folders: true,
+            customFields: true,
+            timelineEntries: { orderBy: { createdAt: 'asc' } },
+            collaborators: true,
+            accessLogs: true,
+            appointments: true,
+            invoices: true,
+            chatSessions: { include: { messages: { include: { sender: true }, orderBy: { createdAt: 'asc' } } } },
+        },
+    });
+}
+
+export async function updateAdminCase(id: string, payload: any) {
+    return prisma.case.update({
+        where: { id },
+        data: {
+            title: payload.title,
+            matter: payload.matter,
+            status: payload.status,
+            progress: typeof payload.progress === 'number' ? payload.progress : undefined,
+            riskScore: typeof payload.riskScore === 'number' ? payload.riskScore : undefined,
+            isArchived: payload.isArchived,
+            totalAgreedFee: typeof payload.totalAgreedFee === 'number' ? payload.totalAgreedFee : undefined,
+            paidAmount: typeof payload.paidAmount === 'number' ? payload.paidAmount : undefined,
+            privateNote: payload.privateNote,
+            clientId: payload.clientId,
+            lawyerId: payload.lawyerId,
+        },
+    });
+}
+
+export async function addAdminCaseTimelineEntry(caseId: string, payload: any) {
+    return prisma.caseTimelineEntry.create({
+        data: {
+            caseId,
+            dateLabel: payload.dateLabel || 'اليوم',
+            title: payload.title,
+            detail: payload.detail || '',
+            type: payload.type || 'system',
+        },
+    });
+}
+
+export async function updateAdminCaseTimelineEntry(id: string, payload: any) {
+    return prisma.caseTimelineEntry.update({
+        where: { id },
+        data: {
+            dateLabel: payload.dateLabel,
+            title: payload.title,
+            detail: payload.detail,
+            type: payload.type,
+        },
+    });
+}
+
+export async function deleteAdminCaseTimelineEntry(id: string) {
+    await prisma.caseTimelineEntry.delete({ where: { id } });
+    return true;
+}
+
+export async function getContractsAdmin() {
+    const [contracts, legacyCases] = await Promise.all([
+        prisma.contract.findMany({
+            include: { owner: { select: { id: true, name: true, email: true } }, case: { select: { id: true, title: true } } },
+            orderBy: { createdAt: 'desc' },
+        }),
+        prisma.case.findMany({
+            where: { matter: 'عقد بيع مركبة' },
+            include: { client: { select: { id: true, name: true, email: true } } },
+            orderBy: { createdAt: 'desc' },
+        }),
+    ]);
+
+    const normalizedContracts = contracts.map((contract) => ({
+        id: contract.id,
+        title: contract.title,
+        status: contract.status,
+        sellerName: contract.sellerName || contract.owner.name,
+        buyerName: contract.buyerName || 'غير محدد',
+        carModel: contract.subject || 'غير محدد',
+        vinNumber: '',
+        reviewNotes: [],
+        price: contract.price || '0',
+        createdAt: contract.createdAt,
+        source: 'contract',
+    }));
+
+    const legacy = legacyCases.map((item) => {
+        let details: any = {};
+        try {
+            details = JSON.parse(item.privateNote || '{}');
+        } catch {
+            details = {};
+        }
+        return {
+            id: item.id,
+            title: item.title,
+            status: item.status === 'pending' && details.status === 'waiting_buyer_signature' ? 'waiting_buyer' : item.status === 'pending' ? 'draft' : 'signed',
+            sellerName: details.sellerName || item.client.name,
+            buyerName: details.buyerName || 'غير محدد',
+            carModel: details.carModel || 'غير محدد',
+            vinNumber: details.vinNumber || 'غير متوفر',
+            reviewNotes: details.reviewNotes || [],
+            price: details.price || '0',
+            createdAt: item.createdAt,
+            source: 'legacy_case',
+        };
+    });
+
+    return [...normalizedContracts, ...legacy];
 }
 
 export async function createUser(userData: { email: string; passwordHash: string; name: string; role: 'user' | 'pro' | 'admin'; }) {

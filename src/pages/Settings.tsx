@@ -707,7 +707,7 @@ export default function Settings() {
                       <StatusBadge tone={uploadedDocumentsCount === verificationDocuments.length ? 'success' : 'warning'}>
                         {uploadedDocumentsCount}/{verificationDocuments.length} مستندات مرفوعة
                       </StatusBadge>
-                      <StatusBadge tone={verifiedDocumentsCount > 0 ? 'info' : 'default'}>
+                      <StatusBadge tone={verifiedDocumentsCount > 0 ? 'info' : 'neutral'}>
                         {verifiedDocumentsCount} مستندات موثقة
                       </StatusBadge>
                     </div>

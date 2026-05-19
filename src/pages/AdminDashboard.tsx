@@ -165,6 +165,84 @@ type LegalService = {
   active: boolean;
 };
 
+type CategoryRecord = {
+  id: string;
+  type: string;
+  name: string;
+  slug: string;
+  description?: string;
+  icon: string;
+  color: string;
+  active: boolean;
+  sortOrder: number;
+};
+
+type UploadRecord = {
+  id: string;
+  ownerName?: string | null;
+  resourceType: string;
+  resourceId?: string | null;
+  purpose: string;
+  originalName: string;
+  url: string;
+  mimeType: string;
+  size: number;
+  status: string;
+  createdAt: string;
+};
+
+type PageRecord = {
+  id: string;
+  slug: string;
+  route: string;
+  title: string;
+  status: string;
+  seoTitle?: string | null;
+  seoDescription?: string | null;
+  blocks?: Array<{
+    id: string;
+    key: string;
+    type: string;
+    title: string;
+    body: string;
+    sortOrder: number;
+    active: boolean;
+  }>;
+};
+
+type PermissionRecord = {
+  id: string;
+  key: string;
+  label: string;
+  description: string;
+  group: string;
+};
+
+type RoleRecord = {
+  id: string;
+  key: string;
+  label: string;
+  description: string;
+  system: boolean;
+  active: boolean;
+  permissions?: string[];
+};
+
+type AdminCaseRecord = {
+  id: string;
+  title: string;
+  matter: string;
+  status: string;
+  progress: number;
+  riskScore: number;
+  privateNote?: string;
+  updatedAt: string;
+  client?: { id: string; name: string; email: string } | null;
+  lawyer?: { id: string; name: string; email: string } | null;
+  documents?: unknown[];
+  timelineEntries?: Array<{ id: string; dateLabel: string; title: string; detail: string; type: string }>;
+};
+
 type DigitalContract = {
   id: string;
   title: string;
@@ -189,7 +267,7 @@ type AdminMetrics = {
   complianceFlags: number;
 };
 
-type AdminTab = 'overview' | 'users' | 'financials' | 'contracts' | 'kyc' | 'support' | 'settings' | 'compliance' | 'system';
+type AdminTab = 'overview' | 'users' | 'cases' | 'resources' | 'roles' | 'financials' | 'contracts' | 'kyc' | 'support' | 'settings' | 'compliance' | 'system';
 
 type AdminToast = {
   id: string;
@@ -271,6 +349,12 @@ export default function AdminDashboard() {
   const [legalDocs, setLegalDocs] = useState<LegalDoc[]>([]);
   const [legalServices, setLegalServices] = useState<LegalService[]>([]);
   const [digitalContracts, setDigitalContracts] = useState<DigitalContract[]>([]);
+  const [categories, setCategories] = useState<CategoryRecord[]>([]);
+  const [uploads, setUploads] = useState<UploadRecord[]>([]);
+  const [pages, setPages] = useState<PageRecord[]>([]);
+  const [roles, setRoles] = useState<RoleRecord[]>([]);
+  const [permissions, setPermissions] = useState<PermissionRecord[]>([]);
+  const [adminCases, setAdminCases] = useState<AdminCaseRecord[]>([]);
   const [newDoc, setNewDoc] = useState<Partial<LegalDoc>>({ title: '', law: '', article: '', category: '', summary: '', source: '' });
   const [newService, setNewService] = useState<Partial<LegalService>>({
     title: '',
@@ -282,6 +366,9 @@ export default function AdminDashboard() {
     icon: 'fa-solid fa-scale-balanced',
     color: 'blue',
   });
+  const [newCategory, setNewCategory] = useState<Partial<CategoryRecord>>({ type: 'case', name: '', description: '', icon: 'fa-folder', color: '#1B365D' });
+  const [newPage, setNewPage] = useState<Partial<PageRecord>>({ title: '', slug: '', route: '', status: 'draft' });
+  const [timelineDrafts, setTimelineDrafts] = useState<Record<string, { title: string; detail: string; type: string }>>({});
   const [newBannedWord, setNewBannedWord] = useState('');
   const [newModerationType, setNewModerationType] = useState<'bannedWord' | 'sensitiveTopic'>('bannedWord');
   const [moderationSearch, setModerationSearch] = useState('');
@@ -556,7 +643,7 @@ export default function AdminDashboard() {
       setIsLoadingDashboard(true);
       setLoadError(null);
       try {
-        const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, servicesRes, contractRes] = await Promise.all([
+        const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, servicesRes, contractRes, categoryRes, uploadRes, pageRes, roleRes, permissionRes, caseRes] = await Promise.all([
           adminFetch('/api/admin/metrics'),
           adminFetch('/api/admin/kyc'),
           adminFetch('/api/admin/users'),
@@ -575,6 +662,12 @@ export default function AdminDashboard() {
           adminFetch('/api/admin/legal-docs'),
           adminFetch('/api/admin/legal-services'),
           adminFetch('/api/admin/contracts'),
+          adminFetch('/api/admin/categories'),
+          adminFetch('/api/admin/uploads'),
+          adminFetch('/api/admin/pages'),
+          adminFetch('/api/admin/roles'),
+          adminFetch('/api/admin/permissions'),
+          adminFetch('/api/admin/cases'),
         ]);
 
         if (metricRes.ok) setMetrics(await metricRes.json());
@@ -598,6 +691,12 @@ export default function AdminDashboard() {
           const res = await contractRes.json();
           setDigitalContracts(res.data || []);
         }
+        if (categoryRes.ok) setCategories(await categoryRes.json());
+        if (uploadRes.ok) setUploads(await uploadRes.json());
+        if (pageRes.ok) setPages(await pageRes.json());
+        if (roleRes.ok) setRoles(await roleRes.json());
+        if (permissionRes.ok) setPermissions(await permissionRes.json());
+        if (caseRes.ok) setAdminCases(await caseRes.json());
         setLastUpdatedAt(new Date());
       } catch (error) {
         console.error('Failed to load admin dashboard', error);
@@ -1104,6 +1203,139 @@ export default function AdminDashboard() {
     showToast('تم حذف الخدمة', 'تمت إزالة الخدمة القانونية من الواجهة.', 'warning');
   };
 
+  const addAdminCategory = async () => {
+    if (!newCategory.name?.trim()) return;
+    const response = await adminFetch('/api/admin/categories', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCategory),
+    });
+    if (!response.ok) return;
+    const category = await response.json();
+    setCategories((prev) => [category, ...prev]);
+    setNewCategory({ type: 'case', name: '', description: '', icon: 'fa-folder', color: '#1B365D' });
+    showToast('تمت إضافة التصنيف', 'أصبح التصنيف متاحاً للإسناد والتنظيم.', 'success');
+  };
+
+  const toggleAdminCategory = async (category: CategoryRecord) => {
+    const response = await adminFetch(`/api/admin/categories/${category.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: !category.active }),
+    });
+    if (!response.ok) return;
+    const updated = await response.json();
+    setCategories((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+  };
+
+  const removeAdminCategory = async (id: string) => {
+    const response = await adminFetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
+    if (!response.ok) return;
+    setCategories((prev) => prev.filter((category) => category.id !== id));
+    showToast('تم حذف التصنيف', 'تمت إزالة التصنيف من لوحة الإدارة.', 'warning');
+  };
+
+  const addAdminPage = async () => {
+    if (!newPage.title?.trim()) return;
+    const slug = (newPage.slug || newPage.title || '').trim().replace(/\s+/g, '-').toLowerCase();
+    const route = newPage.route?.trim() || `/${slug}`;
+    const response = await adminFetch('/api/admin/pages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...newPage, slug, route }),
+    });
+    if (!response.ok) return;
+    const page = await response.json();
+    setPages((prev) => [page, ...prev]);
+    setNewPage({ title: '', slug: '', route: '', status: 'draft' });
+    showToast('تم إنشاء الصفحة', 'يمكنك الآن إضافة محتوى الصفحة وتفعيلها.', 'success');
+  };
+
+  const updateAdminPageStatus = async (page: PageRecord, status: string) => {
+    const response = await adminFetch(`/api/admin/pages/${page.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    });
+    if (!response.ok) return;
+    const updated = await response.json();
+    setPages((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+  };
+
+  const addPageContentBlock = async (page: PageRecord) => {
+    const response = await adminFetch(`/api/admin/pages/${page.id}/blocks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: `block-${(page.blocks?.length || 0) + 1}`,
+        type: 'text',
+        title: 'قسم جديد',
+        body: '',
+        sortOrder: page.blocks?.length || 0,
+        active: true,
+      }),
+    });
+    if (!response.ok) return;
+    const block = await response.json();
+    setPages((prev) => prev.map((item) => (
+      item.id === page.id ? { ...item, blocks: [...(item.blocks || []), block] } : item
+    )));
+  };
+
+  const removeAdminPage = async (id: string) => {
+    const response = await adminFetch(`/api/admin/pages/${id}`, { method: 'DELETE' });
+    if (!response.ok) return;
+    setPages((prev) => prev.filter((page) => page.id !== id));
+  };
+
+  const updateAdminCase = async (id: string, payload: Partial<AdminCaseRecord>) => {
+    const response = await adminFetch(`/api/admin/cases/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) return;
+    const updated = await response.json();
+    setAdminCases((prev) => prev.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)));
+    showToast('تم تحديث القضية', 'تم حفظ التغيير في مسار القضية.', 'success');
+  };
+
+  const addAdminTimelineEntry = async (caseId: string) => {
+    const draft = timelineDrafts[caseId];
+    if (!draft?.title?.trim()) return;
+    const response = await adminFetch(`/api/admin/cases/${caseId}/timeline`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dateLabel: 'اليوم', title: draft.title, detail: draft.detail, type: draft.type || 'system' }),
+    });
+    if (!response.ok) return;
+    const entry = await response.json();
+    setAdminCases((prev) => prev.map((item) => (
+      item.id === caseId ? { ...item, timelineEntries: [...(item.timelineEntries || []), entry] } : item
+    )));
+    setTimelineDrafts((prev) => ({ ...prev, [caseId]: { title: '', detail: '', type: 'system' } }));
+  };
+
+  const removeUpload = async (id: string) => {
+    const response = await adminFetch(`/api/admin/uploads/${id}`, { method: 'DELETE' });
+    if (!response.ok) return;
+    setUploads((prev) => prev.filter((upload) => upload.id !== id));
+  };
+
+  const toggleRolePermission = async (role: RoleRecord, permissionKey: string) => {
+    const current = new Set(role.permissions || []);
+    if (current.has(permissionKey)) current.delete(permissionKey);
+    else current.add(permissionKey);
+    const permissionsPayload = Array.from(current);
+    const response = await adminFetch(`/api/admin/roles/${role.id}/permissions`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ permissions: permissionsPayload }),
+    });
+    if (!response.ok) return;
+    setRoles((prev) => prev.map((item) => (item.id === role.id ? { ...item, permissions: permissionsPayload } : item)));
+  };
+
   const forceSync = () => {
     setSyncStatus('syncing');
     window.setTimeout(() => {
@@ -1123,6 +1355,9 @@ export default function AdminDashboard() {
   }> = [
       { id: 'overview', label: 'المركز', icon: 'fa-grid-2', description: 'أولويات اليوم', count: pendingCount + escalatedTicketCount + urgentAlerts.length },
       { id: 'users', label: 'الحسابات', icon: 'fa-users', description: 'أدوار وحظر', count: blockedCount },
+      { id: 'cases', label: 'القضايا', icon: 'fa-briefcase', description: 'مسار وقرارات', count: adminCases.filter((item) => item.status !== 'closed').length, adminOnly: true },
+      { id: 'resources', label: 'المحتوى', icon: 'fa-layer-group', description: 'تصنيفات وصفحات', count: categories.length + pages.length + uploads.length, adminOnly: true },
+      { id: 'roles', label: 'الصلاحيات', icon: 'fa-user-shield', description: 'أدوار وحقوق', count: roles.length, adminOnly: true },
       { id: 'financials', label: 'الأموال', icon: 'fa-money-bill-transfer', description: 'سيولة ودفعات', count: transactions.length, adminOnly: true },
       { id: 'contracts', label: 'العقود', icon: 'fa-file-contract', description: 'توقيع وتحقق', count: digitalContracts.filter((contract) => contract.status !== 'signed' && contract.status !== 'verified').length },
       { id: 'kyc', label: 'الاعتماد', icon: 'fa-id-card', description: 'محامون جدد', count: pendingCount },
@@ -1174,7 +1409,7 @@ export default function AdminDashboard() {
   ];
 
   useEffect(() => {
-    if (!isAdmin && (activeTab === 'settings' || activeTab === 'compliance')) {
+    if (!isAdmin && (activeTab === 'settings' || activeTab === 'compliance' || activeTab === 'cases' || activeTab === 'resources' || activeTab === 'roles')) {
       setActiveTab('overview');
     }
   }, [isAdmin, activeTab]);
@@ -3313,6 +3548,241 @@ export default function AdminDashboard() {
               </section>
             </div>
             </div>
+          )}
+
+          {activeTab === 'cases' && (
+            <section className="grid gap-5">
+              <div className="rounded-3xl border border-slate-200 bg-white p-5">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h4 className="text-lg font-black text-brand-dark">إدارة القضايا من البداية إلى الإغلاق</h4>
+                    <p className="text-sm font-bold text-slate-500">تحكم بالحالة، نسبة التقدم، المخاطر، وملاحظات الجدول الزمني بين العميل والمحامي.</p>
+                  </div>
+                  <span className="rounded-full bg-brand-navy px-3 py-1 text-[11px] font-black text-white">{adminCases.length} قضية</span>
+                </div>
+              </div>
+
+              <div className="grid gap-4">
+                {adminCases.length === 0 ? (
+                  <EmptyState icon="briefcase" title="لا توجد قضايا" description="ستظهر القضايا هنا عند إنشائها من مساحة العميل أو المحامي." />
+                ) : adminCases.map((caseItem) => {
+                  const draft = timelineDrafts[caseItem.id] || { title: '', detail: '', type: 'system' };
+                  return (
+                    <div key={caseItem.id} className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+                      <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="min-w-0">
+                          <div className="mb-2 flex flex-wrap gap-2">
+                            <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-600">{caseItem.matter}</span>
+                            <span className="rounded-full bg-brand-navy/10 px-3 py-1 text-[11px] font-black text-brand-navy">{caseItem.status}</span>
+                            <span className="rounded-full bg-amber-50 px-3 py-1 text-[11px] font-black text-amber-700">مخاطر {caseItem.riskScore}%</span>
+                          </div>
+                          <h5 className="truncate text-base font-black text-brand-dark">{caseItem.title}</h5>
+                          <p className="mt-1 text-xs font-bold text-slate-500">
+                            العميل: {caseItem.client?.name || 'غير محدد'} · المحامي: {caseItem.lawyer?.name || 'غير مسند'} · مستندات {caseItem.documents?.length || 0}
+                          </p>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-3 xl:min-w-[520px]">
+                          <select
+                            value={caseItem.status}
+                            onChange={(event) => updateAdminCase(caseItem.id, { status: event.target.value })}
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
+                          >
+                            <option value="pending">قيد البدء</option>
+                            <option value="active">نشطة</option>
+                            <option value="review">قيد المراجعة</option>
+                            <option value="closed">محلولة</option>
+                          </select>
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={caseItem.progress}
+                            onChange={(event) => updateAdminCase(caseItem.id, { progress: Number(event.target.value) })}
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
+                            aria-label="نسبة تقدم القضية"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            value={caseItem.riskScore}
+                            onChange={(event) => updateAdminCase(caseItem.id, { riskScore: Number(event.target.value) })}
+                            className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
+                            aria-label="درجة المخاطر"
+                          />
+                        </div>
+                      </div>
+                      <div className="mt-4 h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-brand-gold" style={{ width: `${Math.max(0, Math.min(100, caseItem.progress || 0))}%` }} />
+                      </div>
+                      <div className="mt-5 grid gap-4 xl:grid-cols-[1fr_0.9fr]">
+                        <div className="rounded-3xl bg-slate-50 p-4">
+                          <p className="mb-3 text-xs font-black text-brand-dark">الجدول الزمني</p>
+                          <div className="space-y-3">
+                            {(caseItem.timelineEntries || []).slice(-4).map((entry) => (
+                              <div key={entry.id} className="border-r-4 border-brand-gold bg-white p-3 text-right">
+                                <p className="text-xs font-black text-brand-dark">{entry.title}</p>
+                                <p className="mt-1 text-[11px] font-bold text-slate-500">{entry.dateLabel} · {entry.detail || entry.type}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div className="rounded-3xl border border-slate-100 p-4">
+                          <p className="mb-3 text-xs font-black text-brand-dark">إضافة محطة للعميل والمحامي</p>
+                          <div className="grid gap-2">
+                            <input
+                              value={draft.title}
+                              onChange={(event) => setTimelineDrafts((prev) => ({ ...prev, [caseItem.id]: { ...draft, title: event.target.value } }))}
+                              placeholder="عنوان المحطة"
+                              className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold"
+                            />
+                            <textarea
+                              value={draft.detail}
+                              onChange={(event) => setTimelineDrafts((prev) => ({ ...prev, [caseItem.id]: { ...draft, detail: event.target.value } }))}
+                              placeholder="تفاصيل مختصرة"
+                              rows={2}
+                              className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold"
+                            />
+                            <button onClick={() => addAdminTimelineEntry(caseItem.id)} className="rounded-2xl bg-brand-navy px-4 py-2 text-xs font-black text-white">
+                              إضافة للجدول
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {activeTab === 'resources' && (
+            <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+              <section className="rounded-3xl border border-slate-200 bg-white p-5">
+                <h4 className="text-lg font-black text-brand-dark">التصنيفات</h4>
+                <div className="mt-4 grid gap-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <input value={newCategory.name || ''} onChange={(event) => setNewCategory((prev) => ({ ...prev, name: event.target.value }))} placeholder="اسم التصنيف" className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold" />
+                    <select value={newCategory.type || 'case'} onChange={(event) => setNewCategory((prev) => ({ ...prev, type: event.target.value }))} className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold">
+                      <option value="case">قضايا</option>
+                      <option value="service">خدمات</option>
+                      <option value="content">محتوى</option>
+                      <option value="contract">عقود</option>
+                    </select>
+                  </div>
+                  <textarea value={newCategory.description || ''} onChange={(event) => setNewCategory((prev) => ({ ...prev, description: event.target.value }))} placeholder="وصف مختصر" rows={2} className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold" />
+                  <button onClick={addAdminCategory} className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white">إضافة تصنيف</button>
+                </div>
+                <div className="mt-5 space-y-2">
+                  {categories.map((category) => (
+                    <div key={category.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
+                      <div>
+                        <p className="text-sm font-black text-brand-dark">{category.name}</p>
+                        <p className="text-[11px] font-bold text-slate-500">{category.type} · {category.slug}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => toggleAdminCategory(category)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-600">{category.active ? 'تعطيل' : 'تفعيل'}</button>
+                        <button onClick={() => removeAdminCategory(category.id)} className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-black text-red-700">حذف</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-5">
+                <h4 className="text-lg font-black text-brand-dark">الصفحات ومحتوى الموقع</h4>
+                <div className="mt-4 grid gap-3 md:grid-cols-[1fr_1fr_auto]">
+                  <input value={newPage.title || ''} onChange={(event) => setNewPage((prev) => ({ ...prev, title: event.target.value }))} placeholder="عنوان الصفحة" className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold" />
+                  <input value={newPage.route || ''} onChange={(event) => setNewPage((prev) => ({ ...prev, route: event.target.value }))} placeholder="/route" className="rounded-2xl border border-slate-200 px-3 py-2 text-xs font-bold" />
+                  <button onClick={addAdminPage} className="rounded-2xl bg-brand-gold px-4 py-2 text-xs font-black text-brand-dark">إنشاء</button>
+                </div>
+                <div className="mt-5 space-y-3">
+                  {pages.map((page) => (
+                    <div key={page.id} className="rounded-3xl bg-slate-50 p-4">
+                      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                          <p className="text-sm font-black text-brand-dark">{page.title}</p>
+                          <p className="text-[11px] font-bold text-slate-500">{page.route} · {page.blocks?.length || 0} أقسام</p>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <select value={page.status} onChange={(event) => updateAdminPageStatus(page, event.target.value)} className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black">
+                            <option value="draft">مسودة</option>
+                            <option value="published">منشورة</option>
+                            <option value="archived">مؤرشفة</option>
+                          </select>
+                          <button onClick={() => addPageContentBlock(page)} className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-brand-navy">قسم جديد</button>
+                          <button onClick={() => removeAdminPage(page.id)} className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-black text-red-700">حذف</button>
+                        </div>
+                      </div>
+                      {(page.blocks || []).length > 0 && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {(page.blocks || []).map((block) => (
+                            <span key={block.id} className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-600">{block.title || block.key}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-5 xl:col-span-2">
+                <div className="mb-4 flex items-center justify-between">
+                  <h4 className="text-lg font-black text-brand-dark">مكتبة الرفعات</h4>
+                  <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-black text-slate-600">{uploads.length} ملف</span>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {uploads.slice(0, 12).map((upload) => (
+                    <div key={upload.id} className="rounded-3xl bg-slate-50 p-4">
+                      <p className="truncate text-sm font-black text-brand-dark">{upload.originalName}</p>
+                      <p className="mt-1 text-[11px] font-bold text-slate-500">{upload.purpose} · {upload.ownerName || 'بدون مالك'} · {(upload.size / 1024).toFixed(1)} KB</p>
+                      <div className="mt-3 flex gap-2">
+                        <a href={upload.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-brand-navy">فتح</a>
+                        <button onClick={() => removeUpload(upload.id)} className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-black text-red-700">حذف</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+          )}
+
+          {activeTab === 'roles' && (
+            <section className="rounded-3xl border border-slate-200 bg-white p-5">
+              <div className="mb-5">
+                <h4 className="text-lg font-black text-brand-dark">الأدوار والصلاحيات</h4>
+                <p className="text-sm font-bold text-slate-500">إدارة وصول الإدارة للموارد: مستخدمون، قضايا، محتوى، إعدادات، وملفات.</p>
+              </div>
+              <div className="grid gap-4">
+                {roles.map((role) => (
+                  <div key={role.id} className="rounded-[2rem] bg-slate-50 p-4">
+                    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <p className="text-sm font-black text-brand-dark">{role.label}</p>
+                        <p className="text-[11px] font-bold text-slate-500">{role.description || role.key}</p>
+                      </div>
+                      <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-600">{role.permissions?.length || 0} صلاحية</span>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+                      {permissions.map((permission) => (
+                        <label key={`${role.id}-${permission.key}`} className="flex items-start gap-3 rounded-2xl bg-white p-3 text-right">
+                          <input
+                            type="checkbox"
+                            checked={(role.permissions || []).includes(permission.key)}
+                            onChange={() => toggleRolePermission(role, permission.key)}
+                            className="mt-1 h-4 w-4 accent-brand-navy"
+                          />
+                          <span>
+                            <span className="block text-xs font-black text-brand-dark">{permission.label}</span>
+                            <span className="block text-[10px] font-bold text-slate-500">{permission.group}</span>
+                          </span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
           )}
 
           {activeTab === 'system' && (

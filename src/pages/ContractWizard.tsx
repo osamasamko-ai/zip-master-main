@@ -380,7 +380,7 @@ export default function ContractWizard() {
         if (status === 'signed' || status === 'active') return 'success';
         if (status === 'draft') return 'warning';
         if (status === 'waiting_buyer') return 'info';
-        return 'secondary';
+        return 'neutral';
     };
 
     const getContractStatusLabel = (status: string) => {
