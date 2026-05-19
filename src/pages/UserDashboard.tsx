@@ -207,7 +207,7 @@ function DashboardEmptyState({
         <button
           type="button"
           onClick={onAction}
-          className="mt-5 rounded-xl bg-brand-navy px-4 py-3 text-sm font-black text-white transition hover:bg-brand-dark"
+          className="mt-5 rounded-xl bg-brand-navy px-4 py-3 text-sm font-black text-white transition hover:bg-brand-dark focus-ring"
         >
           {actionLabel}
         </button>
@@ -255,6 +255,7 @@ export default function UserDashboard() {
   const { followedIds: followedLawyers, toggleFollow, isPending, totalFollowed } = useFollowedLawyers();
 
   const [serviceCategory, setServiceCategory] = useState<string>('الكل');
+  const [showInsightBanner, setShowInsightBanner] = useState(true);
 
   const cases = dashboardData?.cases ?? [];
   const documents = dashboardData?.documents ?? [];
@@ -606,6 +607,52 @@ export default function UserDashboard() {
   }, [headerFocus, priorityQueue, priorityRangeLimit]);
   const topPriority = filteredPriorityQueue[0] ?? priorityQueue[0] ?? null;
   const urgentItems = filteredPriorityQueue.slice(0, 4);
+  const pendingPayments = useMemo(
+    () => payments.filter((item) => item.status !== 'مدفوع'),
+    [payments],
+  );
+
+  const dashboardSignals = useMemo(
+    () => [
+      {
+        id: 'priority',
+        label: 'أولوية',
+        value: priorityQueue.length.toLocaleString('ar-IQ'),
+        note: priorityQueue.length > 0 ? 'تحتاج مراجعة' : 'لا توجد',
+        icon: 'fa-solid fa-bolt',
+        tone: 'bg-red-50 text-red-700 border-red-100',
+        action: () => setActiveTab('overview'),
+      },
+      {
+        id: 'documents',
+        label: 'مستندات',
+        value: requiredDocuments.length.toLocaleString('ar-IQ'),
+        note: requiredDocuments.length > 0 ? 'مطلوبة' : 'مكتملة',
+        icon: 'fa-solid fa-file-arrow-up',
+        tone: 'bg-amber-50 text-amber-700 border-amber-100',
+        action: () => setActiveTab('documents'),
+      },
+      {
+        id: 'schedule',
+        label: 'موعد قريب',
+        value: schedule.length > 0 ? schedule.length.toLocaleString('ar-IQ') : '0',
+        note: upcomingScheduleItem?.time ?? 'لا يوجد',
+        icon: 'fa-regular fa-calendar-check',
+        tone: 'bg-sky-50 text-sky-700 border-sky-100',
+        action: () => setActiveTab('schedule'),
+      },
+      {
+        id: 'payments',
+        label: 'مدفوعات',
+        value: pendingPayments.length.toLocaleString('ar-IQ'),
+        note: pendingPayments.length > 0 ? 'بانتظارك' : 'مستقرة',
+        icon: 'fa-solid fa-wallet',
+        tone: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+        action: () => setActiveTab('payments'),
+      },
+    ],
+    [pendingPayments.length, priorityQueue.length, requiredDocuments.length, schedule.length, upcomingScheduleItem?.time],
+  );
 
   const legalTimeline = useMemo<TimelineItem[]>(() => {
     const caseEvents = cases.slice(0, 3).map((item) => ({
@@ -1966,21 +2013,40 @@ export default function UserDashboard() {
 
   return (
     <div className="app-view fade-in w-full max-w-full overflow-x-hidden">
-      <div className="mb-5 flex items-center justify-between rounded-2xl border border-white/10 bg-brand-navy/95 p-4 text-white shadow-lg shadow-brand-navy/20 backdrop-blur-md animate-in slide-in-from-top duration-500">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="hidden sm:flex items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3 py-1.5">
-            <i className="fa-solid fa-vault text-brand-gold text-xs"></i>
-            <span className="text-xs font-black">{availableBalance.toLocaleString('ar-IQ')} د.ع</span>
-          </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/10">
-            <i className="fa-solid fa-sparkles text-brand-gold"></i>
-          </div>
-          <p className="text-xs font-black md:text-sm">
-            توصية ذكية: {topPriority ? topPriority.reason : executiveSummary}
-          </p>
-        </div>
-        <button className="flex h-8 w-8 items-center justify-center rounded-lg text-white/50 transition hover:bg-white/10 hover:text-white"><i className="fa-solid fa-xmark"></i></button>
-      </div>
+      <AnimatePresence>
+        {showInsightBanner && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
+            className="mb-5 flex items-start justify-between gap-3 rounded-2xl border border-white/10 bg-brand-navy/95 p-4 text-white shadow-lg shadow-brand-navy/20 backdrop-blur-md"
+          >
+            <div className="flex min-w-0 items-start gap-3">
+              <div className="hidden shrink-0 items-center gap-2 rounded-xl border border-white/10 bg-white/10 px-3 py-1.5 sm:flex">
+                <i className="fa-solid fa-vault text-xs text-brand-gold"></i>
+                <span className="text-xs font-black">{availableBalance.toLocaleString('ar-IQ')} د.ع</span>
+              </div>
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10">
+                <i className="fa-solid fa-sparkles text-brand-gold"></i>
+              </div>
+              <div className="min-w-0 text-right">
+                <p className="text-xs font-black text-brand-lightgold">توصية ذكية</p>
+                <p className="mt-1 text-xs font-bold leading-6 text-white md:text-sm">
+                  {topPriority ? topPriority.reason : executiveSummary}
+                </p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowInsightBanner(false)}
+              aria-label="إخفاء التوصية"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-white/60 transition hover:bg-white/10 hover:text-white focus-ring"
+            >
+              <i className="fa-solid fa-xmark"></i>
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className="rounded-[32px] border border-slate-200 bg-white shadow-[0_24px_70px_-40px_rgba(15,23,42,0.45)] overflow-hidden">
         <div className="border-b border-slate-200 bg-[linear-gradient(135deg,#ffffff_0%,#f8fafc_52%,#eef2ff_100%)] px-4 py-5 sm:px-6">
@@ -2005,10 +2071,44 @@ export default function UserDashboard() {
                     ? 'أهلاً بك في مركز عملياتك القانوني. تابع مستجدات قضاياك، أنجز المهام المطلوبة، وتواصل مع خبرائك بضغطة زر واحدة.'
                     : `أنت الآن داخل قسم ${activeTabMeta.label}. ${activeTabMeta.description} مع عرض مهيأ للاستخدام المكثف والوصول الأسرع إلى الإجراءات المهمة.`}
                 </p>
-                <div className="mt-4 rounded-[1.6rem] border border-brand-navy/10 bg-white/85 px-4 py-4 shadow-sm">
-                  <p className="text-[11px] font-black uppercase tracking-[0.24em] text-brand-gold">Executive Summary</p>
-                  <p className="mt-2 text-sm font-bold leading-7 text-brand-dark">{executiveSummary}</p>
+                <div className="mt-4 rounded-[1.25rem] border border-brand-navy/10 bg-white/90 px-4 py-4 shadow-sm">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="text-right">
+                      <p className="text-[11px] font-black uppercase tracking-[0.24em] text-brand-gold">Executive Summary</p>
+                      <p className="mt-2 text-sm font-bold leading-7 text-brand-dark">{executiveSummary}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={topPriority?.primaryAction ?? (() => setActiveTab('cases'))}
+                      className="inline-flex shrink-0 items-center justify-center rounded-xl bg-brand-dark px-4 py-3 text-sm font-black text-white transition hover:bg-brand-navy focus-ring"
+                    >
+                      <i className={`${topPriority?.icon ?? 'fa-solid fa-folder-open'} ml-2`}></i>
+                      {topPriority?.cta ?? 'فتح القضايا'}
+                    </button>
+                  </div>
                 </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+                {dashboardSignals.map((signal) => (
+                  <button
+                    key={signal.id}
+                    type="button"
+                    onClick={signal.action}
+                    className={`flex items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-right transition hover:-translate-y-0.5 hover:shadow-sm focus-ring ${signal.tone}`}
+                  >
+                    <div className="min-w-0">
+                      <p className="text-[11px] font-black">{signal.label}</p>
+                      <p className="mt-1 truncate text-xs font-bold opacity-75">{signal.note}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xl font-black">{signal.value}</span>
+                      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/70">
+                        <i className={`${signal.icon} text-sm`}></i>
+                      </span>
+                    </div>
+                  </button>
+                ))}
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -2020,7 +2120,8 @@ export default function UserDashboard() {
                     transition={{ delay: idx * 0.05 }}
                     whileHover={{ y: -4, boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1)" }}
                     onClick={() => handleStatClick(stat.label)}
-                    className={`group relative overflow-hidden rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 text-right shadow-sm transition-all hover:border-brand-navy/30 ${isInitialLoading ? 'animate-pulse opacity-50' : ''}`}
+                    aria-label={`${stat.label}: ${stat.value}`}
+                    className={`group relative overflow-hidden rounded-2xl border border-slate-200 bg-white/90 px-4 py-4 text-right shadow-sm transition-all hover:border-brand-navy/30 focus-ring ${isInitialLoading ? 'animate-pulse opacity-50' : ''}`}
                   >
                     <div className="flex items-center justify-between">
                       <i className={`${stat.icon} ${stat.tone} opacity-50 group-hover:opacity-100 transition-opacity`}></i>
@@ -2037,11 +2138,34 @@ export default function UserDashboard() {
             </div>
             <div className="rounded-3xl border border-slate-200 bg-white/90 p-4 shadow-sm min-w-0">
               <div className="flex flex-col gap-4">
-                <div className="text-right">
-                  <p className="text-sm font-bold text-brand-dark">إجراءات وفلاتر سريعة</p>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">
-                    اختصر الوصول للأعمال اليومية عبر إجراءات مباشرة وفلاتر عرض خفيفة.
-                  </p>
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsCommandPaletteOpen(true)}
+                    className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-500 transition hover:border-brand-navy hover:text-brand-navy focus-ring"
+                    aria-label="فتح البحث السريع"
+                    title="البحث السريع"
+                  >
+                    <i className="fa-solid fa-magnifying-glass"></i>
+                  </button>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-brand-dark">مركز التحكم اليومي</p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      أوضاع عمل، فلاتر، وإجراءات مباشرة من مكان واحد.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-brand-gold/20 bg-brand-gold/10 px-4 py-3 text-right">
+                  <div className="flex items-start justify-between gap-3">
+                    <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-brand-dark shadow-sm">
+                      {currentModeMeta.label}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-sm font-black text-brand-dark">{topPriority ? topPriority.title : 'لا يوجد إجراء حرج الآن'}</p>
+                      <p className="mt-1 text-xs font-bold leading-5 text-slate-600">{topPriority ? topPriority.note : 'راجع الخدمات أو جهز مستنداتك القادمة بهدوء.'}</p>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="rounded-2xl border border-slate-200 bg-white/70 p-3">
@@ -2062,16 +2186,6 @@ export default function UserDashboard() {
                       </button>
                     ))}
                   </div>
-                </div>
-
-                <div className="flex justify-end mt-4 lg:mt-0">
-                  <button
-                    onClick={() => setIsCommandPaletteOpen(true)}
-                    className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2 text-sm text-slate-400 transition hover:border-brand-navy hover:text-brand-navy"
-                  >
-                    <span>البحث السريع (Ctrl+K)</span>
-                    <i className="fa-solid fa-magnifying-glass"></i>
-                  </button>
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -2153,24 +2267,25 @@ export default function UserDashboard() {
           </div >
         </div >
 
-        <div className="border-b border-slate-200 bg-white px-4 py-3 sm:px-6">
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar p-1 bg-slate-50/80 rounded-3xl" role="tablist" aria-label="أقسام لوحة المستخدم">
+        <div className="sticky top-0 z-40 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur-md sm:px-6">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar rounded-2xl bg-slate-50/90 p-1 shadow-inner" role="tablist" aria-label="أقسام لوحة المستخدم">
             {DASHBOARD_TABS.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 role="tab"
+                aria-label={tab.label}
                 aria-selected={activeTab === tab.id}
                 id={`dashboard-tab-${tab.id}`}
                 aria-controls={`dashboard-panel-${tab.id}`}
                 onClick={() => setActiveTab(tab.id)}
-                className={`group relative flex min-w-[120px] md:min-w-[150px] items-center gap-3 rounded-[1.25rem] px-5 py-3 text-right transition-all duration-300 focus:outline-none ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-brand-navy'
+                className={`group relative flex min-w-[116px] items-center gap-3 rounded-xl px-4 py-3 text-right transition-all duration-300 focus:outline-none focus-ring md:min-w-[150px] ${activeTab === tab.id ? 'text-white' : 'text-slate-500 hover:text-brand-navy'
                   }`}
               >
                 {activeTab === tab.id && (
                   <motion.div
                     layoutId="activeUserDashboardTab"
-                    className="absolute inset-0 z-0 rounded-[1.25rem] bg-brand-navy shadow-lg shadow-brand-navy/20"
+                    className="absolute inset-0 z-0 rounded-xl bg-brand-navy shadow-lg shadow-brand-navy/20"
                     transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                   />
                 )}
@@ -2179,8 +2294,8 @@ export default function UserDashboard() {
                   <i className={`${tab.icon} text-xs ${activeTab === tab.id ? 'text-white' : 'text-brand-navy'}`}></i>
                 </div>
                 <div className="relative z-10 min-w-0">
-                  <p className="text-sm font-bold whitespace-nowrap">{tab.label}</p>
-                  <p className={`truncate text-[10px] font-bold ${activeTab === tab.id ? 'text-white/70' : 'text-slate-400'}`}>
+                  <p className="whitespace-nowrap text-sm font-bold">{tab.label}</p>
+                  <p className={`hidden truncate text-[10px] font-bold md:block ${activeTab === tab.id ? 'text-white/70' : 'text-slate-400'}`}>
                     {tab.description}
                   </p>
                 </div>
@@ -2251,6 +2366,7 @@ export default function UserDashboard() {
                   <input
                     autoFocus
                     placeholder="ابحث عن ملف، موعد، أو إجراء..."
+                    aria-label="Search dashboard"
                     className="w-full bg-transparent pr-12 text-lg font-bold text-brand-dark outline-none placeholder:text-slate-300 text-right"
                     value={commandQuery}
                     onChange={(e) => setCommandQuery(e.target.value)}

@@ -68,6 +68,15 @@ body {
   scrollbar-color: #C5A059 transparent;
 }
 
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 :where(body, button, input, textarea, select, a, section, article, aside, header, footer, nav, main, div, span, p, h1, h2, h3, h4, h5, h6) {
   transition:
     background-color 180ms ease,
@@ -199,4 +208,13 @@ body {
 
 .nav-item.active::after {
   width: 100%;
+}
+
+/* Accessibility: consistent focus ring for keyboard users */
+.focus-ring:focus {
+  outline: none;
+}
+.focus-ring:focus-visible {
+  box-shadow: 0 0 0 4px rgba(26, 35, 126, 0.16);
+  border-radius: 0.5rem;
 }
