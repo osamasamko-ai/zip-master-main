@@ -57,6 +57,7 @@ model User {
   feedPosts              FeedPost[]
   feedComments           FeedComment[]
   feedLikes              FeedLike[]
+  feedSaves              FeedSave[]
   contractTemplatesOwned ContractTemplate[]
   contractClausesOwned   ContractClause[]
   contractsOwned         Contract[]         @relation("ContractOwner")
@@ -349,21 +350,27 @@ model Review {
 }
 
 model FeedPost {
-  id        String   @id @default(uuid())
-  authorId  String
-  author    User     @relation(fields: [authorId], references: [id])
-  content   String
-  mediaUrl  String?
-  mediaType String?
-  status    String   @default("published")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  authorId   String
+  author     User     @relation(fields: [authorId], references: [id])
+  content    String
+  category   String   @default("معلومة قانونية")
+  mediaUrl   String?
+  mediaType  String?
+  status     String   @default("published")
+  pinned     Boolean  @default(false)
+  featured   Boolean  @default(false)
+  shareCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   comments FeedComment[]
   likes    FeedLike[]
+  saves    FeedSave[]
 
   @@index([authorId, createdAt])
-  @@index([status, createdAt])
+  @@index([status, pinned, createdAt])
+  @@index([featured, createdAt])
   @@index([mediaType, createdAt])
 }
 
@@ -382,6 +389,17 @@ model FeedComment {
 }
 
 model FeedLike {
+  postId    String
+  post      FeedPost @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@id([postId, userId])
+  @@index([userId, createdAt])
+}
+
+model FeedSave {
   postId    String
   post      FeedPost @relation(fields: [postId], references: [id])
   userId    String

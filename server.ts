@@ -137,6 +137,8 @@ import {
   createFeedPost,
   deleteFeedPost,
   listFeedPosts,
+  shareFeedPost,
+  toggleFeedSave,
   toggleFeedLike,
   updateFeedPost,
 } from './src/server/feedData';
@@ -773,7 +775,7 @@ async function startServer() {
     try {
       const currentUser = (req as any).user;
       const filter = typeof req.query.filter === 'string' ? req.query.filter : 'all';
-      const allowedFilters = ['all', 'videos', 'lawyers', 'admins'];
+      const allowedFilters = ['all', 'videos', 'articles', 'lawyers', 'admins', 'popular'];
       const posts = await listFeedPosts(currentUser.userId, allowedFilters.includes(filter) ? filter as any : 'all');
       res.json({ data: posts });
     } catch (error) {
@@ -797,6 +799,7 @@ async function startServer() {
       }
       const post = await createFeedPost(currentUser.userId, {
         content: req.body.content,
+        category: req.body.category,
         mediaUrl: req.file ? `/uploads/${req.file.filename}` : null,
         mediaType,
       });
@@ -810,7 +813,7 @@ async function startServer() {
   app.put('/api/app/feed/:id', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
-      if (currentUser.role === 'admin' && req.body.status === 'hidden' && !(await roleHasPermission(currentUser.role, 'feed.manage'))) {
+      if (currentUser.role === 'admin' && (req.body.status === 'hidden' || typeof req.body.pinned === 'boolean' || typeof req.body.featured === 'boolean') && !(await roleHasPermission(currentUser.role, 'feed.manage'))) {
         return res.status(403).json({ error: 'Missing permission: feed.manage' });
       }
       const post = await updateFeedPost(currentUser.userId, req.params.id, req.body);
@@ -840,6 +843,26 @@ async function startServer() {
       res.json({ data: post });
     } catch (error: any) {
       res.status(400).json({ error: error.message || 'تعذر تحديث الإعجاب' });
+    }
+  });
+
+  app.post('/api/app/feed/:id/save', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const post = await toggleFeedSave(currentUser.userId, req.params.id);
+      res.json({ data: post });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'تعذر حفظ المنشور' });
+    }
+  });
+
+  app.post('/api/app/feed/:id/share', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const post = await shareFeedPost(currentUser.userId, req.params.id);
+      res.json({ data: post });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'تعذر مشاركة المنشور' });
     }
   });
 

@@ -1,13 +1,17 @@
 import { prisma } from './prisma';
 
-type FeedFilter = 'all' | 'videos' | 'lawyers' | 'admins';
+type FeedFilter = 'all' | 'videos' | 'articles' | 'lawyers' | 'admins' | 'popular';
 
 const POST_SELECT = {
   id: true,
   content: true,
+  category: true,
   mediaUrl: true,
   mediaType: true,
   status: true,
+  pinned: true,
+  featured: true,
+  shareCount: true,
   createdAt: true,
   updatedAt: true,
   author: {
@@ -27,6 +31,7 @@ const POST_SELECT = {
     },
   },
   likes: { select: { userId: true } },
+  saves: { select: { userId: true } },
   comments: {
     orderBy: { createdAt: 'asc' as const },
     select: {
@@ -69,7 +74,11 @@ function mapPost(post: any, viewerId?: string) {
     content: post.content,
     mediaUrl: post.mediaUrl,
     mediaType: post.mediaType,
+    category: post.category,
     status: post.status,
+    pinned: post.pinned,
+    featured: post.featured,
+    shareCount: post.shareCount,
     createdAt: post.createdAt,
     updatedAt: post.updatedAt,
     author: {
@@ -81,8 +90,11 @@ function mapPost(post: any, viewerId?: string) {
       specialty: post.author.lawyerProfile?.specialty || '',
     },
     likesCount: post.likes.length,
+    savesCount: post.saves.length,
     commentsCount: post.comments.length,
     likedByMe: Boolean(viewerId && post.likes.some((like: any) => like.userId === viewerId)),
+    savedByMe: Boolean(viewerId && post.saves.some((save: any) => save.userId === viewerId)),
+    readingTime: Math.max(1, Math.ceil((post.content || '').split(/\s+/).filter(Boolean).length / 180)),
     comments: post.comments.map((comment: any) => ({
       id: comment.id,
       content: comment.content,
@@ -116,6 +128,7 @@ export async function listFeedPosts(viewerId: string, filter: FeedFilter = 'all'
     where: {
       status: 'published',
       mediaType: filter === 'videos' ? 'video' : undefined,
+      AND: filter === 'articles' ? [{ mediaType: { not: 'video' } }] : undefined,
       author: {
         role: roleFilter?.role,
         OR: [
@@ -125,13 +138,15 @@ export async function listFeedPosts(viewerId: string, filter: FeedFilter = 'all'
       },
     },
     select: POST_SELECT,
-    orderBy: { createdAt: 'desc' },
+    orderBy: filter === 'popular'
+      ? [{ pinned: 'desc' }, { likes: { _count: 'desc' } }, { comments: { _count: 'desc' } }, { createdAt: 'desc' }]
+      : [{ pinned: 'desc' }, { featured: 'desc' }, { createdAt: 'desc' }],
   });
 
   return posts.map((post) => mapPost(post, viewerId));
 }
 
-export async function createFeedPost(userId: string, payload: { content?: string; mediaUrl?: string | null; mediaType?: string | null }) {
+export async function createFeedPost(userId: string, payload: { content?: string; category?: string; mediaUrl?: string | null; mediaType?: string | null }) {
   const user = await getCurrentUser(userId);
   if (!canPublish(user)) {
     throw new Error('only verified lawyers and admins can create posts');
@@ -149,6 +164,7 @@ export async function createFeedPost(userId: string, payload: { content?: string
     data: {
       authorId: userId,
       content,
+      category: cleanContent(payload.category, 60) || 'معلومة قانونية',
       mediaUrl,
       mediaType,
       status: 'published',
@@ -159,7 +175,7 @@ export async function createFeedPost(userId: string, payload: { content?: string
   return mapPost(post, userId);
 }
 
-export async function updateFeedPost(userId: string, postId: string, payload: { content?: string; status?: string }) {
+export async function updateFeedPost(userId: string, postId: string, payload: { content?: string; status?: string; pinned?: boolean; featured?: boolean }) {
   const user = await getCurrentUser(userId);
   const existing = await prisma.feedPost.findUnique({ where: { id: postId }, select: { authorId: true } });
   if (!existing) throw new Error('post not found');
@@ -171,6 +187,8 @@ export async function updateFeedPost(userId: string, postId: string, payload: { 
     data: {
       content: payload.content == null ? undefined : cleanContent(payload.content),
       status,
+      pinned: user?.role === 'admin' && typeof payload.pinned === 'boolean' ? payload.pinned : undefined,
+      featured: user?.role === 'admin' && typeof payload.featured === 'boolean' ? payload.featured : undefined,
     },
     select: POST_SELECT,
   });
@@ -185,10 +203,37 @@ export async function deleteFeedPost(userId: string, postId: string) {
 
   await prisma.$transaction([
     prisma.feedLike.deleteMany({ where: { postId } }),
+    prisma.feedSave.deleteMany({ where: { postId } }),
     prisma.feedComment.deleteMany({ where: { postId } }),
     prisma.feedPost.delete({ where: { id: postId } }),
   ]);
   return true;
+}
+
+export async function toggleFeedSave(userId: string, postId: string) {
+  const post = await prisma.feedPost.findFirst({ where: { id: postId, status: 'published' }, select: { id: true } });
+  if (!post) throw new Error('post not found');
+
+  const existing = await prisma.feedSave.findUnique({ where: { postId_userId: { postId, userId } } });
+  if (existing) {
+    await prisma.feedSave.delete({ where: { postId_userId: { postId, userId } } });
+  } else {
+    await prisma.feedSave.create({ data: { postId, userId } });
+  }
+
+  const updated = await prisma.feedPost.findUnique({ where: { id: postId }, select: POST_SELECT });
+  return mapPost(updated, userId);
+}
+
+export async function shareFeedPost(userId: string, postId: string) {
+  const post = await prisma.feedPost.findFirst({ where: { id: postId, status: 'published' }, select: { id: true } });
+  if (!post) throw new Error('post not found');
+  const updated = await prisma.feedPost.update({
+    where: { id: postId },
+    data: { shareCount: { increment: 1 } },
+    select: POST_SELECT,
+  });
+  return mapPost(updated, userId);
 }
 
 export async function toggleFeedLike(userId: string, postId: string) {

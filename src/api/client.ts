@@ -340,9 +340,10 @@ class ApiClient {
         return response.data;
     }
 
-    async createFeedPost(data: { content: string; media?: File | null }): Promise<ApiResponse<any>> {
+    async createFeedPost(data: { content: string; category?: string; media?: File | null }): Promise<ApiResponse<any>> {
         const formData = new FormData();
         formData.append('content', data.content);
+        if (data.category) formData.append('category', data.category);
         if (data.media) formData.append('media', data.media);
         const response = await this.client.post('/api/app/feed', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
@@ -362,6 +363,16 @@ class ApiClient {
 
     async likeFeedPost(id: string): Promise<ApiResponse<any>> {
         const response = await this.client.post(`/api/app/feed/${id}/like`);
+        return response.data;
+    }
+
+    async saveFeedPost(id: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/feed/${id}/save`);
+        return response.data;
+    }
+
+    async shareFeedPost(id: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/feed/${id}/share`);
         return response.data;
     }
 
