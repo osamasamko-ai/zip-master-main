@@ -1,6 +1,8 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { prisma } from './prisma';
 function parseAttachments(value: string | string[] | null | undefined): string[] {
     if (Array.isArray(value)) return value;
@@ -1007,6 +1009,18 @@ function slugify(value: string) {
         .slice(0, 80) || crypto.randomUUID();
 }
 
+function cleanText(value: unknown, fallback = '') {
+    return typeof value === 'string' ? value.trim().slice(0, 5000) : fallback;
+}
+
+function cleanKey(value: unknown, fallback = '') {
+    return cleanText(value, fallback).toLowerCase().replace(/[^a-z0-9._-]/g, '').slice(0, 80);
+}
+
+function cleanStatus(value: unknown, allowed: string[], fallback: string) {
+    return typeof value === 'string' && allowed.includes(value) ? value : fallback;
+}
+
 export async function getCategories(type?: string): Promise<CategoryRecord[]> {
     return prisma.category.findMany({
         where: type ? { type } : undefined,
@@ -1015,19 +1029,21 @@ export async function getCategories(type?: string): Promise<CategoryRecord[]> {
 }
 
 export async function addCategory(payload: Partial<CategoryRecord>): Promise<CategoryRecord> {
-    if (!payload.type || !payload.name) {
+    const type = cleanKey(payload.type, 'content');
+    const name = cleanText(payload.name);
+    if (!type || !name) {
         throw new Error('type and name are required');
     }
     return prisma.category.create({
         data: {
-            type: payload.type,
-            name: payload.name,
-            slug: payload.slug || slugify(payload.name),
-            description: payload.description || '',
-            icon: payload.icon || 'fa-solid fa-layer-group',
-            color: payload.color || 'blue',
+            type,
+            name,
+            slug: cleanKey(payload.slug) || slugify(name),
+            description: cleanText(payload.description),
+            icon: cleanText(payload.icon, 'fa-solid fa-layer-group'),
+            color: cleanText(payload.color, 'blue').slice(0, 40),
             active: payload.active !== false,
-            sortOrder: payload.sortOrder ?? 0,
+            sortOrder: Number.isFinite(payload.sortOrder) ? Number(payload.sortOrder) : 0,
         },
     }) as any;
 }
@@ -1036,26 +1052,30 @@ export async function updateCategory(id: string, payload: Partial<CategoryRecord
     return prisma.category.update({
         where: { id },
         data: {
-            type: payload.type,
-            name: payload.name,
-            slug: payload.slug,
-            description: payload.description,
-            icon: payload.icon,
-            color: payload.color,
+            type: payload.type ? cleanKey(payload.type) : undefined,
+            name: payload.name ? cleanText(payload.name) : undefined,
+            slug: payload.slug ? cleanKey(payload.slug) : undefined,
+            description: payload.description == null ? undefined : cleanText(payload.description),
+            icon: payload.icon == null ? undefined : cleanText(payload.icon, 'fa-solid fa-layer-group'),
+            color: payload.color == null ? undefined : cleanText(payload.color, 'blue').slice(0, 40),
             active: payload.active,
-            sortOrder: payload.sortOrder,
+            sortOrder: Number.isFinite(payload.sortOrder) ? Number(payload.sortOrder) : undefined,
         },
     }) as any;
 }
 
 export async function deleteCategory(id: string) {
-    await prisma.category.delete({ where: { id } });
+    await prisma.$transaction([
+        prisma.legalService.updateMany({ where: { categoryId: id }, data: { categoryId: null } }),
+        prisma.contractClause.updateMany({ where: { categoryId: id }, data: { categoryId: null } }),
+        prisma.category.delete({ where: { id } }),
+    ]);
     return true;
 }
 
 export async function reorderCategories(items: Array<{ id: string; sortOrder: number }>) {
-    await prisma.$transaction(items.map((item) =>
-        prisma.category.update({ where: { id: item.id }, data: { sortOrder: item.sortOrder } })
+    await prisma.$transaction(items.filter((item) => item.id && Number.isFinite(item.sortOrder)).map((item) =>
+        prisma.category.update({ where: { id: item.id }, data: { sortOrder: Number(item.sortOrder) } })
     ));
     return getCategories();
 }
@@ -1085,10 +1105,10 @@ export async function addUploadRecord(payload: {
     return prisma.upload.create({
         data: {
             ownerId: payload.ownerId || null,
-            resourceType: payload.resourceType,
+            resourceType: cleanKey(payload.resourceType, 'media'),
             resourceId: payload.resourceId || null,
-            purpose: payload.purpose,
-            originalName: payload.originalName,
+            purpose: cleanKey(payload.purpose, 'admin_media'),
+            originalName: cleanText(payload.originalName, 'upload'),
             filename: payload.filename,
             url: payload.url,
             mimeType: payload.mimeType,
@@ -1101,17 +1121,27 @@ export async function updateUploadRecord(id: string, payload: Partial<UploadReco
     return prisma.upload.update({
         where: { id },
         data: {
-            ownerId: payload.ownerId,
-            resourceType: payload.resourceType,
+            resourceType: payload.resourceType ? cleanKey(payload.resourceType) : undefined,
             resourceId: payload.resourceId,
-            purpose: payload.purpose,
-            status: payload.status,
+            purpose: payload.purpose ? cleanKey(payload.purpose) : undefined,
+            status: payload.status ? cleanStatus(payload.status, ['active', 'archived', 'quarantined'], 'active') : undefined,
         },
     });
 }
 
 export async function deleteUploadRecord(id: string) {
-    await prisma.upload.delete({ where: { id } });
+    const upload = await prisma.upload.findUnique({ where: { id }, select: { filename: true } });
+    await prisma.$transaction([
+        prisma.siteContentBlock.updateMany({ where: { mediaUploadId: id }, data: { mediaUploadId: null } }),
+        prisma.upload.delete({ where: { id } }),
+    ]);
+    if (upload?.filename) {
+        const uploadsDir = path.resolve(process.cwd(), 'uploads');
+        const filePath = path.resolve(uploadsDir, path.basename(upload.filename));
+        if (filePath.startsWith(uploadsDir) && fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+        }
+    }
     return true;
 }
 
@@ -1123,15 +1153,17 @@ export async function getPages(): Promise<PageRecord[]> {
 }
 
 export async function addPage(payload: Partial<PageRecord>): Promise<PageRecord> {
-    if (!payload.title || !payload.route) throw new Error('title and route are required');
+    const title = cleanText(payload.title);
+    const route = cleanText(payload.route);
+    if (!title || !route || !route.startsWith('/')) throw new Error('title and a root-relative route are required');
     return prisma.page.create({
         data: {
-            title: payload.title,
-            route: payload.route,
-            slug: payload.slug || slugify(payload.route.replace(/^\//, '') || payload.title),
-            status: payload.status || 'draft',
-            seoTitle: payload.seoTitle,
-            seoDescription: payload.seoDescription,
+            title,
+            route,
+            slug: cleanKey(payload.slug) || slugify(route.replace(/^\//, '') || title),
+            status: cleanStatus(payload.status, ['draft', 'published', 'archived'], 'draft'),
+            seoTitle: payload.seoTitle == null ? undefined : cleanText(payload.seoTitle),
+            seoDescription: payload.seoDescription == null ? undefined : cleanText(payload.seoDescription),
         },
         include: { blocks: true },
     }) as any;
@@ -1141,12 +1173,12 @@ export async function updatePage(id: string, payload: Partial<PageRecord>): Prom
     return prisma.page.update({
         where: { id },
         data: {
-            title: payload.title,
-            route: payload.route,
-            slug: payload.slug,
-            status: payload.status,
-            seoTitle: payload.seoTitle,
-            seoDescription: payload.seoDescription,
+            title: payload.title == null ? undefined : cleanText(payload.title),
+            route: payload.route == null ? undefined : cleanText(payload.route),
+            slug: payload.slug == null ? undefined : cleanKey(payload.slug),
+            status: payload.status == null ? undefined : cleanStatus(payload.status, ['draft', 'published', 'archived'], 'draft'),
+            seoTitle: payload.seoTitle == null ? undefined : cleanText(payload.seoTitle),
+            seoDescription: payload.seoDescription == null ? undefined : cleanText(payload.seoDescription),
         },
         include: { blocks: { orderBy: { sortOrder: 'asc' } } },
     }) as any;
@@ -1159,36 +1191,46 @@ export async function deletePage(id: string) {
 }
 
 export async function addPageBlock(pageId: string, payload: any) {
+    const page = await prisma.page.findUnique({ where: { id: pageId }, select: { id: true } });
+    if (!page) throw new Error('page not found');
     return prisma.siteContentBlock.create({
         data: {
             pageId,
-            key: payload.key || slugify(payload.title || payload.type || 'block'),
-            type: payload.type || 'text',
-            title: payload.title || '',
-            body: payload.body || '',
+            key: cleanKey(payload.key) || slugify(payload.title || payload.type || 'block'),
+            type: cleanKey(payload.type, 'text'),
+            title: cleanText(payload.title),
+            body: cleanText(payload.body),
             mediaUploadId: payload.mediaUploadId || null,
-            sortOrder: payload.sortOrder ?? 0,
+            sortOrder: Number.isFinite(payload.sortOrder) ? Number(payload.sortOrder) : 0,
             active: payload.active !== false,
         },
     });
 }
 
-export async function updatePageBlock(blockId: string, payload: any) {
+export async function updatePageBlock(blockId: string, payload: any, pageId?: string) {
+    if (pageId) {
+        const block = await prisma.siteContentBlock.findFirst({ where: { id: blockId, pageId }, select: { id: true } });
+        if (!block) throw new Error('block not found for page');
+    }
     return prisma.siteContentBlock.update({
         where: { id: blockId },
         data: {
-            key: payload.key,
-            type: payload.type,
-            title: payload.title,
-            body: payload.body,
+            key: payload.key == null ? undefined : cleanKey(payload.key),
+            type: payload.type == null ? undefined : cleanKey(payload.type),
+            title: payload.title == null ? undefined : cleanText(payload.title),
+            body: payload.body == null ? undefined : cleanText(payload.body),
             mediaUploadId: payload.mediaUploadId,
-            sortOrder: payload.sortOrder,
+            sortOrder: Number.isFinite(payload.sortOrder) ? Number(payload.sortOrder) : undefined,
             active: payload.active,
         },
     });
 }
 
-export async function deletePageBlock(blockId: string) {
+export async function deletePageBlock(blockId: string, pageId?: string) {
+    if (pageId) {
+        const block = await prisma.siteContentBlock.findFirst({ where: { id: blockId, pageId }, select: { id: true } });
+        if (!block) throw new Error('block not found for page');
+    }
     await prisma.siteContentBlock.delete({ where: { id: blockId } });
     return true;
 }
@@ -1200,13 +1242,33 @@ const DEFAULT_PERMISSIONS = [
     'roles.manage', 'audit.read', 'kyc.manage', 'support.manage',
 ];
 
+const PERMISSION_LABELS: Record<string, { label: string; group: string }> = {
+    'users.read': { label: 'عرض المستخدمين', group: 'المستخدمون' },
+    'users.create': { label: 'إنشاء مستخدم', group: 'المستخدمون' },
+    'users.update': { label: 'تعديل المستخدمين', group: 'المستخدمون' },
+    'users.delete': { label: 'حذف المستخدمين', group: 'المستخدمون' },
+    'cases.read': { label: 'عرض القضايا', group: 'القضايا' },
+    'cases.create': { label: 'إنشاء القضايا', group: 'القضايا' },
+    'cases.update': { label: 'تعديل القضايا', group: 'القضايا' },
+    'cases.reassign': { label: 'إسناد القضايا', group: 'القضايا' },
+    'cases.delete': { label: 'حذف القضايا', group: 'القضايا' },
+    'content.manage': { label: 'إدارة المحتوى', group: 'المحتوى' },
+    'uploads.manage': { label: 'إدارة الملفات', group: 'المحتوى' },
+    'settings.manage': { label: 'إدارة الإعدادات', group: 'النظام' },
+    'billing.manage': { label: 'إدارة الأموال', group: 'الأموال' },
+    'roles.manage': { label: 'إدارة الصلاحيات', group: 'الصلاحيات' },
+    'audit.read': { label: 'عرض السجلات', group: 'التدقيق' },
+    'kyc.manage': { label: 'إدارة الاعتماد', group: 'الاعتماد' },
+    'support.manage': { label: 'إدارة الدعم', group: 'الدعم' },
+};
+
 export async function ensureRolesAndPermissions() {
     await Promise.all(DEFAULT_PERMISSIONS.map((key) => {
         const [resource, action] = key.split('.');
         return prisma.permission.upsert({
             where: { key },
-            update: {},
-            create: { key, resource, action, description: key },
+            update: { description: PERMISSION_LABELS[key]?.label || key },
+            create: { key, resource, action, description: PERMISSION_LABELS[key]?.label || key },
         });
     }));
 
@@ -1245,16 +1307,23 @@ export async function getRoles(): Promise<RoleRecord[]> {
 
 export async function getPermissions() {
     await ensureRolesAndPermissions();
-    return prisma.permission.findMany({ orderBy: [{ resource: 'asc' }, { action: 'asc' }] });
+    const rows = await prisma.permission.findMany({ orderBy: [{ resource: 'asc' }, { action: 'asc' }] });
+    return rows.map((permission) => ({
+        ...permission,
+        label: PERMISSION_LABELS[permission.key]?.label || permission.description || permission.key,
+        group: PERMISSION_LABELS[permission.key]?.group || permission.resource,
+    }));
 }
 
 export async function addRole(payload: Partial<RoleRecord>) {
-    if (!payload.key || !payload.label) throw new Error('key and label are required');
+    const key = cleanKey(payload.key);
+    const label = cleanText(payload.label);
+    if (!key || !label) throw new Error('key and label are required');
     return prisma.role.create({
         data: {
-            key: payload.key,
-            label: payload.label,
-            description: payload.description || '',
+            key,
+            label,
+            description: cleanText(payload.description),
             active: payload.active !== false,
             system: false,
         },
@@ -1262,23 +1331,44 @@ export async function addRole(payload: Partial<RoleRecord>) {
 }
 
 export async function updateRole(id: string, payload: Partial<RoleRecord>) {
+    const role = await prisma.role.findUnique({ where: { id } });
+    if (!role) throw new Error('role not found');
     return prisma.role.update({
         where: { id },
         data: {
-            label: payload.label,
-            description: payload.description,
-            active: payload.active,
+            label: payload.label == null ? undefined : cleanText(payload.label),
+            description: payload.description == null ? undefined : cleanText(payload.description),
+            active: role.system ? undefined : payload.active,
         },
     });
 }
 
 export async function updateRolePermissions(id: string, permissionKeys: string[]) {
-    const permissions = await prisma.permission.findMany({ where: { key: { in: permissionKeys } } });
+    const role = await prisma.role.findUnique({ where: { id } });
+    if (!role) throw new Error('role not found');
+    if (role.system) throw new Error('system role permissions cannot be changed');
+    const cleanedKeys = Array.from(new Set(permissionKeys.map((key) => cleanKey(key)).filter(Boolean)));
+    if (role.key === 'admin' && !cleanedKeys.includes('roles.manage')) {
+        throw new Error('admin role must keep roles.manage');
+    }
+    const permissions = await prisma.permission.findMany({ where: { key: { in: cleanedKeys } } });
     await prisma.rolePermission.deleteMany({ where: { roleId: id } });
     await prisma.rolePermission.createMany({
         data: permissions.map((permission) => ({ roleId: id, permissionId: permission.id })),
     });
     return getRoles();
+}
+
+export async function roleHasPermission(roleKey: string, permissionKey: string) {
+    await ensureRolesAndPermissions();
+    const permission = await prisma.rolePermission.findFirst({
+        where: {
+            role: { key: roleKey, active: true },
+            permission: { key: permissionKey },
+        },
+        select: { roleId: true },
+    });
+    return Boolean(permission);
 }
 
 export async function deleteRole(id: string) {
@@ -1342,30 +1432,42 @@ export async function updateAdminCase(id: string, payload: any) {
 }
 
 export async function addAdminCaseTimelineEntry(caseId: string, payload: any) {
+    const item = await prisma.case.findUnique({ where: { id: caseId }, select: { id: true } });
+    if (!item) throw new Error('case not found');
+    const title = cleanText(payload.title);
+    if (!title) throw new Error('timeline title is required');
     return prisma.caseTimelineEntry.create({
         data: {
             caseId,
-            dateLabel: payload.dateLabel || 'اليوم',
-            title: payload.title,
-            detail: payload.detail || '',
-            type: payload.type || 'system',
+            dateLabel: cleanText(payload.dateLabel, 'اليوم'),
+            title,
+            detail: cleanText(payload.detail),
+            type: cleanKey(payload.type, 'system'),
         },
     });
 }
 
-export async function updateAdminCaseTimelineEntry(id: string, payload: any) {
+export async function updateAdminCaseTimelineEntry(id: string, payload: any, caseId?: string) {
+    if (caseId) {
+        const entry = await prisma.caseTimelineEntry.findFirst({ where: { id, caseId }, select: { id: true } });
+        if (!entry) throw new Error('timeline entry not found for case');
+    }
     return prisma.caseTimelineEntry.update({
         where: { id },
         data: {
-            dateLabel: payload.dateLabel,
-            title: payload.title,
-            detail: payload.detail,
-            type: payload.type,
+            dateLabel: payload.dateLabel == null ? undefined : cleanText(payload.dateLabel),
+            title: payload.title == null ? undefined : cleanText(payload.title),
+            detail: payload.detail == null ? undefined : cleanText(payload.detail),
+            type: payload.type == null ? undefined : cleanKey(payload.type),
         },
     });
 }
 
-export async function deleteAdminCaseTimelineEntry(id: string) {
+export async function deleteAdminCaseTimelineEntry(id: string, caseId?: string) {
+    if (caseId) {
+        const entry = await prisma.caseTimelineEntry.findFirst({ where: { id, caseId }, select: { id: true } });
+        if (!entry) throw new Error('timeline entry not found for case');
+    }
     await prisma.caseTimelineEntry.delete({ where: { id } });
     return true;
 }

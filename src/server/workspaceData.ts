@@ -680,6 +680,7 @@ export async function deleteCaseWorkspace(caseId: string) {
     // Delete optional references
     await tx.appointment.deleteMany({ where: { caseId } });
     await tx.invoice.deleteMany({ where: { caseId } });
+    await tx.contract.deleteMany({ where: { caseId } });
 
     // Finally delete the case itself
     await tx.case.delete({ where: { id: caseId } });

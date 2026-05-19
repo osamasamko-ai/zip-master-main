@@ -111,6 +111,7 @@ type AiSettings = {
   topK: number;
   fallbackMode: boolean;
   maxTokens: number;
+  forceLocalMode: boolean;
   pricePerRequest: number;
   pricePerToken: number;
   freeRequestsPerUser: number;
@@ -368,6 +369,7 @@ export default function AdminDashboard() {
   });
   const [newCategory, setNewCategory] = useState<Partial<CategoryRecord>>({ type: 'case', name: '', description: '', icon: 'fa-folder', color: '#1B365D' });
   const [newPage, setNewPage] = useState<Partial<PageRecord>>({ title: '', slug: '', route: '', status: 'draft' });
+  const [newRole, setNewRole] = useState<Partial<RoleRecord>>({ key: '', label: '', description: '' });
   const [timelineDrafts, setTimelineDrafts] = useState<Record<string, { title: string; detail: string; type: string }>>({});
   const [newBannedWord, setNewBannedWord] = useState('');
   const [newModerationType, setNewModerationType] = useState<'bannedWord' | 'sensitiveTopic'>('bannedWord');
@@ -414,6 +416,15 @@ export default function AdminDashboard() {
       ...(init.headers || {}),
     };
     return fetch(url, { ...init, headers });
+  };
+
+  const readApiError = async (response: Response, fallback: string) => {
+    try {
+      const payload = await response.json();
+      return payload?.error || fallback;
+    } catch {
+      return fallback;
+    }
   };
 
   const confirmDeleteDoc = async () => {
@@ -871,7 +882,10 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled }),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر إضافة التصنيف', await readApiError(response, 'لم يتم حفظ التصنيف.'), 'danger');
+      return;
+    }
     const flag = await response.json();
     setFlags((prev) => prev.map((item) => (item.key === flag.key ? flag : item)));
     showToast('تم تحديث الميزة', `${flag.label} ${flag.enabled ? 'مفعلة' : 'معطلة'} الآن.`, 'success');
@@ -998,7 +1012,10 @@ export default function AdminDashboard() {
 
   const clearSystemCache = async () => {
     const response = await adminFetch('/api/admin/cache/clear', { method: 'POST' });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر تحديث التصنيف', await readApiError(response, 'لم يتم حفظ حالة التصنيف.'), 'danger');
+      return;
+    }
     setSystemLogs((prev) => [
       { id: `log-${Date.now()}`, time: new Date().toLocaleTimeString('en-GB'), level: 'info', msg: 'Admin cache cleared successfully.' },
       ...prev,
@@ -1009,7 +1026,10 @@ export default function AdminDashboard() {
 
   const restartAiServices = async () => {
     const response = await adminFetch('/api/admin/ai/restart', { method: 'POST' });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر حذف التصنيف', await readApiError(response, 'قد يكون التصنيف مرتبطاً ببيانات أخرى.'), 'danger');
+      return;
+    }
     setSystemLogs((prev) => [
       { id: `log-${Date.now()}`, time: new Date().toLocaleTimeString('en-GB'), level: 'warn', msg: 'AI services restart queued by admin.' },
       ...prev,
@@ -1032,7 +1052,10 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر إنشاء الصفحة', await readApiError(response, 'لم يتم حفظ الصفحة.'), 'danger');
+      return;
+    }
     const updated = await response.json();
     setSupportTickets((prev) => prev.map((ticket) => (ticket.id === updated.id ? updated : ticket)));
     showToast('تم تحديث التذكرة', `تم نقل التذكرة إلى ${status}.`, 'success');
@@ -1058,7 +1081,10 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر تحديث الصفحة', await readApiError(response, 'لم يتم حفظ حالة الصفحة.'), 'danger');
+      return;
+    }
     const updated = await response.json();
     setSystemSettings(updated);
     showToast('تم تحديث النظام', 'تم حفظ إعدادات النظام.', 'success');
@@ -1070,7 +1096,10 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر إضافة القسم', await readApiError(response, 'لم يتم حفظ قسم المحتوى.'), 'danger');
+      return;
+    }
     const updated = await response.json();
     setAiSettings(updated);
     showToast('تم تحديث AI', 'تم حفظ إعدادات الذكاء الاصطناعي.', 'success');
@@ -1082,7 +1111,10 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ enabled, feePercent }),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر حذف الصفحة', await readApiError(response, 'لم يتم حذف الصفحة.'), 'danger');
+      return;
+    }
     const updated = await response.json();
     setPaymentGateways((prev) => prev.map((gateway) => (gateway.key === updated.key ? updated : gateway)));
     showToast('تم تحديث بوابة الدفع', 'تم حفظ إعدادات بوابة الدفع.', 'success');
@@ -1094,7 +1126,10 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(settings),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر تحديث القضية', await readApiError(response, 'لم يتم حفظ مسار القضية.'), 'danger');
+      return;
+    }
     const updated = await response.json();
     setWorkflowSettings(updated);
     showToast('تم تحديث سير العمل', 'تم حفظ إعدادات القضايا والتوقيع.', 'success');
@@ -1106,7 +1141,10 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(partial),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر إضافة المحطة', await readApiError(response, 'لم يتم حفظ الجدول الزمني.'), 'danger');
+      return;
+    }
     const updated = await response.json();
     setNotificationTemplates((prev) => prev.map((template) => (template.key === updated.key ? updated : template)));
     showToast('تم تحديث قالب الإشعار', 'تم حفظ قالب الإشعار.', 'success');
@@ -1118,7 +1156,10 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active }),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر حذف الملف', await readApiError(response, 'لم يتم حذف سجل الرفع.'), 'danger');
+      return;
+    }
     const updated = await response.json();
     setModerationRules((prev) => prev.map((rule) => (rule.id === updated.id ? updated : rule)));
     showToast('تم تحديث قاعدة المراقبة', `القاعدة ${updated.active ? 'مفعلة' : 'معطلة'} الآن.`, 'success');
@@ -1332,8 +1373,59 @@ export default function AdminDashboard() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ permissions: permissionsPayload }),
     });
-    if (!response.ok) return;
+    if (!response.ok) {
+      showToast('تعذر تحديث الصلاحيات', await readApiError(response, 'لم يتم حفظ صلاحيات الدور.'), 'danger');
+      return;
+    }
     setRoles((prev) => prev.map((item) => (item.id === role.id ? { ...item, permissions: permissionsPayload } : item)));
+  };
+
+  const addAdminRole = async () => {
+    if (!newRole.key?.trim() || !newRole.label?.trim()) {
+      showToast('بيانات الدور ناقصة', 'أدخل مفتاح الدور واسمه قبل الحفظ.', 'warning');
+      return;
+    }
+    const response = await adminFetch('/api/admin/roles', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newRole),
+    });
+    if (!response.ok) {
+      showToast('تعذر إنشاء الدور', await readApiError(response, 'لم يتم حفظ الدور الجديد.'), 'danger');
+      return;
+    }
+    const role = await response.json();
+    setRoles((prev) => [...prev, { ...role, permissions: [] }]);
+    setNewRole({ key: '', label: '', description: '' });
+    showToast('تم إنشاء الدور', 'يمكنك الآن اختيار الصلاحيات المناسبة له.', 'success');
+  };
+
+  const updateAdminRole = async (role: RoleRecord, partial: Partial<RoleRecord>) => {
+    const response = await adminFetch(`/api/admin/roles/${role.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(partial),
+    });
+    if (!response.ok) {
+      showToast('تعذر تحديث الدور', await readApiError(response, 'لم يتم حفظ تعديل الدور.'), 'danger');
+      return;
+    }
+    const updated = await response.json();
+    setRoles((prev) => prev.map((item) => (item.id === role.id ? { ...item, ...updated } : item)));
+  };
+
+  const removeAdminRole = async (role: RoleRecord) => {
+    if (role.system) {
+      showToast('دور نظامي', 'لا يمكن حذف الأدوار النظامية.', 'warning');
+      return;
+    }
+    const response = await adminFetch(`/api/admin/roles/${role.id}`, { method: 'DELETE' });
+    if (!response.ok) {
+      showToast('تعذر حذف الدور', await readApiError(response, 'لم يتم حذف الدور.'), 'danger');
+      return;
+    }
+    setRoles((prev) => prev.filter((item) => item.id !== role.id));
+    showToast('تم حذف الدور', 'تمت إزالة الدور وصلاحياته.', 'warning');
   };
 
   const forceSync = () => {
@@ -3753,15 +3845,58 @@ export default function AdminDashboard() {
                 <h4 className="text-lg font-black text-brand-dark">الأدوار والصلاحيات</h4>
                 <p className="text-sm font-bold text-slate-500">إدارة وصول الإدارة للموارد: مستخدمون، قضايا، محتوى، إعدادات، وملفات.</p>
               </div>
+              <div className="mb-5 grid gap-3 rounded-3xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-[0.8fr_1fr_1.2fr_auto]">
+                <input
+                  value={newRole.key || ''}
+                  onChange={(event) => setNewRole((prev) => ({ ...prev, key: event.target.value }))}
+                  placeholder="role-key"
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold"
+                />
+                <input
+                  value={newRole.label || ''}
+                  onChange={(event) => setNewRole((prev) => ({ ...prev, label: event.target.value }))}
+                  placeholder="اسم الدور"
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold"
+                />
+                <input
+                  value={newRole.description || ''}
+                  onChange={(event) => setNewRole((prev) => ({ ...prev, description: event.target.value }))}
+                  placeholder="وصف مختصر"
+                  className="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-bold"
+                />
+                <button onClick={addAdminRole} className="rounded-2xl bg-brand-navy px-4 py-2 text-xs font-black text-white">
+                  إضافة دور
+                </button>
+              </div>
               <div className="grid gap-4">
                 {roles.map((role) => (
                   <div key={role.id} className="rounded-[2rem] bg-slate-50 p-4">
-                    <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
-                        <p className="text-sm font-black text-brand-dark">{role.label}</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="text-sm font-black text-brand-dark">{role.label}</p>
+                          {role.system && <span className="rounded-full bg-brand-gold/20 px-2 py-1 text-[10px] font-black text-brand-dark">نظامي</span>}
+                          {!role.active && <span className="rounded-full bg-red-50 px-2 py-1 text-[10px] font-black text-red-700">معطل</span>}
+                        </div>
                         <p className="text-[11px] font-bold text-slate-500">{role.description || role.key}</p>
                       </div>
-                      <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-600">{role.permissions?.length || 0} صلاحية</span>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full bg-white px-3 py-1 text-[11px] font-black text-slate-600">{role.permissions?.length || 0} صلاحية</span>
+                        <button
+                          onClick={() => updateAdminRole(role, { active: !role.active })}
+                          disabled={role.system}
+                          className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-600 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {role.active ? 'تعطيل' : 'تفعيل'}
+                        </button>
+                        <button
+                          onClick={() => removeAdminRole(role)}
+                          disabled={role.system}
+                          className="rounded-xl bg-red-50 px-3 py-2 text-[11px] font-black text-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          حذف
+                        </button>
+                      </div>
                     </div>
                     <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                       {permissions.map((permission) => (
@@ -3770,6 +3905,7 @@ export default function AdminDashboard() {
                             type="checkbox"
                             checked={(role.permissions || []).includes(permission.key)}
                             onChange={() => toggleRolePermission(role, permission.key)}
+                            disabled={role.system}
                             className="mt-1 h-4 w-4 accent-brand-navy"
                           />
                           <span>

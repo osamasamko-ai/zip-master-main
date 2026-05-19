@@ -72,6 +72,7 @@ import {
   deletePageBlock,
   getRoles,
   getPermissions,
+  roleHasPermission,
   addRole,
   updateRole,
   updateRolePermissions,
@@ -310,12 +311,21 @@ async function startServer() {
     next();
   };
 
-  const adminOnly = (req: express.Request, res: express.Response, next: express.NextFunction) => {
-    const user = (req as any).user;
-    if (user.role !== 'admin') {
-      return res.status(403).json({ error: 'Admin access required' });
+  const requireAdminPermission = (permission: string) => async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+    try {
+      const user = (req as any).user;
+      if (!user || user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+      }
+      const allowed = await roleHasPermission(user.role, permission);
+      if (!allowed) {
+        return res.status(403).json({ error: `Missing permission: ${permission}` });
+      }
+      next();
+    } catch (error) {
+      console.error('Admin permission check failed:', error);
+      res.status(500).json({ error: 'Failed to verify admin permission' });
     }
-    next();
   };
 
   // ============================================
@@ -1101,30 +1111,30 @@ async function startServer() {
     res.json({ status: 'ok' });
   });
 
-  app.get('/api/admin/metrics', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/metrics', authenticateToken, requireAdminPermission('audit.read'), async (req, res) => {
     res.json(await getAdminMetrics());
   });
 
-  app.get('/api/admin/alerts', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/alerts', authenticateToken, requireAdminPermission('audit.read'), async (req, res) => {
     res.json(await getSecurityAlerts());
   });
 
-  app.get('/api/admin/audit-logs', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/audit-logs', authenticateToken, requireAdminPermission('audit.read'), async (req, res) => {
     const type = typeof req.query.type === 'string' ? req.query.type : undefined;
     res.json(await getAuditLogs(type));
   });
 
-  app.get('/api/admin/transactions', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/transactions', authenticateToken, requireAdminPermission('billing.manage'), async (req, res) => {
     res.json(await getTransactionRecords());
   });
 
-  app.get('/api/admin/kyc', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/kyc', authenticateToken, requireAdminPermission('kyc.manage'), async (req, res) => {
     const search = typeof req.query.search === 'string' ? req.query.search : undefined;
     const status = typeof req.query.status === 'string' ? req.query.status : undefined;
     res.json(await getKycApplications(search, status as any));
   });
 
-  app.post('/api/admin/kyc/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/kyc/:id', authenticateToken, requireAdminPermission('kyc.manage'), async (req, res) => {
     const { status } = req.body;
     if (status !== 'approved' && status !== 'rejected') {
       return res.status(400).json({ error: 'status must be approved or rejected' });
@@ -1138,11 +1148,11 @@ async function startServer() {
     return res.json({ success: true, application: updated });
   });
 
-  app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/users', authenticateToken, requireAdminPermission('users.read'), async (req, res) => {
     res.json(await getUsers());
   });
 
-  app.put('/api/admin/users/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.put('/api/admin/users/:id', authenticateToken, requireAdminPermission('users.update'), async (req, res) => {
     const updated = await updateUserProfile(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'user not found' });
@@ -1150,7 +1160,7 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.post('/api/admin/users/:id/role', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/users/:id/role', authenticateToken, requireAdminPermission('users.update'), async (req, res) => {
     const { role } = req.body;
     if (!['user', 'pro', 'admin'].includes(role)) {
       return res.status(400).json({ error: 'role must be user, pro, or admin' });
@@ -1162,7 +1172,7 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.post('/api/admin/users/:id/block', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/users/:id/block', authenticateToken, requireAdminPermission('users.update'), async (req, res) => {
     const updated = await toggleUserBlock(req.params.id);
     if (!updated) {
       return res.status(404).json({ error: 'user not found' });
@@ -1170,7 +1180,7 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.post('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/users', authenticateToken, requireAdminPermission('users.create'), async (req, res) => {
     try {
       const { email, password, name, role = 'user' } = req.body;
       const requestedRole = role as 'user' | 'pro' | 'admin';
@@ -1236,11 +1246,11 @@ async function startServer() {
     }
   });
 
-  app.get('/api/admin/feature-flags', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/feature-flags', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     res.json(await getFeatureFlags());
   });
 
-  app.post('/api/admin/feature-flags/:key', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/feature-flags/:key', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     const { enabled } = req.body;
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'enabled must be boolean' });
@@ -1252,11 +1262,11 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/support-tickets', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/support-tickets', authenticateToken, requireAdminPermission('support.manage'), async (req, res) => {
     res.json(await getSupportTickets());
   });
 
-  app.post('/api/admin/support-tickets/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/support-tickets/:id', authenticateToken, requireAdminPermission('support.manage'), async (req, res) => {
     const { status } = req.body;
     if (!['open', 'pending', 'resolved', 'escalated'].includes(status)) {
       return res.status(400).json({ error: 'invalid ticket status' });
@@ -1268,11 +1278,11 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/policies', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/policies', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     res.json(await getPolicies());
   });
 
-  app.post('/api/admin/policies/:key', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/policies/:key', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     const { value } = req.body;
     if (typeof value !== 'string') {
       return res.status(400).json({ error: 'value must be a string' });
@@ -1284,29 +1294,29 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/system-settings', async (req, res) => {
+  app.get('/api/admin/system-settings', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     res.json(await getSystemSettings());
   });
 
-  app.post('/api/admin/system-settings', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/system-settings', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     const updated = await updateSystemSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/ai-settings', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/ai-settings', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     res.json(await getAiSettings());
   });
 
-  app.post('/api/admin/ai-settings', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/ai-settings', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     const updated = await updateAiSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/payment-gateways', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/payment-gateways', authenticateToken, requireAdminPermission('billing.manage'), async (req, res) => {
     res.json(await getPaymentGateways());
   });
 
-  app.post('/api/admin/payment-gateways/:key', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/payment-gateways/:key', authenticateToken, requireAdminPermission('billing.manage'), async (req, res) => {
     const { enabled, feePercent } = req.body;
     if (typeof enabled !== 'boolean') {
       return res.status(400).json({ error: 'enabled must be boolean' });
@@ -1318,20 +1328,20 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/workflow-settings', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/workflow-settings', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     res.json(await getWorkflowSettings());
   });
 
-  app.post('/api/admin/workflow-settings', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/workflow-settings', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     const updated = await updateWorkflowSettings(req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/notification-templates', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/notification-templates', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     res.json(await getNotificationTemplates());
   });
 
-  app.post('/api/admin/notification-templates/:key', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/notification-templates/:key', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     const updated = await updateNotificationTemplate(req.params.key, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'notification template not found' });
@@ -1339,11 +1349,11 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/moderation-rules', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/moderation-rules', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     res.json(await getModerationRules());
   });
 
-  app.post('/api/admin/moderation-rules', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/moderation-rules', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     const { type, value, active } = req.body;
     if (!type || !value) {
       return res.status(400).json({ error: 'type and value are required' });
@@ -1352,7 +1362,7 @@ async function startServer() {
     return res.status(201).json(newRule);
   });
 
-  app.post('/api/admin/moderation-rules/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/moderation-rules/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     const updated = await updateModerationRule(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'moderation rule not found' });
@@ -1360,18 +1370,18 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.delete('/api/admin/moderation-rules/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.delete('/api/admin/moderation-rules/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     if (!(await deleteModerationRule(req.params.id))) {
       return res.status(404).json({ error: 'moderation rule not found' });
     }
     return res.json({ success: true });
   });
 
-  app.get('/api/admin/legal-docs', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/legal-docs', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     res.json(await getLegalDocs());
   });
 
-  app.post('/api/admin/legal-docs', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/legal-docs', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     const { title, law, article, category, summary, source } = req.body;
     if (!title || !law || !article || !category || !summary || !source) {
       return res.status(400).json({ error: 'missing document fields' });
@@ -1380,14 +1390,14 @@ async function startServer() {
     return res.status(201).json(newDoc);
   });
 
-  app.delete('/api/admin/legal-docs/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.delete('/api/admin/legal-docs/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     if (!(await deleteLegalDoc(req.params.id))) {
       return res.status(404).json({ error: 'document not found' });
     }
     return res.json({ success: true });
   });
 
-  app.put('/api/admin/legal-docs/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.put('/api/admin/legal-docs/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     const updated = await updateLegalDoc(req.params.id, req.body);
     if (!updated) {
       return res.status(404).json({ error: 'document not found' });
@@ -1395,11 +1405,11 @@ async function startServer() {
     return res.json(updated);
   });
 
-  app.get('/api/admin/legal-services', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/legal-services', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     res.json(await getLegalServices());
   });
 
-  app.post('/api/admin/legal-services', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/legal-services', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     const { title, description, price, time, category, lawyerId } = req.body;
     const icon = req.body.icon || 'fa-solid fa-scale-balanced';
     const color = req.body.color || 'blue';
@@ -1433,24 +1443,24 @@ async function startServer() {
     return res.status(201).json(created);
   });
 
-  app.delete('/api/admin/legal-services/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.delete('/api/admin/legal-services/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     if (!(await deleteLegalService(req.params.id))) {
       return res.status(404).json({ error: 'service not found' });
     }
     return res.json({ success: true });
   });
 
-  app.put('/api/admin/legal-services/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.put('/api/admin/legal-services/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     const updated = await updateLegalService(req.params.id, req.body);
     return res.json(updated);
   });
 
-  app.get('/api/admin/categories', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/categories', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     const type = typeof req.query.type === 'string' ? req.query.type : undefined;
     res.json(await getCategories(type));
   });
 
-  app.post('/api/admin/categories', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/categories', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     try {
       res.status(201).json(await addCategory(req.body));
     } catch (error: any) {
@@ -1458,24 +1468,32 @@ async function startServer() {
     }
   });
 
-  app.put('/api/admin/categories/:id', authenticateToken, adminOnly, async (req, res) => {
-    res.json(await updateCategory(req.params.id, req.body));
+  app.put('/api/admin/categories/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
+    try {
+      res.json(await updateCategory(req.params.id, req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to update category' });
+    }
   });
 
-  app.delete('/api/admin/categories/:id', authenticateToken, adminOnly, async (req, res) => {
-    await deleteCategory(req.params.id);
-    res.json({ success: true });
+  app.delete('/api/admin/categories/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
+    try {
+      await deleteCategory(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to delete category' });
+    }
   });
 
-  app.post('/api/admin/categories/reorder', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/categories/reorder', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     res.json(await reorderCategories(Array.isArray(req.body.items) ? req.body.items : []));
   });
 
-  app.get('/api/admin/uploads', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/uploads', authenticateToken, requireAdminPermission('uploads.manage'), async (req, res) => {
     res.json(await getUploads());
   });
 
-  app.post('/api/admin/uploads', authenticateToken, adminOnly, upload.single('file'), async (req, res) => {
+  app.post('/api/admin/uploads', authenticateToken, requireAdminPermission('uploads.manage'), upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const record = await addUploadRecord({
       ownerId: (req as any).user.userId,
@@ -1491,20 +1509,28 @@ async function startServer() {
     res.status(201).json(record);
   });
 
-  app.put('/api/admin/uploads/:id', authenticateToken, adminOnly, async (req, res) => {
-    res.json(await updateUploadRecord(req.params.id, req.body));
+  app.put('/api/admin/uploads/:id', authenticateToken, requireAdminPermission('uploads.manage'), async (req, res) => {
+    try {
+      res.json(await updateUploadRecord(req.params.id, req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to update upload' });
+    }
   });
 
-  app.delete('/api/admin/uploads/:id', authenticateToken, adminOnly, async (req, res) => {
-    await deleteUploadRecord(req.params.id);
-    res.json({ success: true });
+  app.delete('/api/admin/uploads/:id', authenticateToken, requireAdminPermission('uploads.manage'), async (req, res) => {
+    try {
+      await deleteUploadRecord(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to delete upload' });
+    }
   });
 
-  app.get('/api/admin/pages', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/pages', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     res.json(await getPages());
   });
 
-  app.post('/api/admin/pages', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/pages', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
     try {
       res.status(201).json(await addPage(req.body));
     } catch (error: any) {
@@ -1512,37 +1538,57 @@ async function startServer() {
     }
   });
 
-  app.put('/api/admin/pages/:id', authenticateToken, adminOnly, async (req, res) => {
-    res.json(await updatePage(req.params.id, req.body));
+  app.put('/api/admin/pages/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
+    try {
+      res.json(await updatePage(req.params.id, req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to update page' });
+    }
   });
 
-  app.delete('/api/admin/pages/:id', authenticateToken, adminOnly, async (req, res) => {
-    await deletePage(req.params.id);
-    res.json({ success: true });
+  app.delete('/api/admin/pages/:id', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
+    try {
+      await deletePage(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to delete page' });
+    }
   });
 
-  app.post('/api/admin/pages/:id/blocks', authenticateToken, adminOnly, async (req, res) => {
-    res.status(201).json(await addPageBlock(req.params.id, req.body));
+  app.post('/api/admin/pages/:id/blocks', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
+    try {
+      res.status(201).json(await addPageBlock(req.params.id, req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to create block' });
+    }
   });
 
-  app.put('/api/admin/pages/:pageId/blocks/:blockId', authenticateToken, adminOnly, async (req, res) => {
-    res.json(await updatePageBlock(req.params.blockId, req.body));
+  app.put('/api/admin/pages/:pageId/blocks/:blockId', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
+    try {
+      res.json(await updatePageBlock(req.params.blockId, req.body, req.params.pageId));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to update block' });
+    }
   });
 
-  app.delete('/api/admin/pages/:pageId/blocks/:blockId', authenticateToken, adminOnly, async (req, res) => {
-    await deletePageBlock(req.params.blockId);
-    res.json({ success: true });
+  app.delete('/api/admin/pages/:pageId/blocks/:blockId', authenticateToken, requireAdminPermission('content.manage'), async (req, res) => {
+    try {
+      await deletePageBlock(req.params.blockId, req.params.pageId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to delete block' });
+    }
   });
 
-  app.get('/api/admin/roles', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/roles', authenticateToken, requireAdminPermission('roles.manage'), async (req, res) => {
     res.json(await getRoles());
   });
 
-  app.get('/api/admin/permissions', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/permissions', authenticateToken, requireAdminPermission('roles.manage'), async (req, res) => {
     res.json(await getPermissions());
   });
 
-  app.post('/api/admin/roles', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/roles', authenticateToken, requireAdminPermission('roles.manage'), async (req, res) => {
     try {
       res.status(201).json(await addRole(req.body));
     } catch (error: any) {
@@ -1550,15 +1596,23 @@ async function startServer() {
     }
   });
 
-  app.put('/api/admin/roles/:id', authenticateToken, adminOnly, async (req, res) => {
-    res.json(await updateRole(req.params.id, req.body));
+  app.put('/api/admin/roles/:id', authenticateToken, requireAdminPermission('roles.manage'), async (req, res) => {
+    try {
+      res.json(await updateRole(req.params.id, req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to update role' });
+    }
   });
 
-  app.put('/api/admin/roles/:id/permissions', authenticateToken, adminOnly, async (req, res) => {
-    res.json(await updateRolePermissions(req.params.id, Array.isArray(req.body.permissions) ? req.body.permissions : []));
+  app.put('/api/admin/roles/:id/permissions', authenticateToken, requireAdminPermission('roles.manage'), async (req, res) => {
+    try {
+      res.json(await updateRolePermissions(req.params.id, Array.isArray(req.body.permissions) ? req.body.permissions : []));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to update permissions' });
+    }
   });
 
-  app.delete('/api/admin/roles/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.delete('/api/admin/roles/:id', authenticateToken, requireAdminPermission('roles.manage'), async (req, res) => {
     try {
       await deleteRole(req.params.id);
       res.json({ success: true });
@@ -1567,48 +1621,68 @@ async function startServer() {
     }
   });
 
-  app.get('/api/admin/cases', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/cases', authenticateToken, requireAdminPermission('cases.read'), async (req, res) => {
     res.json(await getAdminCases());
   });
 
-  app.get('/api/admin/cases/:id', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/cases/:id', authenticateToken, requireAdminPermission('cases.read'), async (req, res) => {
     const item = await getAdminCase(req.params.id);
     if (!item) return res.status(404).json({ error: 'case not found' });
     res.json(item);
   });
 
-  app.put('/api/admin/cases/:id', authenticateToken, adminOnly, async (req, res) => {
-    res.json(await updateAdminCase(req.params.id, req.body));
+  app.put('/api/admin/cases/:id', authenticateToken, requireAdminPermission('cases.update'), async (req, res) => {
+    try {
+      res.json(await updateAdminCase(req.params.id, req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to update case' });
+    }
   });
 
-  app.delete('/api/admin/cases/:id', authenticateToken, adminOnly, async (req, res) => {
-    await deleteCaseWorkspace(req.params.id);
-    res.json({ success: true });
+  app.delete('/api/admin/cases/:id', authenticateToken, requireAdminPermission('cases.delete'), async (req, res) => {
+    try {
+      await deleteCaseWorkspace(req.params.id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to delete case' });
+    }
   });
 
-  app.post('/api/admin/cases/:id/timeline', authenticateToken, adminOnly, async (req, res) => {
-    res.status(201).json(await addAdminCaseTimelineEntry(req.params.id, req.body));
+  app.post('/api/admin/cases/:id/timeline', authenticateToken, requireAdminPermission('cases.update'), async (req, res) => {
+    try {
+      res.status(201).json(await addAdminCaseTimelineEntry(req.params.id, req.body));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to add timeline entry' });
+    }
   });
 
-  app.put('/api/admin/cases/:caseId/timeline/:entryId', authenticateToken, adminOnly, async (req, res) => {
-    res.json(await updateAdminCaseTimelineEntry(req.params.entryId, req.body));
+  app.put('/api/admin/cases/:caseId/timeline/:entryId', authenticateToken, requireAdminPermission('cases.update'), async (req, res) => {
+    try {
+      res.json(await updateAdminCaseTimelineEntry(req.params.entryId, req.body, req.params.caseId));
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to update timeline entry' });
+    }
   });
 
-  app.delete('/api/admin/cases/:caseId/timeline/:entryId', authenticateToken, adminOnly, async (req, res) => {
-    await deleteAdminCaseTimelineEntry(req.params.entryId);
-    res.json({ success: true });
+  app.delete('/api/admin/cases/:caseId/timeline/:entryId', authenticateToken, requireAdminPermission('cases.update'), async (req, res) => {
+    try {
+      await deleteAdminCaseTimelineEntry(req.params.entryId, req.params.caseId);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(400).json({ error: error.message || 'failed to delete timeline entry' });
+    }
   });
 
-  app.post('/api/admin/cache/clear', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/cache/clear', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     clearAdminCache();
     res.json({ success: true, message: 'cache cleared' });
   });
 
-  app.post('/api/admin/ai/restart', authenticateToken, adminOnly, async (req, res) => {
+  app.post('/api/admin/ai/restart', authenticateToken, requireAdminPermission('settings.manage'), async (req, res) => {
     res.json({ success: true, message: 'AI services restart queued' });
   });
 
-  app.get('/api/admin/export', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/export', authenticateToken, requireAdminPermission('audit.read'), async (req, res) => {
     const type = typeof req.query.type === 'string' ? req.query.type : 'kyc';
     if (type !== 'kyc' && type !== 'transactions') {
       return res.status(400).json({ error: 'type must be kyc or transactions' });
@@ -1899,7 +1973,7 @@ ${additionalConditions}
   });
 
   // --- Admin Contracts Monitoring ---
-  app.get('/api/admin/contracts', authenticateToken, adminOnly, async (req, res) => {
+  app.get('/api/admin/contracts', authenticateToken, requireAdminPermission('cases.read'), async (req, res) => {
     try {
       res.json({ data: await getContractsAdmin() });
     } catch (error) {
