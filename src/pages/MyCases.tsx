@@ -9,7 +9,7 @@ import apiClient from '../api/client';
 type DocumentType = 'pdf' | 'image' | 'other';
 type CaseStatus = 'pending' | 'review' | 'active' | 'closed';
 
-type WorkspaceTab = 'summary' | 'chat' | 'ai' | 'financials';
+type WorkspaceTab = 'summary' | 'chat' | 'ai' | 'financials' | 'resolution';
 type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded' | 'contracts';
 type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed' | 'drafts';
 
@@ -122,6 +122,21 @@ const CASE_TYPES = [
   { id: 'commercial', label: 'تجارية' }
 ];
 
+const CASE_LIFECYCLE_STEPS: Array<{
+  id: string;
+  label: string;
+  note: string;
+  icon: string;
+  tab: WorkspaceTab;
+}> = [
+  { id: 'intake', label: 'فتح الملف', note: 'بيانات القضية والمحامي', icon: 'fa-folder-plus', tab: 'summary' },
+  { id: 'lawyer-review', label: 'مراجعة المحامي', note: 'تحديد الخطة والخطوة التالية', icon: 'fa-user-tie', tab: 'chat' },
+  { id: 'documents', label: 'الوثائق', note: 'رفع، مراجعة، وتوقيع', icon: 'fa-file-signature', tab: 'summary' },
+  { id: 'work', label: 'تنفيذ الإجراء', note: 'مراسلات وتحديثات العمل', icon: 'fa-scale-balanced', tab: 'chat' },
+  { id: 'payment', label: 'الأتعاب', note: 'الفواتير والسداد', icon: 'fa-wallet', tab: 'financials' },
+  { id: 'closeout', label: 'الإغلاق', note: 'ملخص نهائي وأرشفة', icon: 'fa-circle-check', tab: 'resolution' },
+];
+
 const SIDEBAR_FILTERS: Array<{ id: SidebarFilter; label: string; icon: string }> = [
   { id: 'needs_action', label: 'إجراء', icon: 'fa-bell' },
   { id: 'drafts', label: 'مسودات', icon: 'fa-pen-ruler' },
@@ -173,6 +188,89 @@ const getMessageTimeLabel = (message: CaseMessage) => {
   if (Number.isNaN(createdAt.getTime())) return '';
 
   return createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
+};
+
+const getLifecycleIndex = (legalCase: LegalCase) => {
+  if (legalCase.status === 'closed') return 5;
+  if (legalCase.progress >= 90) return 5;
+  if (legalCase.financials.totalAgreed > 0 && legalCase.financials.paid >= legalCase.financials.totalAgreed && legalCase.progress >= 75) return 4;
+  if (legalCase.progress >= 55) return 3;
+  if (legalCase.documents.length > 0 || legalCase.documents.some((doc) => doc.actionRequired || doc.expiresAt)) return 2;
+  if (legalCase.messages.length > 1 || legalCase.status === 'review' || legalCase.status === 'active') return 1;
+  return 0;
+};
+
+const getTimelineEventMeta = (type: CaseTimelineEvent['type']) => {
+  if (type === 'hearing') return { label: 'جلسة', icon: 'fa-building-columns', tone: 'bg-red-50 text-red-700 border-red-100' };
+  if (type === 'filing') return { label: 'إيداع', icon: 'fa-file-circle-check', tone: 'bg-blue-50 text-blue-700 border-blue-100' };
+  if (type === 'meeting') return { label: 'اجتماع', icon: 'fa-handshake', tone: 'bg-amber-50 text-amber-700 border-amber-100' };
+  return { label: 'تحديث', icon: 'fa-circle-info', tone: 'bg-slate-100 text-slate-600 border-slate-200' };
+};
+
+const getCaseRoadmapSteps = (activeCase: LegalCase) => {
+  const pendingDocuments = activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length;
+  const paidPercent = activeCase.financials.totalAgreed > 0
+    ? Math.round((activeCase.financials.paid / activeCase.financials.totalAgreed) * 100)
+    : 100;
+  const lifecycleIndex = getLifecycleIndex(activeCase);
+
+  return [
+    {
+      id: 'opened',
+      label: 'فتح الملف',
+      note: `تم إنشاء الملف في ${activeCase.date}`,
+      icon: 'fa-folder-plus',
+      progressGate: 0,
+      tab: 'summary' as WorkspaceTab,
+    },
+    {
+      id: 'review',
+      label: 'تقييم المحامي',
+      note: activeCase.messages.length > 1 ? 'بدأت المراسلات والتوجيهات' : 'بانتظار أول توجيه واضح',
+      icon: 'fa-user-tie',
+      progressGate: 15,
+      tab: 'chat' as WorkspaceTab,
+    },
+    {
+      id: 'documents',
+      label: 'اكتمال الوثائق',
+      note: pendingDocuments > 0 ? `${pendingDocuments.toLocaleString('ar-IQ')} وثيقة تحتاج إجراء` : 'لا توجد وثائق معلقة حالياً',
+      icon: 'fa-file-signature',
+      progressGate: 35,
+      tab: 'summary' as WorkspaceTab,
+    },
+    {
+      id: 'execution',
+      label: 'تنفيذ الإجراءات',
+      note: activeCase.progress >= 55 ? 'القضية داخل مرحلة التنفيذ' : 'ستبدأ بعد اكتمال المتطلبات الأساسية',
+      icon: 'fa-scale-balanced',
+      progressGate: 55,
+      tab: 'chat' as WorkspaceTab,
+    },
+    {
+      id: 'settlement',
+      label: 'المالية والاتفاق',
+      note: activeCase.financials.totalAgreed > 0 ? `السداد ${paidPercent}%` : 'لا توجد أتعاب مسجلة بعد',
+      icon: 'fa-wallet',
+      progressGate: 75,
+      tab: 'financials' as WorkspaceTab,
+    },
+    {
+      id: 'closed',
+      label: 'الإغلاق النهائي',
+      note: activeCase.status === 'closed' ? 'تم إغلاق القضية' : 'يظهر عند اكتمال المراجعة النهائية',
+      icon: 'fa-circle-check',
+      progressGate: 90,
+      tab: 'resolution' as WorkspaceTab,
+    },
+  ].map((step, index) => {
+    const isCompleted = activeCase.status === 'closed' || activeCase.progress >= step.progressGate || index < lifecycleIndex;
+    const isCurrent = activeCase.status !== 'closed' && !isCompleted && index === Math.min(lifecycleIndex, 5);
+    return {
+      ...step,
+      state: isCompleted ? 'completed' : isCurrent ? 'current' : 'upcoming',
+    };
+  });
 };
 
 // --- Sub-Components ---
@@ -302,6 +400,73 @@ const CaseSidebar = ({
   );
 };
 
+const CaseLifecycleRail = ({
+  activeCase,
+  setActiveTab,
+  setDocFilter,
+}: {
+  activeCase: LegalCase;
+  setActiveTab: (tab: WorkspaceTab) => void;
+  setDocFilter: (filter: DocFilter) => void;
+}) => {
+  const currentIndex = getLifecycleIndex(activeCase);
+
+  return (
+    <section className="rounded-[1.5rem] border border-slate-200 bg-white p-4 text-right shadow-sm">
+      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">مسار القضية</p>
+          <h3 className="mt-1 text-base font-black text-brand-dark">من فتح الملف إلى الإغلاق</h3>
+        </div>
+        <span className="w-fit rounded-full bg-brand-navy/5 px-3 py-1.5 text-[10px] font-black text-brand-navy">
+          المرحلة الحالية: {CASE_LIFECYCLE_STEPS[currentIndex]?.label}
+        </span>
+      </div>
+
+      <div className="mt-4 grid gap-2 md:grid-cols-3 2xl:grid-cols-6">
+        {CASE_LIFECYCLE_STEPS.map((step, index) => {
+          const isDone = index < currentIndex || activeCase.status === 'closed';
+          const isCurrent = index === currentIndex && activeCase.status !== 'closed';
+          return (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => {
+                if (step.id === 'documents') setDocFilter('pending');
+                setActiveTab(step.tab);
+              }}
+              className={`relative min-h-[104px] rounded-2xl border p-3 text-right transition hover:-translate-y-0.5 hover:shadow-sm ${
+                isCurrent
+                  ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/15'
+                  : isDone
+                    ? 'border-emerald-100 bg-emerald-50 text-emerald-800'
+                    : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-navy/20 hover:bg-white'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${
+                  isCurrent ? 'bg-white/15 text-white' : isDone ? 'bg-white text-emerald-600' : 'bg-white text-brand-navy'
+                }`}>
+                  <i className={`fa-solid ${isDone ? 'fa-check' : step.icon} text-sm`}></i>
+                </span>
+                <span className={`rounded-full px-2 py-1 text-[9px] font-black ${
+                  isCurrent ? 'bg-white/15 text-white' : isDone ? 'bg-white text-emerald-700' : 'bg-white text-slate-400'
+                }`}>
+                  {index + 1}
+                </span>
+              </div>
+              <p className="mt-3 text-sm font-black">{step.label}</p>
+              <p className={`mt-1 text-[11px] font-bold leading-5 ${isCurrent ? 'text-white/75' : isDone ? 'text-emerald-700/75' : 'text-slate-400'}`}>
+                {step.note}
+              </p>
+            </button>
+          );
+        })}
+      </div>
+    </section>
+  );
+};
+
 const SummaryTab = ({
   activeCase,
   setIsNewFieldModalOpen,
@@ -310,7 +475,13 @@ const SummaryTab = ({
   activeCase: LegalCase,
   setIsNewFieldModalOpen: (open: boolean) => void,
   setActiveTab: (tab: WorkspaceTab) => void
-}) => (
+}) => {
+  const roadmapSteps = getCaseRoadmapSteps(activeCase);
+  const currentStep = roadmapSteps.find((step) => step.state === 'current') ?? roadmapSteps[roadmapSteps.length - 1];
+  const completedSteps = roadmapSteps.filter((step) => step.state === 'completed').length;
+  const sortedTimeline = [...activeCase.timeline];
+
+  return (
   <div className="flex-1 overflow-y-auto p-5 bg-slate-50/30 space-y-6 custom-scrollbar">
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
@@ -356,46 +527,139 @@ const SummaryTab = ({
       </div>
     </div>
 
-    <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
-        <h4 className="text-lg font-black text-brand-dark mb-6 flex items-center gap-2">
-          <i className="fa-solid fa-map-location-dot text-brand-gold"></i> خريطة الطريق
-        </h4>
-        <div className="relative space-y-8 before:absolute before:right-6 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-100">
-          <div className="relative pr-14">
-            <div className="absolute right-4 top-1 h-5 w-5 rounded-full border-4 border-white bg-emerald-500 shadow-sm"></div>
-            <p className="text-sm font-black text-brand-dark">فتح الملف ورفع المسودة</p>
-            <p className="text-xs font-bold text-slate-400 mt-1">تمت المعالجة في {activeCase.date}</p>
+    <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)] gap-6">
+      <section className="bg-white rounded-[2.5rem] border border-slate-100 p-6 shadow-sm">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h4 className="text-lg font-black text-brand-dark flex items-center gap-2">
+              <i className="fa-solid fa-map-location-dot text-brand-gold"></i>
+              خط سير القضية
+            </h4>
+            <p className="mt-2 text-xs font-bold leading-6 text-slate-500">
+              يوضح هذا المسار أين تقف القضية الآن، وما الذي اكتمل، وما هي الخطوة القادمة بينك وبين المحامي.
+            </p>
           </div>
-          <div className="relative pr-14">
-            <div className="absolute right-4 top-1 h-5 w-5 rounded-full border-4 border-white bg-brand-gold animate-pulse shadow-sm"></div>
-            <p className="text-sm font-black text-brand-navy">{activeCase.statusText}</p>
-            <p className="text-xs font-bold text-slate-500 mt-1">بانتظار مراجعة المحامي للتعديلات المرفوعة.</p>
-          </div>
-          <div className="relative pr-14 opacity-40">
-            <div className="absolute right-4 top-1 h-5 w-5 rounded-full border-4 border-white bg-slate-200"></div>
-            <p className="text-sm font-black text-slate-500">التوقيع النهائي</p>
+          <div className="rounded-2xl border border-brand-navy/10 bg-brand-navy/5 px-4 py-3 text-right">
+            <p className="text-[10px] font-black text-brand-navy">المرحلة الحالية</p>
+            <p className="mt-1 text-sm font-black text-brand-dark">{currentStep.label}</p>
+            <p className="mt-1 text-[11px] font-bold text-slate-500">{completedSteps} / {roadmapSteps.length} مراحل مكتملة</p>
           </div>
         </div>
-      </div>
 
-      <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
-        <h4 className="text-lg font-black text-brand-dark mb-6 flex items-center gap-2">
-          <i className="fa-solid fa-clock-rotate-left text-brand-navy"></i> سجل الأحداث التفصيلي
-        </h4>
-        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-          {activeCase.timeline.map((event) => (
-            <div key={event.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100 relative group">
-              <div className="flex justify-between items-start mb-1">
-                <span className="text-[10px] font-black text-brand-navy uppercase tracking-widest">{event.date}</span>
-                <span className={`text-[8px] font-black px-2 py-0.5 rounded-lg ${event.type === 'hearing' ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-blue-600'}`}>{event.type === 'hearing' ? 'جلسة' : event.type === 'filing' ? 'إيداع' : 'حدث'}</span>
+        <div className="mt-6 rounded-[2rem] border border-slate-100 bg-slate-50/60 p-4">
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <span className="text-xs font-black text-brand-dark">{activeCase.statusText}</span>
+            <span className="text-xs font-black text-brand-navy">{activeCase.progress}%</span>
+          </div>
+          <div className="h-2.5 overflow-hidden rounded-full bg-white shadow-inner">
+            <div className="h-full rounded-full bg-brand-gold transition-all duration-1000" style={{ width: `${activeCase.progress}%` }}></div>
+          </div>
+        </div>
+
+        <div className="mt-6 grid gap-3 lg:grid-cols-2">
+          {roadmapSteps.map((step, index) => (
+            <button
+              key={step.id}
+              type="button"
+              onClick={() => setActiveTab(step.tab)}
+              className={`group relative min-h-[118px] rounded-[1.5rem] border p-4 text-right transition hover:-translate-y-0.5 hover:shadow-md ${
+                step.state === 'completed'
+                  ? 'border-emerald-100 bg-emerald-50/80'
+                  : step.state === 'current'
+                    ? 'border-brand-navy bg-white shadow-lg shadow-brand-navy/10'
+                    : 'border-slate-100 bg-white/80 opacity-75 hover:opacity-100'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ${
+                  step.state === 'completed'
+                    ? 'bg-white text-emerald-600'
+                    : step.state === 'current'
+                      ? 'bg-brand-navy text-white'
+                      : 'bg-slate-50 text-slate-400'
+                }`}>
+                  <i className={`fa-solid ${step.state === 'completed' ? 'fa-check' : step.icon}`}></i>
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ${
+                      step.state === 'completed'
+                        ? 'bg-white text-emerald-700'
+                        : step.state === 'current'
+                          ? 'bg-brand-navy/5 text-brand-navy'
+                          : 'bg-slate-100 text-slate-400'
+                    }`}>
+                      {step.state === 'completed' ? 'مكتمل' : step.state === 'current' ? 'الحالي' : 'قادم'}
+                    </span>
+                    <span className="text-[10px] font-black text-slate-400">مرحلة {index + 1}</span>
+                  </div>
+                  <p className="mt-2 text-sm font-black text-brand-dark">{step.label}</p>
+                  <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{step.note}</p>
+                </div>
               </div>
-              <p className="text-sm font-black text-brand-dark">{event.title}</p>
-              <p className="text-xs font-bold text-slate-500 mt-1">{event.detail}</p>
-            </div>
+            </button>
           ))}
         </div>
-      </div>
+      </section>
+
+      <section className="bg-white rounded-[2.5rem] border border-slate-100 p-6 shadow-sm">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h4 className="text-lg font-black text-brand-dark flex items-center gap-2">
+              <i className="fa-solid fa-clock-rotate-left text-brand-navy"></i>
+              سجل الأحداث
+            </h4>
+            <p className="mt-2 text-xs font-bold leading-6 text-slate-500">تاريخ مختصر لكل جلسة، إيداع، اجتماع، أو تحديث مهم.</p>
+          </div>
+          <span className="rounded-full bg-slate-50 px-3 py-1.5 text-[10px] font-black text-slate-500 ring-1 ring-slate-100">
+            {sortedTimeline.length.toLocaleString('ar-IQ')} حدث
+          </span>
+        </div>
+        <div className="mt-6 max-h-[680px] overflow-y-auto pr-2 custom-scrollbar">
+          {sortedTimeline.length > 0 ? (
+            <div className="relative space-y-4 before:absolute before:right-5 before:top-3 before:bottom-3 before:w-0.5 before:bg-slate-100">
+              {sortedTimeline.map((event, index) => {
+                const meta = getTimelineEventMeta(event.type);
+                const isLatest = index === 0;
+                return (
+                  <article key={event.id} className="relative pr-14">
+                    <div className={`absolute right-2.5 top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full border-4 border-white shadow-sm ${
+                      isLatest ? 'bg-brand-gold text-brand-dark' : 'bg-slate-200 text-slate-500'
+                    }`}>
+                      <i className={`fa-solid ${isLatest ? 'fa-star' : 'fa-circle'} text-[8px]`}></i>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab(event.type === 'filing' ? 'summary' : 'chat')}
+                      className={`w-full rounded-2xl border p-4 text-right transition hover:-translate-y-0.5 hover:shadow-sm ${
+                        isLatest ? 'border-brand-gold/30 bg-brand-gold/10' : 'border-slate-100 bg-slate-50/70 hover:bg-white'
+                      }`}
+                    >
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className={`rounded-full border px-2.5 py-1 text-[9px] font-black ${meta.tone}`}>
+                          <i className={`fa-solid ${meta.icon} ml-1`}></i>
+                          {meta.label}
+                        </span>
+                        <span className="text-[10px] font-black text-brand-navy">{event.date}</span>
+                      </div>
+                      <p className="mt-3 text-sm font-black text-brand-dark">{event.title}</p>
+                      <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{event.detail}</p>
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 p-8 text-center">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white text-slate-300 shadow-sm">
+                <i className="fa-solid fa-clock-rotate-left text-xl"></i>
+              </div>
+              <p className="mt-4 text-sm font-black text-brand-dark">لا توجد أحداث مسجلة بعد</p>
+              <p className="mt-2 text-xs font-bold leading-6 text-slate-500">ستظهر هنا الجلسات، الإيداعات، وملاحظات المحامي عند إضافتها.</p>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
 
     <div className="flex flex-col gap-4 sm:flex-row">
@@ -403,7 +667,8 @@ const SummaryTab = ({
       <ActionButton onClick={() => window.print()} variant="secondary" className="flex-1">طباعة التقرير الحالي</ActionButton>
     </div>
   </div>
-);
+  );
+};
 
 const ChatTab = ({
   activeCase,
@@ -687,6 +952,151 @@ const FinancialsTab = ({ activeCase }: { activeCase: LegalCase }) => (
     </div>
   </div>
 );
+
+const ResolutionTab = ({
+  activeCase,
+  setActiveTab,
+  sendMessage,
+  setIsSummaryModalOpen,
+}: {
+  activeCase: LegalCase;
+  setActiveTab: (tab: WorkspaceTab) => void;
+  sendMessage: (text?: string, optimisticId?: string) => void;
+  setIsSummaryModalOpen: (open: boolean) => void;
+}) => {
+  const pendingDocuments = activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
+  const remainingBalance = Math.max(0, activeCase.financials.totalAgreed - activeCase.financials.paid);
+  const latestUserMessage = [...activeCase.messages].reverse().find((message) => message.sender === 'user');
+  const checklist = [
+    {
+      label: 'لا توجد وثائق تنتظر إجراءك',
+      note: pendingDocuments.length > 0 ? `${pendingDocuments.length.toLocaleString('ar-IQ')} وثيقة تحتاج متابعة` : 'كل الوثائق المطلوبة مكتملة أو تحت المراجعة.',
+      done: pendingDocuments.length === 0,
+      action: () => setActiveTab('summary'),
+    },
+    {
+      label: 'التقدم التشغيلي وصل لمرحلة الإغلاق',
+      note: activeCase.progress >= 80 ? `${activeCase.progress}% مكتمل` : `التقدم الحالي ${activeCase.progress}% ويحتاج متابعة إضافية.`,
+      done: activeCase.progress >= 80 || activeCase.status === 'closed',
+      action: () => setActiveTab('chat'),
+    },
+    {
+      label: 'الوضع المالي واضح',
+      note: remainingBalance === 0 ? 'لا يوجد مبلغ متبقٍ على هذه القضية.' : `${remainingBalance.toLocaleString()} د.ع متبقٍ حسب سجل الفواتير.`,
+      done: remainingBalance === 0 || activeCase.financials.totalAgreed === 0,
+      action: () => setActiveTab('financials'),
+    },
+    {
+      label: 'آخر رسالة تمت متابعتها',
+      note: latestUserMessage?.awaitingResponse ? 'توجد رسالة منك بانتظار متابعة المحامي.' : 'لا توجد رسالة معلقة منك حالياً.',
+      done: !latestUserMessage?.awaitingResponse,
+      action: () => setActiveTab('chat'),
+    },
+  ];
+  const readyToClose = checklist.every((item) => item.done);
+
+  return (
+    <div className="flex-1 overflow-y-auto bg-slate-50/30 p-5 custom-scrollbar">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <section className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">Resolution Center</p>
+              <h3 className="mt-2 text-2xl font-black text-brand-dark">إغلاق القضية بدون فقدان أي خطوة</h3>
+              <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
+                راجع المتطلبات النهائية، اطلب من المحامي اعتماد الإغلاق، ثم احتفظ بملخص القضية والوثائق للرجوع إليها لاحقاً.
+              </p>
+            </div>
+            <span className={`w-fit rounded-full px-3 py-1.5 text-[10px] font-black ring-1 ${
+              activeCase.status === 'closed'
+                ? 'bg-emerald-50 text-emerald-700 ring-emerald-100'
+                : readyToClose
+                  ? 'bg-brand-navy/5 text-brand-navy ring-brand-navy/10'
+                  : 'bg-amber-50 text-amber-700 ring-amber-100'
+            }`}>
+              {activeCase.status === 'closed' ? 'مغلقة' : readyToClose ? 'جاهزة للمراجعة النهائية' : 'تحتاج إكمال'}
+            </span>
+          </div>
+
+          <div className="mt-6 grid gap-3">
+            {checklist.map((item) => (
+              <button
+                key={item.label}
+                type="button"
+                onClick={item.action}
+                className="flex items-start justify-between gap-4 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 text-right transition hover:border-brand-navy/20 hover:bg-white"
+              >
+                <div className="min-w-0">
+                  <p className="text-sm font-black text-brand-dark">{item.label}</p>
+                  <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{item.note}</p>
+                </div>
+                <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${
+                  item.done ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                }`}>
+                  <i className={`fa-solid ${item.done ? 'fa-check' : 'fa-arrow-left'}`}></i>
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <aside className="space-y-4">
+          <section className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-sm">
+            <h4 className="text-base font-black text-brand-dark">الإجراء التالي</h4>
+            <p className="mt-2 text-xs font-bold leading-6 text-slate-500">
+              {activeCase.status === 'closed'
+                ? 'القضية مغلقة. يمكنك حفظ الملخص أو الرجوع للوثائق في أي وقت.'
+                : readyToClose
+                  ? 'أرسل طلب اعتماد الإغلاق للمحامي ليؤكد النتيجة النهائية.'
+                  : 'ابدأ بالعناصر غير المكتملة في قائمة الإغلاق.'}
+            </p>
+            <div className="mt-4 grid gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const message = readyToClose
+                    ? 'أرغب بمراجعة القضية للإغلاق النهائي. هل يمكنك تأكيد النتيجة والخطوات الختامية؟'
+                    : 'أريد معرفة ما المتبقي قبل إغلاق القضية بشكل نهائي.';
+                  sendMessage(message);
+                  setActiveTab('chat');
+                }}
+                disabled={activeCase.status === 'closed'}
+                className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                مراسلة المحامي للإغلاق
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSummaryModalOpen(true)}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-brand-navy transition hover:border-brand-navy"
+              >
+                عرض ملخص القضية
+              </button>
+            </div>
+          </section>
+
+          <section className="rounded-[2rem] border border-slate-100 bg-white p-5 shadow-sm">
+            <h4 className="text-base font-black text-brand-dark">نتيجة الملف</h4>
+            <div className="mt-4 grid gap-3 text-right">
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-[10px] font-black text-slate-400">المحامي</p>
+                <p className="mt-1 text-sm font-black text-brand-dark">{activeCase.lawyer.name}</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-[10px] font-black text-slate-400">الوثائق</p>
+                <p className="mt-1 text-sm font-black text-brand-dark">{activeCase.documents.length.toLocaleString('ar-IQ')} وثيقة</p>
+              </div>
+              <div className="rounded-2xl bg-slate-50 px-4 py-3">
+                <p className="text-[10px] font-black text-slate-400">الحالة</p>
+                <p className="mt-1 text-sm font-black text-brand-dark">{activeCase.statusText}</p>
+              </div>
+            </div>
+          </section>
+        </aside>
+      </div>
+    </div>
+  );
+};
 
 export default function MyCases() {
   const { user, logout } = useAuth();
@@ -1649,7 +2059,7 @@ export default function MyCases() {
               )}
             </div>
             <h2 className="mt-2 text-2xl font-black text-brand-dark sm:text-3xl">متابعة القضايا</h2>
-            <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">اختر قضية، راجع الرسائل والوثائق، ثم نفّذ الإجراء المطلوب.</p>
+            <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">ابدأ ملفاً، تواصل مع المحامي، أدر الوثائق والمدفوعات، ثم أغلق القضية بملخص واضح.</p>
           </div>
         </div>
         <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
@@ -1692,9 +2102,21 @@ export default function MyCases() {
                 <i className="fa-regular fa-comments"></i>
                 الرسائل
               </ActionButton>
+              <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('resolution')}>
+                <i className="fa-solid fa-circle-check"></i>
+                الإغلاق
+              </ActionButton>
             </div>
           </div>
         </div>
+      )}
+
+      {activeCase && (
+        <CaseLifecycleRail
+          activeCase={activeCase}
+          setActiveTab={setActiveTab}
+          setDocFilter={setDocFilter}
+        />
       )}
 
       <div className={`grid min-h-[760px] w-full min-w-0 grid-cols-1 gap-5 2xl:h-[calc(100vh-285px)] ${isSidebarCollapsed ? '' : 'xl:grid-cols-[320px_minmax(0,1fr)]'}`}>
@@ -1983,6 +2405,7 @@ export default function MyCases() {
                       { id: 'chat', label: 'التوجيهات', icon: 'fa-regular fa-comments', badge: activeCase.unreadCount ? activeCase.unreadCount.toLocaleString('ar-IQ') : undefined },
                       { id: 'ai', label: 'الذكاء الاصطناعي', icon: 'fa-solid fa-robot', badge: activeCase.aiConsultations?.length ? activeCase.aiConsultations.length.toLocaleString('ar-IQ') : undefined },
                       { id: 'financials', label: 'المالية', icon: 'fa-solid fa-file-invoice-dollar', badge: `${Math.round((activeCase.financials.paid / Math.max(activeCase.financials.totalAgreed, 1)) * 100)}%` },
+                      { id: 'resolution', label: 'الإغلاق', icon: 'fa-solid fa-circle-check', badge: activeCase.status === 'closed' ? 'تم' : undefined },
                     ].map((tab) => (
                       <button
                         key={tab.id}
@@ -2219,8 +2642,15 @@ export default function MyCases() {
                       setIsNewFieldModalOpen={setIsNewFieldModalOpen}
                       setActiveTab={setActiveTab}
                     />
-                  ) : (
+                  ) : activeTab === 'financials' ? (
                     <FinancialsTab activeCase={activeCase} />
+                  ) : (
+                    <ResolutionTab
+                      activeCase={activeCase}
+                      setActiveTab={setActiveTab}
+                      sendMessage={sendMessage}
+                      setIsSummaryModalOpen={setIsSummaryModalOpen}
+                    />
                   )}
                   <div className="mt-auto border-t border-slate-100 bg-white p-4">
                     <button
@@ -3135,6 +3565,21 @@ export default function MyCases() {
               <h3 className="text-2xl font-black text-brand-dark mb-2">فتح ملف قضية جديد</h3>
               <p className="text-sm font-bold text-slate-500 mb-6">أدخل عنواناً واضحاً للقضية لبدء العمل مع المحامي المتخصص.</p>
 
+              <div className="mb-6 grid grid-cols-3 gap-2">
+                {[
+                  { label: 'بيانات', icon: 'fa-pen-to-square' },
+                  { label: 'محامٍ', icon: 'fa-user-tie' },
+                  { label: 'متابعة', icon: 'fa-comments' },
+                ].map((step, index) => (
+                  <div key={step.label} className="rounded-2xl border border-slate-100 bg-slate-50 px-3 py-3 text-center">
+                    <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-white text-brand-navy shadow-sm">
+                      <i className={`fa-solid ${step.icon} text-xs`}></i>
+                    </div>
+                    <p className="mt-2 text-[10px] font-black text-brand-dark">{index + 1}. {step.label}</p>
+                  </div>
+                ))}
+              </div>
+
               <div className="space-y-4 mb-8">
                 {createCaseError && (
                   <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700">
@@ -3257,6 +3702,24 @@ export default function MyCases() {
                     لا يمكن فتح ملف جديد الآن لأنه لا يوجد محامون مسجلون في النظام حالياً.
                   </div>
                 )}
+
+                <div className="rounded-2xl border border-brand-navy/10 bg-brand-navy/5 px-4 py-4">
+                  <p className="text-xs font-black text-brand-navy">بعد فتح الملف</p>
+                  <div className="mt-3 grid gap-2 text-xs font-bold text-slate-600">
+                    <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2">
+                      <span>المحامي يستلم الملف ويحدد أول خطوة</span>
+                      <i className="fa-solid fa-check text-emerald-500"></i>
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2">
+                      <span>تظهر الوثائق والرسائل داخل مساحة واحدة</span>
+                      <i className="fa-solid fa-check text-emerald-500"></i>
+                    </div>
+                    <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2">
+                      <span>يمكنك طلب الإغلاق عند اكتمال المتطلبات</span>
+                      <i className="fa-solid fa-check text-emerald-500"></i>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex gap-3">
