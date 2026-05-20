@@ -110,7 +110,7 @@ function SettingsCard({
   className?: string;
 }) {
   return (
-    <section className={`overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm ${className}`}>
+    <section className={`w-full min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm ${className}`}>
       <div className="border-b border-slate-100 bg-slate-50/50 px-6 py-5 text-right">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div>
@@ -515,10 +515,10 @@ export default function Settings() {
   };
 
   return (
-    <div className="app-view fade-in mx-auto max-w-[1440px] space-y-6 pb-12 text-right">
-      <section className="overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-white shadow-premium">
-        <div className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8">
-          <div>
+    <div className="app-view fade-in mx-auto w-full min-w-0 max-w-full space-y-6 overflow-x-hidden pb-12 text-right">
+      <section className="min-w-0 overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-white shadow-premium">
+        <div className="grid min-w-0 gap-6 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_minmax(280px,360px)] lg:p-8">
+          <div className="min-w-0">
             <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-xs font-black text-brand-dark">
               <i className="fa-solid fa-sliders text-brand-gold"></i>
               Private Workspace
@@ -539,7 +539,7 @@ export default function Settings() {
               </StatusBadge>
             </div>
           </div>
-          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
+          <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
             <div className="space-y-4">
               <div>
                 <div className="mb-2 flex items-center justify-between text-xs font-black text-slate-500">
@@ -599,8 +599,8 @@ export default function Settings() {
         <NoticePanel title={savedToast.includes('تعذر') ? 'تنبيه' : 'تم الحفظ'} description={savedToast} tone={savedToast.includes('تعذر') ? 'warning' : 'success'} />
       )}
 
-      <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
-        <aside className="space-y-3">
+      <div className="grid min-w-0 gap-6 xl:grid-cols-[minmax(240px,300px)_minmax(0,1fr)]">
+        <aside className="min-w-0 space-y-3">
           {sections.map((section) => (
             <button
               key={section.id}
@@ -621,7 +621,7 @@ export default function Settings() {
           ))}
         </aside>
 
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           {activeSection === 'account' && (
             <>
               <NoticePanel
@@ -1009,7 +1009,7 @@ export default function Settings() {
               <SettingsCard title="طريقة الدفع" description="إدارة البطاقات المربوطة أو إضافة وسائل دفع احتياطية.">
                 <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex items-start justify-between gap-3">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                       <div className="rounded-xl bg-brand-dark px-4 py-3 text-white">
                         <p className="text-xs uppercase tracking-[0.2em] text-white/60">فيزا</p>
                         <p className="mt-3 text-lg font-bold">•••• 4242</p>
@@ -1137,17 +1137,17 @@ export default function Settings() {
               <SettingsCard title="التطبيقات المتصلة" description="إدارة الربط مع الأدوات الخارجية لتسريع سير عملك القانوني.">
                 <div className="grid gap-4">
                   {connectedApps.map((app) => (
-                    <div key={app.id} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50/30 p-4 transition-all hover:bg-slate-50">
-                      <div className="flex items-center gap-4">
+                    <div key={app.id} className="flex min-w-0 flex-col gap-4 rounded-2xl border border-slate-100 bg-slate-50/30 p-4 transition-all hover:bg-slate-50 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-4">
                         <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-xl text-slate-600 shadow-sm">
                           <i className={app.icon}></i>
                         </div>
-                        <div className="text-right">
+                        <div className="min-w-0 text-right">
                           <p className="text-sm font-bold text-brand-dark">{app.name}</p>
                           <p className="mt-0.5 text-xs text-slate-500">{app.desc}</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex shrink-0 items-center justify-end gap-3">
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${app.status === 'connected' ? 'text-emerald-600' : 'text-slate-400'}`}>
                           {app.status === 'connected' ? 'متصل' : 'غير متصل'}
                         </span>
