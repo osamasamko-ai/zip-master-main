@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import FollowButton from '../components/FollowButton';
@@ -16,32 +16,65 @@ interface AvailabilityAlert {
   time: string;
 }
 
+type AvailabilityFilter = 'all' | 'online' | 'offline';
+type FollowedSortMode = 'priority' | 'rating' | 'followers';
+
 export default function Following() {
   const navigate = useNavigate();
-  const { followedIds, follow, unfollow, isFollowed, isPending, totalFollowed } = useFollowedLawyers();
+  const { followedIds, follow, unfollow, isFollowed, isPending, totalFollowed, reload } = useFollowedLawyers();
   const [followedSearch, setFollowedSearch] = useState('');
-  const [availabilityFilter, setAvailabilityFilter] = useState<'all' | 'online' | 'offline'>('all');
+  const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('all');
   const [specialtyFilter, setSpecialtyFilter] = useState('all');
+  const [sortMode, setSortMode] = useState<FollowedSortMode>('priority');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
+  const [loadWarning, setLoadWarning] = useState('');
   const [alerts, setAlerts] = useState<AvailabilityAlert[]>([]);
   const [activeToast, setActiveToast] = useState<AvailabilityAlert | null>(null);
   const [allLawyers, setAllLawyers] = useState<any[]>([]);
 
-  useEffect(() => {
-    const load = async () => {
-      setIsLoading(true);
-      try {
-        const lawyersResponse = await apiClient.getLawyers();
-        setAllLawyers(lawyersResponse.data || []);
-      } catch (error) {
-        console.error('Failed to load following page data', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+  const loadPageData = useCallback(async () => {
+    setIsLoading(true);
+    setLoadError('');
+    setLoadWarning('');
+    try {
+      const [lawyersResponse, followingResponse] = await Promise.allSettled([
+        apiClient.getLawyers(),
+        apiClient.getFollowing(),
+      ]);
 
-    load();
+      const directoryLawyers = lawyersResponse.status === 'fulfilled' ? lawyersResponse.value.data || [] : [];
+      const followedLawyersFromApi = followingResponse.status === 'fulfilled' ? followingResponse.value.data || [] : [];
+      const mergedLawyers = [
+        ...directoryLawyers,
+        ...followedLawyersFromApi.filter((followedLawyer: any) => !directoryLawyers.some((lawyer: any) => lawyer.id === followedLawyer.id)),
+      ];
+
+      if (lawyersResponse.status === 'rejected' && followingResponse.status === 'rejected') {
+        throw new Error('Failed to load directory and following data');
+      }
+
+      setAllLawyers(mergedLawyers);
+
+      if (lawyersResponse.status === 'rejected') {
+        setLoadWarning('تم تحميل المحفوظات، لكن تعذر تحميل المقترحين حالياً.');
+      }
+    } catch (error) {
+      console.error('Failed to load following page data', error);
+      setLoadError('تعذر تحميل المحامين المحفوظين حالياً. حاول تحديث الصفحة أو الرجوع إلى دليل المحامين.');
+      setAllLawyers([]);
+    } finally {
+      setIsLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadPageData();
+  }, [loadPageData]);
+
+  const retryLoad = async () => {
+    await Promise.all([loadPageData(), reload()]);
+  };
 
   useEffect(() => {
     const handleFollowStateChange = (event: Event) => {
@@ -91,8 +124,12 @@ export default function Following() {
 
         return matchesSearch && matchesAvailability && matchesSpecialty;
       })
-      .sort((left, right) => Number(right.isOnline) - Number(left.isOnline) || right.rating - left.rating);
-  }, [availabilityFilter, followedSearch, savedLawyers, specialtyFilter]);
+      .sort((left, right) => {
+        if (sortMode === 'rating') return right.rating - left.rating;
+        if (sortMode === 'followers') return right.followers - left.followers;
+        return Number(right.isOnline) - Number(left.isOnline) || right.rating - left.rating || right.followers - left.followers;
+      });
+  }, [availabilityFilter, followedSearch, savedLawyers, sortMode, specialtyFilter]);
 
   const suggestedLawyers = useMemo(
     () => allLawyers.filter((lawyer) => !followedIds.includes(lawyer.id)).sort((left, right) => right.followers - left.followers),
@@ -106,12 +143,14 @@ export default function Following() {
     followedSearch.trim().length > 0,
     availabilityFilter !== 'all',
     specialtyFilter !== 'all',
+    sortMode !== 'priority',
   ].filter(Boolean).length;
 
   const resetFilters = () => {
     setFollowedSearch('');
     setAvailabilityFilter('all');
     setSpecialtyFilter('all');
+    setSortMode('priority');
   };
 
   useEffect(() => {
@@ -139,7 +178,7 @@ export default function Following() {
   }, [allLawyers, followedIds]);
 
   return (
-    <div className="app-view fade-in space-y-6 pb-12 text-right">
+    <div className="app-view fade-in mx-auto w-full min-w-0 max-w-full space-y-6 overflow-x-hidden pb-12 text-right">
       <AnimatePresence>
         {activeToast && (
           <motion.div
@@ -167,9 +206,9 @@ export default function Following() {
         )}
       </AnimatePresence>
 
-      <section className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-white/80 shadow-premium backdrop-blur">
-        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="p-6 md:p-8">
+      <section className="min-w-0 overflow-hidden rounded-[2rem] border border-white/70 bg-white/85 shadow-premium backdrop-blur">
+        <div className="grid min-w-0 gap-0 xl:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]">
+          <div className="min-w-0 p-5 sm:p-6 md:p-8">
             <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-gold">
               <i className="fa-solid fa-bookmark"></i>
               Saved Lawyers
@@ -181,28 +220,37 @@ export default function Following() {
 
             <div className="mt-6 grid gap-3 md:grid-cols-3">
               <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">المحفوظون</p>
+                <div className="flex items-center justify-between gap-3">
+                  <i className="fa-solid fa-user-check text-brand-gold"></i>
+                  <p className="text-[11px] font-black text-slate-400">المحفوظون</p>
+                </div>
                 <p className="mt-2 text-2xl font-black text-brand-dark">{totalFollowed.toLocaleString('ar-IQ')}</p>
               </div>
               <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">متاحون الآن</p>
+                <div className="flex items-center justify-between gap-3">
+                  <i className="fa-solid fa-signal text-emerald-500"></i>
+                  <p className="text-[11px] font-black text-slate-400">متاحون الآن</p>
+                </div>
                 <p className="mt-2 text-2xl font-black text-brand-dark">{onlineFollowedCount.toLocaleString('ar-IQ')}</p>
               </div>
               <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">أفضل محفوظ</p>
+                <div className="flex items-center justify-between gap-3">
+                  <i className="fa-solid fa-star text-amber-400"></i>
+                  <p className="text-[11px] font-black text-slate-400">أفضل محفوظ</p>
+                </div>
                 <p className="mt-2 truncate text-sm font-black text-brand-dark">{topSavedLawyer ? `${topSavedLawyer.name} • ${topSavedLawyer.rating}` : 'لا يوجد'}</p>
               </div>
             </div>
           </div>
 
-          <div className="bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-6 text-white md:p-8">
+          <div className="border-t border-white/10 bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-5 text-white sm:p-6 md:p-8 xl:border-r xl:border-t-0">
             <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-lightgold">Saved Network</p>
             <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
                 <p className="text-[11px] font-black text-white/60">نتائج العرض</p>
                 <p className="mt-2 text-3xl font-black">{followedLawyers.length.toLocaleString('ar-IQ')}</p>
               </div>
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
                 <p className="text-[11px] font-black text-white/60">إجمالي المتابعين</p>
                 <p className="mt-2 text-3xl font-black">{totalFollowersAcrossSaved.toLocaleString('ar-IQ')}</p>
               </div>
@@ -210,22 +258,24 @@ export default function Following() {
             <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/10 p-4">
               <p className="text-[10px] font-black uppercase tracking-widest text-white/60">الإجراء الأسرع</p>
               <p className="mt-2 text-sm font-black">{onlineFollowedCount > 0 ? 'ابدأ بالمحامين المتاحين الآن' : 'راجع المقترحين أو افتح دليل المحامين'}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button onClick={() => setAvailabilityFilter('online')} className="rounded-xl bg-brand-gold px-3 py-2 text-[10px] font-black text-brand-dark transition hover:bg-brand-lightgold">المتاحون</button>
-                <button onClick={() => navigate('/lawyers')} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white transition hover:bg-white/20">دليل المحامين</button>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <button type="button" onClick={() => setAvailabilityFilter('online')} className="rounded-xl bg-brand-gold px-3 py-2 text-[10px] font-black text-brand-dark transition hover:bg-brand-lightgold">المتاحون</button>
+                <button type="button" onClick={() => navigate('/lawyers')} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white transition hover:bg-white/20">دليل المحامين</button>
               </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-6">
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(300px,360px)]">
+        <div className="min-w-0 space-y-6">
+          <section className="min-w-0 rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h3 className="text-xl font-black text-brand-dark">المحامون المحفوظون</h3>
-              <p className="mt-1 text-xs font-bold text-slate-400">كل بطاقة هنا تنتهي بإجراء واضح: تواصل، افتح قضية، أو أزل من المحفوظات.</p>
+              <p className="mt-1 text-xs font-bold text-slate-400">
+                {isLoading ? 'جاري تحميل قائمتك...' : `${followedLawyers.length.toLocaleString('ar-IQ')} نتيجة ضمن ${savedLawyers.length.toLocaleString('ar-IQ')} محفوظ`}
+              </p>
             </div>
             <div className="relative w-full lg:w-96">
               <input
@@ -238,12 +288,13 @@ export default function Following() {
               <i className="fa-solid fa-magnifying-glass absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
             </div>
           </div>
-          <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_220px]">
+            <div className="flex min-w-0 gap-2 overflow-x-auto pb-1 no-scrollbar">
             {([
               { id: 'all', label: 'الكل', count: savedLawyers.length },
               { id: 'online', label: 'متاح الآن', count: savedLawyers.filter((lawyer) => lawyer.isOnline).length },
               { id: 'offline', label: 'حسب الجدول', count: savedLawyers.filter((lawyer) => !lawyer.isOnline).length },
-            ] as Array<{ id: 'all' | 'online' | 'offline'; label: string; count: number }>).map((filter) => (
+            ] as Array<{ id: AvailabilityFilter; label: string; count: number }>).map((filter) => (
               <button
                 key={filter.id}
                 type="button"
@@ -264,6 +315,16 @@ export default function Following() {
                 {specialty === 'all' ? 'كل التخصصات' : specialty}
               </button>
             ))}
+            </div>
+            <select
+              value={sortMode}
+              onChange={(event) => setSortMode(event.target.value as FollowedSortMode)}
+              className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xs font-black text-slate-700 outline-none transition focus:border-brand-navy"
+            >
+              <option value="priority">الأولوية الذكية</option>
+              <option value="rating">الأعلى تقييماً</option>
+              <option value="followers">الأكثر متابعة</option>
+            </select>
           </div>
           {(activeFilterCount > 0) && (
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-slate-50 px-4 py-3">
@@ -271,9 +332,27 @@ export default function Following() {
               <button onClick={resetFilters} className="text-xs font-black text-brand-navy transition hover:text-brand-dark">مسح الفلاتر</button>
             </div>
           )}
+          {loadWarning && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3">
+              <span className="text-xs font-black text-amber-700">{loadWarning}</span>
+              <button type="button" onClick={retryLoad} className="text-xs font-black text-brand-navy transition hover:text-brand-dark">إعادة المحاولة</button>
+            </div>
+          )}
           </section>
 
-          {isLoading ? (
+          {loadError ? (
+            <EmptyState
+              icon="circle-exclamation"
+              title="تعذر تحميل المحفوظات"
+              description={loadError}
+              action={
+                <div className="flex flex-wrap justify-center gap-3">
+                  <ActionButton onClick={retryLoad} variant="primary">إعادة المحاولة</ActionButton>
+                  <ActionButton onClick={() => navigate('/lawyers')} variant="secondary">دليل المحامين</ActionButton>
+                </div>
+              }
+            />
+          ) : isLoading ? (
             <div className="grid gap-6 sm:grid-cols-2">
               {[0, 1, 2, 3].map((item) => (
                 <div key={item} className="h-80 animate-pulse rounded-[2rem] border border-slate-200 bg-white shadow-sm" />
@@ -285,10 +364,10 @@ export default function Following() {
                 <motion.article
                   key={lawyer.id}
                   layout
-                  className="group overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm transition hover:border-brand-navy/30 hover:shadow-lg"
+                  className="group min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm transition hover:border-brand-navy/30 hover:shadow-lg sm:p-6"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-3 text-right">
+                  <div className="flex min-w-0 items-start justify-between gap-4">
+                    <div className="min-w-0 space-y-3 text-right">
                       <div className="flex flex-wrap items-center justify-end gap-2">
                         {lawyer.verified && (
                           <StatusBadge tone="info" className="px-2.5 py-1 text-[11px]">
@@ -301,8 +380,8 @@ export default function Following() {
                         </StatusBadge>
                       </div>
                       <div>
-                        <h3 className="text-lg font-black text-brand-dark">{lawyer.name}</h3>
-                        <p className="mt-1 text-sm font-bold text-slate-500">{lawyer.tagline}</p>
+                        <h3 className="truncate text-lg font-black text-brand-dark">{lawyer.name}</h3>
+                        <p className="mt-1 line-clamp-2 text-sm font-bold text-slate-500">{lawyer.tagline}</p>
                       </div>
                     </div>
                     <div className="relative shrink-0">
@@ -311,7 +390,7 @@ export default function Following() {
                     </div>
                   </div>
 
-                  <div className="mt-5 grid grid-cols-3 gap-3">
+                  <div className="mt-5 grid grid-cols-3 gap-2 sm:gap-3">
                     <div className="rounded-2xl bg-slate-50 px-3 py-3 text-right">
                       <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">التقييم</p>
                       <p className="mt-1 text-sm font-black text-brand-dark">{lawyer.rating} • {lawyer.reviewCount}</p>
@@ -326,15 +405,15 @@ export default function Following() {
                     </div>
                   </div>
 
-                  <div className="mt-5 flex items-center justify-between rounded-2xl border border-emerald-100 bg-emerald-50/60 px-4 py-3">
+                  <div className={`mt-5 flex flex-col gap-3 rounded-2xl border px-4 py-3 sm:flex-row sm:items-center sm:justify-between ${lawyer.isOnline ? 'border-emerald-100 bg-emerald-50/60' : 'border-slate-200 bg-slate-50'}`}>
                     <div className="text-right">
                       <p className={`text-xs font-black ${lawyer.isOnline ? 'text-emerald-700' : 'text-slate-600'}`}>{lawyer.isOnline ? 'متاح الآن' : lawyer.responseTime}</p>
                       <p className="mt-1 text-[11px] font-bold text-slate-500">يثق به {lawyer.followers.toLocaleString()} متابع</p>
                     </div>
-                    <FollowButton isFollowing={true} isLoading={isPending(lawyer.id)} onToggle={() => unfollow(lawyer.id)} />
+                    <FollowButton isFollowing={true} isLoading={isPending(lawyer.id)} onToggle={() => unfollow(lawyer.id)} className="w-full sm:w-auto" />
                   </div>
 
-                  <div className="mt-4 grid grid-cols-3 gap-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <ActionButton
                       onClick={() => navigate(`/profile/${lawyer.id}`)}
                       variant="secondary"
@@ -378,7 +457,7 @@ export default function Following() {
           )}
         </div>
 
-        <aside className="space-y-6">
+        <aside className="min-w-0 space-y-6 xl:sticky xl:top-24 xl:self-start">
           <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
             <h3 className="text-base font-black text-brand-dark">مقترحون لك</h3>
             <p className="mt-1 text-xs font-bold text-slate-500">مرتبون حسب الثقة والتخصص وعدد المتابعين.</p>
@@ -386,14 +465,14 @@ export default function Following() {
               {suggestedLawyers.slice(0, 3).map((lawyer) => (
                 <div key={lawyer.id} className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
                   <div className="flex items-start gap-3">
-                    <div className="text-right">
-                      <p className="text-sm font-black text-brand-dark">{lawyer.name}</p>
+                    <div className="min-w-0 flex-1 text-right">
+                      <p className="truncate text-sm font-black text-brand-dark">{lawyer.name}</p>
                       <p className="mt-1 text-xs font-bold text-slate-500">{lawyer.specialty} • {lawyer.location}</p>
                       <p className="mt-2 text-[11px] font-black text-brand-gold">{lawyer.followers.toLocaleString()} متابع • {lawyer.rating} نجوم</p>
                     </div>
                     <img src={lawyer.avatar} alt={lawyer.name} className="h-12 w-12 rounded-2xl object-cover" />
                   </div>
-                  <div className="mt-4 flex items-center gap-3">
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-1 2xl:grid-cols-2">
                     <ActionButton onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)} variant="secondary" size="sm" className="flex-1">
                       تواصل
                     </ActionButton>
