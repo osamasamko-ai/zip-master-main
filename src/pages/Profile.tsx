@@ -10,6 +10,17 @@ import apiClient from '../api/client';
 
 type PublicTab = 'overview' | 'posts' | 'reviews' | 'activity';
 
+type ProfileStory = {
+  id: string;
+  text: string;
+  mediaUrl?: string | null;
+  mediaType?: 'image' | 'video' | null;
+  seenByMe: boolean;
+  viewedAt?: string | null;
+  createdAt: string;
+  expiresAt: string;
+};
+
 function formatPostDate(value: string) {
   return new Intl.DateTimeFormat('ar-IQ', {
     month: 'short',
@@ -92,9 +103,56 @@ export default function Profile() {
   const [lawyer, setLawyer] = useState<any | null>(null);
   const [reviews, setReviews] = useState<any[]>([]);
   const [lawyerPosts, setLawyerPosts] = useState<any[]>([]);
+  const [lawyerStories, setLawyerStories] = useState<ProfileStory[]>([]);
+  const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
+  const [storyProgress, setStoryProgress] = useState(0);
   const [activityItems, setActivityItems] = useState<any[]>([]);
   const [relatedLawyers, setRelatedLawyers] = useState<any[]>([]);
   const [loadError, setLoadError] = useState('');
+  const activeStory = activeStoryIndex === null ? null : lawyerStories[activeStoryIndex] || null;
+
+  const markStorySeen = React.useCallback((selectedStory: ProfileStory) => {
+    if (selectedStory.seenByMe) return;
+
+    setLawyerStories((current) =>
+      current.map((item) =>
+        item.id === selectedStory.id
+          ? { ...item, seenByMe: true, viewedAt: item.viewedAt || new Date().toISOString() }
+          : item
+      )
+    );
+    apiClient.markFeedStoryViewed(selectedStory.id)
+      .then((response) => {
+        setLawyerStories((current) => current.map((item) => (item.id === selectedStory.id ? { ...item, ...response.data } : item)));
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const openStory = React.useCallback((story?: ProfileStory) => {
+    const selectedStory = story || lawyerStories.find((item) => !item.seenByMe) || lawyerStories[0];
+    if (!selectedStory) return;
+
+    const selectedIndex = Math.max(0, lawyerStories.findIndex((item) => item.id === selectedStory.id));
+    setStoryProgress(0);
+    setActiveStoryIndex(selectedIndex);
+    markStorySeen(selectedStory);
+  }, [lawyerStories, markStorySeen]);
+
+  const goToStory = React.useCallback((direction: 1 | -1) => {
+    if (activeStoryIndex === null) return;
+    const nextIndex = activeStoryIndex + direction;
+
+    if (nextIndex < 0) return;
+    if (nextIndex >= lawyerStories.length) {
+      setActiveStoryIndex(null);
+      setStoryProgress(0);
+      return;
+    }
+
+    setStoryProgress(0);
+    setActiveStoryIndex(nextIndex);
+    markStorySeen(lawyerStories[nextIndex]);
+  }, [activeStoryIndex, lawyerStories, markStorySeen]);
 
   React.useEffect(() => {
     const load = async () => {
@@ -118,6 +176,7 @@ export default function Profile() {
         setLawyer(profileData.lawyer);
         setReviews(profileData.reviews || []);
         setLawyerPosts(profileData.posts || []);
+        setLawyerStories(profileData.stories || []);
         setActivityItems(profileData.activity || []);
         setRelatedLawyers((lawyersResponse.data || []).filter((item: any) => item.id !== params.id && item.specialty === profileData.lawyer.specialty).slice(0, 2));
       } catch (error) {
@@ -158,6 +217,31 @@ export default function Profile() {
     return () => window.removeEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
   }, []);
 
+  React.useEffect(() => {
+    setStoryProgress(0);
+  }, [activeStoryIndex]);
+
+  React.useEffect(() => {
+    if (!activeStory) return undefined;
+
+    const duration = activeStory.mediaType === 'video' ? 12000 : 6000;
+    const tickMs = 80;
+    const increment = (tickMs / duration) * 100;
+    const timer = window.setInterval(() => {
+      setStoryProgress((current) => {
+        const next = current + increment;
+        if (next >= 100) {
+          window.clearInterval(timer);
+          window.setTimeout(() => goToStory(1), 0);
+          return 100;
+        }
+        return next;
+      });
+    }, tickMs);
+
+    return () => window.clearInterval(timer);
+  }, [activeStory, goToStory]);
+
   if (!lawyer && loadError) {
     return (
       <div className="app-view w-full min-w-0 text-right">
@@ -180,6 +264,8 @@ export default function Profile() {
   }
 
   const isFollowing = isFollowed(lawyer.id);
+  const hasStories = lawyerStories.length > 0;
+  const hasNewStory = lawyerStories.some((story) => !story.seenByMe);
   const socialProofText = `${lawyer.followers.toLocaleString()} متابع • ${lawyer.reviewCount} مراجعة موثقة • ${lawyer.casesHandled}`;
 
   const credentialBadges = [
@@ -208,8 +294,26 @@ export default function Profile() {
           <div className="-mt-16 flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row-reverse lg:items-end lg:justify-between">
             <div className="flex flex-col items-center gap-3 text-center sm:flex-row-reverse sm:text-right">
               <div className="relative">
-                <img src={lawyer.avatar} alt={lawyer.name} className="h-32 w-32 rounded-full border-4 border-white bg-white object-cover shadow-md sm:h-40 sm:w-40" />
+                <button
+                  type="button"
+                  onClick={() => openStory()}
+                  disabled={!hasStories}
+                  className={`relative rounded-full p-1 transition ${hasStories ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'} ${hasStories ? (hasNewStory ? 'bg-[#1877f2]' : 'bg-slate-300') : 'bg-transparent'}`}
+                  title={hasStories ? 'عرض قصة المحامي' : undefined}
+                >
+                  <img src={lawyer.avatar} alt={lawyer.name} className="h-32 w-32 rounded-full border-4 border-white bg-white object-cover shadow-md sm:h-40 sm:w-40" />
+                </button>
                 <span className={`absolute bottom-3 right-3 h-5 w-5 rounded-full border-4 border-white ${lawyer.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                {hasStories && (
+                  <button
+                    type="button"
+                    onClick={() => openStory()}
+                    className={`absolute bottom-2 left-2 flex h-9 w-9 items-center justify-center rounded-full border-4 border-white text-white shadow-md ${hasNewStory ? 'bg-[#1877f2]' : 'bg-slate-500'}`}
+                    title="عرض القصة"
+                  >
+                    <i className="fa-solid fa-play text-[10px]"></i>
+                  </button>
+                )}
               </div>
               <div className="pt-2">
                 <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
@@ -224,6 +328,16 @@ export default function Profile() {
                 <h1 className="mt-3 text-3xl font-black leading-tight text-slate-950 sm:text-4xl">{lawyer.name}</h1>
                 <p className="mt-2 text-sm font-bold text-slate-600">{lawyer.tagline}</p>
                 <p className="mt-2 text-sm font-black text-slate-500">{socialProofText}</p>
+                {hasStories && (
+                  <button
+                    type="button"
+                    onClick={() => openStory()}
+                    className={`mt-3 inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-black transition ${hasNewStory ? 'bg-[#e7f3ff] text-[#1877f2] hover:bg-[#dbeafe]' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'}`}
+                  >
+                    <span className={`h-2 w-2 rounded-full ${hasNewStory ? 'bg-[#1877f2]' : 'bg-slate-400'}`}></span>
+                    {hasNewStory ? 'قصة جديدة' : 'عرض القصة'}
+                  </button>
+                )}
               </div>
             </div>
 
@@ -541,6 +655,105 @@ export default function Profile() {
             ))}
           </div>
         </section>
+      )}
+      {activeStory && (
+        <div className="fixed inset-0 z-[700] flex items-center justify-center bg-black/85 p-4">
+          <button type="button" onClick={() => setActiveStoryIndex(null)} className="absolute left-5 top-5 h-10 w-10 rounded-full bg-white/10 text-white hover:bg-white/20">
+            <i className="fa-solid fa-xmark"></i>
+          </button>
+          <article className="relative aspect-[9/16] max-h-[86vh] w-full max-w-sm overflow-hidden rounded-2xl bg-slate-950 shadow-2xl">
+            <div className="absolute inset-x-0 top-0 z-20 space-y-3 p-4">
+              <div className="flex gap-1.5">
+                {lawyerStories.map((story, index) => (
+                  <button
+                    key={story.id}
+                    type="button"
+                    onClick={() => {
+                      setActiveStoryIndex(index);
+                      markStorySeen(story);
+                    }}
+                    className="h-1 flex-1 overflow-hidden rounded-full bg-white/25"
+                    title={`القصة ${index + 1}`}
+                  >
+                    <span
+                      className="block h-full rounded-full bg-white transition-[width] duration-75"
+                      style={{
+                        width:
+                          activeStoryIndex === null
+                            ? '0%'
+                            : index < activeStoryIndex
+                              ? '100%'
+                              : index === activeStoryIndex
+                                ? `${storyProgress}%`
+                                : '0%',
+                      }}
+                    />
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="rounded-full bg-black/30 px-2.5 py-1 text-[10px] font-black text-white backdrop-blur">
+                  {(activeStoryIndex ?? 0) + 1} / {lawyerStories.length}
+                </span>
+                <div className="flex items-center gap-3">
+                  <div className="min-w-0 text-right">
+                    <p className="truncate text-sm font-black text-white">{lawyer.name}</p>
+                    <p className="text-[11px] font-bold text-white/70">{lawyer.specialty}</p>
+                  </div>
+                  <img src={lawyer.avatar} alt={lawyer.name} className="h-10 w-10 rounded-full border-2 border-white/70 object-cover" />
+                </div>
+              </div>
+            </div>
+            {activeStory.mediaUrl ? (
+              activeStory.mediaType === 'video' ? (
+                <video src={activeStory.mediaUrl} controls autoPlay className="h-full w-full object-contain" />
+              ) : (
+                <img src={activeStory.mediaUrl} alt="" className="h-full w-full object-contain" />
+              )
+            ) : (
+              <div className={`h-full w-full bg-gradient-to-br ${lawyer.accent}`} />
+            )}
+            <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-black/75 to-transparent" />
+            <button
+              type="button"
+              onClick={() => goToStory(-1)}
+              disabled={activeStoryIndex === 0}
+              className="absolute right-0 top-0 z-10 h-full w-1/2 cursor-pointer disabled:cursor-default"
+              title="القصة السابقة"
+            />
+            <button
+              type="button"
+              onClick={() => goToStory(1)}
+              className="absolute left-0 top-0 z-10 h-full w-1/2 cursor-pointer"
+              title="القصة التالية"
+            />
+            {activeStoryIndex !== 0 && (
+              <button
+                type="button"
+                onClick={() => goToStory(-1)}
+                className="absolute right-3 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/50"
+                title="السابق"
+              >
+                <i className="fa-solid fa-chevron-right text-xs"></i>
+              </button>
+            )}
+            {activeStoryIndex !== null && activeStoryIndex < lawyerStories.length - 1 && (
+              <button
+                type="button"
+                onClick={() => goToStory(1)}
+                className="absolute left-3 top-1/2 z-30 flex h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/35 text-white backdrop-blur transition hover:bg-black/50"
+                title="التالي"
+              >
+                <i className="fa-solid fa-chevron-left text-xs"></i>
+              </button>
+            )}
+            {activeStory.text && (
+              <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-black/80 to-transparent p-5">
+                <p className="text-center text-lg font-black leading-8 text-white">{activeStory.text}</p>
+              </div>
+            )}
+          </article>
+        </div>
       )}
       {/* NotificationToast is now rendered globally by NotificationProvider, removed local toast */}
     </div>
