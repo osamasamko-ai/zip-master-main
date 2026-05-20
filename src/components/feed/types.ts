@@ -43,6 +43,9 @@ export type SuggestedLawyer = {
   id: string;
   name: string;
   specialty?: string;
+  avatar?: string;
+  location?: string;
+  followers?: number;
   img?: string;
   lawyerProfile?: {
     avatar?: string;

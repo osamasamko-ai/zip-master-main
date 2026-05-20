@@ -16,18 +16,18 @@ export default function FeedFilters({
   onChange: (filter: FeedFilter) => void;
 }) {
   return (
-    <div className="sticky top-[4.5rem] z-30 -mx-1 overflow-x-auto rounded-[1.7rem] border border-slate-200 bg-white/90 p-1 shadow-lg shadow-slate-900/5 backdrop-blur-xl">
+    <div className="sticky top-[4.5rem] z-30 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
       <div className="flex min-w-max gap-1">
         {filters.map((filter) => (
           <button
             key={filter.id}
             onClick={() => onChange(filter.id)}
-            className={`group inline-flex items-center gap-2 rounded-[1.35rem] px-4 py-3 text-xs font-black transition-all duration-200 ${activeFilter === filter.id
-              ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20'
-              : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'
+            className={`group inline-flex items-center gap-2 rounded-md px-4 py-2.5 text-xs font-black transition-all duration-200 ${activeFilter === filter.id
+              ? 'bg-[#1877f2] text-white shadow-sm'
+              : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800'
               }`}
           >
-            <i className={`fa-solid ${filter.icon} ${activeFilter === filter.id ? 'text-brand-gold' : 'text-slate-300 group-hover:text-brand-navy'}`}></i>
+            <i className={`fa-solid ${filter.icon} ${activeFilter === filter.id ? 'text-white' : 'text-slate-300 group-hover:text-[#1877f2]'}`}></i>
             {filter.label}
           </button>
         ))}

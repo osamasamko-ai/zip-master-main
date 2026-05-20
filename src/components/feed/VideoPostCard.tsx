@@ -3,7 +3,7 @@ import type { FeedPost } from './types';
 export default function VideoPostCard({ post, onOpen }: { post?: FeedPost; onOpen?: (id: string) => void }) {
   if (!post) {
     return (
-      <div className="rounded-[2rem] border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
+      <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-5 text-center">
         <i className="fa-solid fa-circle-play mb-3 text-3xl text-slate-300"></i>
         <p className="text-xs font-black text-slate-400">لا توجد فيديوهات رائجة بعد</p>
       </div>
@@ -13,16 +13,16 @@ export default function VideoPostCard({ post, onOpen }: { post?: FeedPost; onOpe
   return (
     <button
       onClick={() => onOpen?.(post.id)}
-      className="group relative block w-full overflow-hidden rounded-[2rem] bg-slate-950 text-right shadow-lg shadow-slate-900/10"
+      className="group relative block w-full overflow-hidden rounded-lg bg-slate-950 text-right shadow-sm"
     >
       {post.mediaUrl ? (
         <video src={post.mediaUrl} muted className="h-44 w-full object-cover opacity-80 transition duration-500 group-hover:scale-105" />
       ) : (
-        <div className="h-44 bg-brand-navy" />
+        <div className="h-44 bg-[#1877f2]" />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 text-brand-navy shadow-xl transition group-hover:scale-110">
+        <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 text-[#1877f2] shadow-xl transition group-hover:scale-110">
           <i className="fa-solid fa-play"></i>
         </span>
       </div>

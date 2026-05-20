@@ -21,7 +21,7 @@ export default function FeedSidebar({
       <Panel title="المواضيع الرائجة" icon="fa-hashtag">
         <div className="flex flex-wrap gap-2">
           {(trendingTopics.length ? trendingTopics : ['أحوال شخصية', 'عقارات', 'عقود', 'عمل']).map((topic) => (
-            <span key={topic} className="rounded-full bg-brand-gold/15 px-3 py-1.5 text-[11px] font-black text-brand-dark">
+            <span key={topic} className="rounded-full bg-[#e7f3ff] px-3 py-1.5 text-[11px] font-black text-[#1877f2]">
               #{topic}
             </span>
           ))}
@@ -31,16 +31,16 @@ export default function FeedSidebar({
       <Panel title="محامون مقترحون" icon="fa-user-plus">
         <div className="space-y-3">
           {suggestedLawyers.slice(0, 4).map((lawyer) => (
-            <div key={lawyer.id} className="flex items-center justify-between gap-3 rounded-2xl bg-slate-50 p-3">
-              <button onClick={() => onFollow(lawyer.id)} className="rounded-xl bg-white px-3 py-2 text-[11px] font-black text-brand-navy shadow-sm transition hover:bg-brand-navy hover:text-white">
+            <div key={lawyer.id} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
+              <button onClick={() => onFollow(lawyer.id)} className="rounded-md bg-white px-3 py-2 text-[11px] font-black text-[#1877f2] shadow-sm transition hover:bg-[#1877f2] hover:text-white">
                 متابعة
               </button>
               <div className="flex min-w-0 items-center gap-3">
                 <div className="min-w-0 text-right">
-                  <p className="truncate text-xs font-black text-brand-dark">{lawyer.name}</p>
+                  <p className="truncate text-xs font-black text-slate-900">{lawyer.name}</p>
                   <p className="truncate text-[10px] font-bold text-slate-400">{lawyer.lawyerProfile?.specialty || lawyer.specialty || 'محامٍ موثق'}</p>
                 </div>
-                <img src={lawyer.lawyerProfile?.avatar || lawyer.img || 'https://i.pravatar.cc/150'} alt="" className="h-10 w-10 rounded-xl object-cover" />
+                <img src={lawyer.avatar || lawyer.lawyerProfile?.avatar || lawyer.img || 'https://i.pravatar.cc/150'} alt="" className="h-10 w-10 rounded-full object-cover" />
               </div>
             </div>
           ))}
@@ -51,7 +51,7 @@ export default function FeedSidebar({
         <div className="space-y-3">
           <VideoPostCard post={videos[0]} onOpen={onOpenPost} />
           {videos.slice(1).map((video) => (
-            <button key={video.id} onClick={() => onOpenPost(video.id)} className="line-clamp-2 w-full rounded-2xl bg-slate-50 p-3 text-right text-xs font-black leading-6 text-slate-600 transition hover:bg-brand-navy hover:text-white">
+            <button key={video.id} onClick={() => onOpenPost(video.id)} className="line-clamp-2 w-full rounded-md bg-slate-50 p-3 text-right text-xs font-black leading-6 text-slate-600 transition hover:bg-[#1877f2] hover:text-white">
               {video.content}
             </button>
           ))}
@@ -61,10 +61,10 @@ export default function FeedSidebar({
       <Panel title="آخر إعلانات الإدارة" icon="fa-bullhorn">
         <div className="space-y-2">
           {announcements.length === 0 ? (
-            <p className="rounded-2xl bg-slate-50 p-4 text-xs font-bold text-slate-400">لا توجد إعلانات حديثة.</p>
+            <p className="rounded-md bg-slate-50 p-4 text-xs font-bold text-slate-400">لا توجد إعلانات حديثة.</p>
           ) : announcements.map((post) => (
-            <button key={post.id} onClick={() => onOpenPost(post.id)} className="w-full rounded-2xl border border-brand-gold/20 bg-brand-gold/10 p-3 text-right transition hover:bg-brand-gold/20">
-              <p className="line-clamp-2 text-xs font-black leading-6 text-brand-dark">{post.content}</p>
+            <button key={post.id} onClick={() => onOpenPost(post.id)} className="w-full rounded-md border border-[#1877f2]/10 bg-[#e7f3ff] p-3 text-right transition hover:bg-blue-100">
+              <p className="line-clamp-2 text-xs font-black leading-6 text-slate-800">{post.content}</p>
             </button>
           ))}
         </div>
@@ -75,10 +75,10 @@ export default function FeedSidebar({
 
 function Panel({ title, icon, children }: { title: string; icon: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-black text-brand-dark">{title}</h3>
-        <span className="flex h-9 w-9 items-center justify-center rounded-2xl bg-brand-navy/5 text-brand-navy">
+        <h3 className="text-sm font-black text-slate-900">{title}</h3>
+        <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
           <i className={`fa-solid ${icon} text-xs`}></i>
         </span>
       </div>
