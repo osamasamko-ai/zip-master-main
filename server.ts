@@ -611,6 +611,48 @@ async function startServer() {
     }
   });
 
+  app.post('/api/app/profile/media', authenticateToken, upload.single('image'), async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const kind = req.body.kind === 'cover' ? 'cover' : 'avatar';
+      if (!req.file) return res.status(400).json({ error: 'لم يتم رفع صورة.' });
+      if (!req.file.mimetype.startsWith('image/')) {
+        return res.status(400).json({ error: 'يسمح برفع الصور فقط.' });
+      }
+
+      const imageUrl = `/uploads/${req.file.filename}`;
+      const existingUser = await prisma.user.findUnique({
+        where: { id: currentUser.userId },
+        select: { role: true },
+      });
+
+      if (!existingUser) return res.status(404).json({ error: 'المستخدم غير موجود.' });
+
+      if (kind === 'avatar') {
+        await prisma.user.update({
+          where: { id: currentUser.userId },
+          data: { img: imageUrl },
+        });
+      }
+
+      if (existingUser.role === 'pro' || existingUser.role === 'admin') {
+        await prisma.lawyerProfile.upsert({
+          where: { userId: currentUser.userId },
+          update: kind === 'cover' ? { coverImage: imageUrl } : { avatar: imageUrl },
+          create: {
+            userId: currentUser.userId,
+            ...(kind === 'cover' ? { coverImage: imageUrl } : { avatar: imageUrl }),
+          },
+        });
+      }
+
+      res.json({ data: { kind, url: imageUrl } });
+    } catch (error) {
+      console.error('Profile media upload error:', error);
+      res.status(500).json({ error: 'تعذر تحديث الصورة.' });
+    }
+  });
+
   app.put('/api/app/settings/preferences', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;

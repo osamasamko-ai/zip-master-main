@@ -75,6 +75,7 @@ model LawyerProfile {
   specialty             String?
   experienceYears       Int     @default(0)
   avatar                String?
+  coverImage            String?
   tagline               String?
   availability          String?
   isOnline              Boolean @default(false)

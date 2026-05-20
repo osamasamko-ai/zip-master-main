@@ -7,6 +7,7 @@ import NoticePanel from '../components/ui/NoticePanel';
 import StatusBadge from '../components/ui/StatusBadge';
 import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 import apiClient from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 type PublicTab = 'overview' | 'posts' | 'reviews' | 'activity';
 
@@ -94,6 +95,7 @@ function PublicStat({ label, value, note }: { label: string; value: string; note
 }
 
 export default function Profile() {
+  const { user, updateUser } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams<{ id: string }>();
@@ -106,9 +108,12 @@ export default function Profile() {
   const [lawyerStories, setLawyerStories] = useState<ProfileStory[]>([]);
   const [activeStoryIndex, setActiveStoryIndex] = useState<number | null>(null);
   const [storyProgress, setStoryProgress] = useState(0);
+  const [mediaUploadTarget, setMediaUploadTarget] = useState<'avatar' | 'cover' | null>(null);
   const [activityItems, setActivityItems] = useState<any[]>([]);
   const [relatedLawyers, setRelatedLawyers] = useState<any[]>([]);
   const [loadError, setLoadError] = useState('');
+  const avatarInputRef = React.useRef<HTMLInputElement>(null);
+  const coverInputRef = React.useRef<HTMLInputElement>(null);
   const activeStory = activeStoryIndex === null ? null : lawyerStories[activeStoryIndex] || null;
 
   const markStorySeen = React.useCallback((selectedStory: ProfileStory) => {
@@ -264,6 +269,7 @@ export default function Profile() {
   }
 
   const isFollowing = isFollowed(lawyer.id);
+  const isOwnProfile = user?.id === lawyer.id;
   const hasStories = lawyerStories.length > 0;
   const hasNewStory = lawyerStories.some((story) => !story.seenByMe);
   const socialProofText = `${lawyer.followers.toLocaleString()} متابع • ${lawyer.reviewCount} مراجعة موثقة • ${lawyer.casesHandled}`;
@@ -275,25 +281,70 @@ export default function Profile() {
     `الانضمام: ${lawyer.submittedAt ?? 'غير محدد'}`,
   ];
 
+  const uploadProfileImage = async (kind: 'avatar' | 'cover', file?: File) => {
+    if (!file || !isOwnProfile) return;
+
+    setMediaUploadTarget(kind);
+    try {
+      const response = await apiClient.uploadProfileMedia(kind, file);
+      const imageUrl = response.data?.url;
+      if (!imageUrl) return;
+
+      setLawyer((current: any) =>
+        current
+          ? {
+            ...current,
+            ...(kind === 'avatar' ? { avatar: imageUrl } : { coverImage: imageUrl }),
+          }
+          : current
+      );
+
+      if (kind === 'avatar') updateUser({ img: imageUrl });
+    } catch (error) {
+      console.error('Failed to upload profile media', error);
+      setLoadError(kind === 'avatar' ? 'تعذر تحديث صورة الملف.' : 'تعذر تحديث صورة الغلاف.');
+    } finally {
+      setMediaUploadTarget(null);
+      if (kind === 'avatar' && avatarInputRef.current) avatarInputRef.current.value = '';
+      if (kind === 'cover' && coverInputRef.current) coverInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="app-view mx-auto w-full min-w-0 max-w-[1400px] space-y-5 overflow-x-hidden pb-24 text-right">
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className={`relative h-56 bg-gradient-to-br ${lawyer.accent} sm:h-72`}>
+        <div
+          className={`relative h-[260px] bg-gradient-to-br ${lawyer.accent} bg-cover bg-center sm:h-[340px] lg:h-[400px]`}
+          style={lawyer.coverImage ? { backgroundImage: `url(${lawyer.coverImage})` } : undefined}
+        >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_32%),linear-gradient(180deg,transparent,rgba(0,0,0,0.22))]" />
-          <button
-            type="button"
-            onClick={() => navigate('/feed')}
-            className="absolute left-4 top-4 rounded-md bg-white/90 px-3 py-2 text-xs font-black text-slate-700 shadow-sm transition hover:bg-white"
-          >
-            <i className="fa-solid fa-newspaper ml-2 text-[#1877f2]"></i>
-            منشوراته
-          </button>
+          <div className="absolute bottom-5 left-5 flex flex-wrap justify-end gap-2">
+            {isOwnProfile && (
+              <button
+                type="button"
+                onClick={() => coverInputRef.current?.click()}
+                disabled={mediaUploadTarget === 'cover'}
+                className="rounded-md bg-white/95 px-4 py-2.5 text-sm font-black text-slate-800 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-70"
+              >
+                <i className={`fa-solid ${mediaUploadTarget === 'cover' ? 'fa-spinner fa-spin' : 'fa-camera'} ml-2 text-slate-700`}></i>
+                {mediaUploadTarget === 'cover' ? 'جاري الرفع...' : 'تغيير الغلاف'}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => navigate('/feed')}
+              className="rounded-md bg-white/95 px-4 py-2.5 text-sm font-black text-slate-800 shadow-sm transition hover:bg-white"
+            >
+              <i className="fa-solid fa-newspaper ml-2 text-[#1877f2]"></i>
+              منشوراته
+            </button>
+          </div>
         </div>
 
-        <div className="px-5 pb-5">
-          <div className="-mt-16 flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row-reverse lg:items-end lg:justify-between">
-            <div className="flex flex-col items-center gap-3 text-center sm:flex-row-reverse sm:text-right">
-              <div className="relative">
+        <div className="px-5 pb-5 sm:px-8 lg:px-10">
+          <div className="-mt-8 flex flex-col gap-5 border-b border-slate-200 pb-7 lg:-mt-10 lg:flex-row-reverse lg:items-end lg:justify-between">
+            <div className="flex min-w-0 flex-col items-center gap-4 text-center sm:flex-row-reverse sm:items-end sm:text-right">
+              <div className="relative shrink-0">
                 <button
                   type="button"
                   onClick={() => openStory()}
@@ -301,21 +352,32 @@ export default function Profile() {
                   className={`relative rounded-full p-1 transition ${hasStories ? 'cursor-pointer hover:scale-[1.02]' : 'cursor-default'} ${hasStories ? (hasNewStory ? 'bg-[#1877f2]' : 'bg-slate-300') : 'bg-transparent'}`}
                   title={hasStories ? 'عرض قصة المحامي' : undefined}
                 >
-                  <img src={lawyer.avatar} alt={lawyer.name} className="h-32 w-32 rounded-full border-4 border-white bg-white object-cover shadow-md sm:h-40 sm:w-40" />
+                  <img src={lawyer.avatar} alt={lawyer.name} className="h-36 w-36 rounded-full border-4 border-white bg-white object-cover shadow-md sm:h-44 sm:w-44" />
                 </button>
-                <span className={`absolute bottom-3 right-3 h-5 w-5 rounded-full border-4 border-white ${lawyer.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                <span className={`absolute bottom-4 right-4 h-5 w-5 rounded-full border-4 border-white ${lawyer.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+                {isOwnProfile && (
+                  <button
+                    type="button"
+                    onClick={() => avatarInputRef.current?.click()}
+                    disabled={mediaUploadTarget === 'avatar'}
+                    className="absolute bottom-3 left-3 z-10 flex h-10 w-10 items-center justify-center rounded-full border-4 border-white bg-slate-900 text-white shadow-md transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-70"
+                    title="تغيير صورة الملف"
+                  >
+                    <i className={`fa-solid ${mediaUploadTarget === 'avatar' ? 'fa-spinner fa-spin' : 'fa-camera'} text-[11px]`}></i>
+                  </button>
+                )}
                 {hasStories && (
                   <button
                     type="button"
                     onClick={() => openStory()}
-                    className={`absolute bottom-2 left-2 flex h-9 w-9 items-center justify-center rounded-full border-4 border-white text-white shadow-md ${hasNewStory ? 'bg-[#1877f2]' : 'bg-slate-500'}`}
+                    className={`absolute ${isOwnProfile ? 'bottom-3 left-12' : 'bottom-3 left-3'} flex h-10 w-10 items-center justify-center rounded-full border-4 border-white text-white shadow-md ${hasNewStory ? 'bg-[#1877f2]' : 'bg-slate-500'}`}
                     title="عرض القصة"
                   >
                     <i className="fa-solid fa-play text-[10px]"></i>
                   </button>
                 )}
               </div>
-              <div className="pt-2">
+              <div className="min-w-0 pb-1">
                 <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
                   {lawyer.verified && (
                     <StatusBadge tone="info">
@@ -325,9 +387,14 @@ export default function Profile() {
                   )}
                   <StatusBadge tone="neutral">{lawyer.specialty}</StatusBadge>
                 </div>
-                <h1 className="mt-3 text-3xl font-black leading-tight text-slate-950 sm:text-4xl">{lawyer.name}</h1>
-                <p className="mt-2 text-sm font-bold text-slate-600">{lawyer.tagline}</p>
-                <p className="mt-2 text-sm font-black text-slate-500">{socialProofText}</p>
+                <h1 className="mt-3 break-words text-3xl font-black leading-tight text-slate-950 sm:text-4xl lg:text-5xl">{lawyer.name}</h1>
+                <p className="mt-2 max-w-3xl text-sm font-bold leading-6 text-slate-600 sm:text-base">{lawyer.tagline}</p>
+                <p className="mt-2 text-sm font-black text-slate-500 sm:text-base">{socialProofText}</p>
+                <div className="mt-2 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs font-bold text-slate-500 sm:justify-end sm:text-sm">
+                  <span><i className="fa-solid fa-location-dot ml-1"></i>{lawyer.location}</span>
+                  <span><i className="fa-solid fa-briefcase ml-1"></i>{lawyer.experience}</span>
+                  <span><i className="fa-solid fa-clock ml-1"></i>{lawyer.responseTime}</span>
+                </div>
                 {hasStories && (
                   <button
                     type="button"
@@ -341,7 +408,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <div className="flex flex-wrap justify-center gap-2 lg:justify-end">
+            <div className="flex flex-wrap justify-center gap-2 pb-1 lg:justify-end">
               <ActionButton
                 onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)}
                 variant="primary"
@@ -361,6 +428,25 @@ export default function Profile() {
             </div>
           </div>
 
+          {isOwnProfile && (
+            <>
+              <input
+                ref={avatarInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(event) => uploadProfileImage('avatar', event.target.files?.[0])}
+              />
+              <input
+                ref={coverInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(event) => uploadProfileImage('cover', event.target.files?.[0])}
+              />
+            </>
+          )}
+
           <div className="grid gap-3 py-5 sm:grid-cols-4">
             <PublicStat label="التقييم" value={lawyer.rating.toFixed(1)} note={`${lawyer.reviewCount} مراجعة`} />
             <PublicStat label="المتابعون" value={lawyer.followers.toLocaleString()} note="متابع" />
@@ -370,9 +456,9 @@ export default function Profile() {
         </div>
       </section>
 
-      <div className="sticky top-16 z-30 w-full min-w-0 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div className="flex flex-wrap justify-end gap-2">
+      <div className="sticky top-16 z-30 w-full min-w-0 rounded-lg border border-slate-200 bg-white/95 px-4 py-2 shadow-sm backdrop-blur-md">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex overflow-x-auto no-scrollbar">
             {[
               { id: 'overview' as const, label: 'حول' },
               { id: 'posts' as const, label: 'المنشورات' },
@@ -382,12 +468,13 @@ export default function Profile() {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`rounded-md px-4 py-2 text-sm font-black transition ${activeTab === tab.id
-                  ? 'bg-[#e7f3ff] text-[#1877f2]'
+                className={`relative shrink-0 rounded-md px-5 py-3 text-sm font-black transition ${activeTab === tab.id
+                  ? 'text-[#1877f2]'
                   : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
               >
                 {tab.label}
+                {activeTab === tab.id && <span className="absolute inset-x-4 bottom-0 h-1 rounded-t-full bg-[#1877f2]" />}
               </button>
             ))}
           </div>

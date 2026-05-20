@@ -111,6 +111,16 @@ class ApiClient {
         return response.data;
     }
 
+    async uploadProfileMedia(kind: 'avatar' | 'cover', file: File): Promise<ApiResponse<any>> {
+        const formData = new FormData();
+        formData.append('kind', kind);
+        formData.append('image', file);
+        const response = await this.client.post('/api/app/profile/media', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    }
+
     async updateSettingsPreferences(data: any): Promise<ApiResponse<any>> {
         const response = await this.client.put('/api/app/settings/preferences', data);
         return response.data;
