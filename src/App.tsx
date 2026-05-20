@@ -71,6 +71,8 @@ export default function App() {
           <Routes>
             <Route path="/auth" element={<Auth />} />
             <Route path="/verify/:id" element={<Verify />} />
+            {/* Public profile view (accessible without signing in) */}
+            <Route path="/profile/:id" element={<Profile />} />
             <Route
               path="/"
               element={
