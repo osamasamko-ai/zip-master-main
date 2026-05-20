@@ -51,6 +51,33 @@ const POST_SELECT = {
   },
 };
 
+const STORY_SELECT = {
+  id: true,
+  text: true,
+  mediaUrl: true,
+  mediaType: true,
+  status: true,
+  expiresAt: true,
+  createdAt: true,
+  updatedAt: true,
+  author: {
+    select: {
+      id: true,
+      name: true,
+      role: true,
+      img: true,
+      verified: true,
+      lawyerProfile: {
+        select: {
+          avatar: true,
+          licenseStatus: true,
+          specialty: true,
+        },
+      },
+    },
+  },
+};
+
 function cleanContent(value: unknown, max = 2000) {
   return typeof value === 'string' ? value.trim().slice(0, max) : '';
 }
@@ -109,11 +136,83 @@ function mapPost(post: any, viewerId?: string) {
   };
 }
 
+function mapStory(story: any) {
+  const authorRole = story.author.role === 'admin' ? 'admin' : 'lawyer';
+  return {
+    id: story.id,
+    text: story.text,
+    mediaUrl: story.mediaUrl,
+    mediaType: story.mediaType,
+    status: story.status,
+    expiresAt: story.expiresAt,
+    createdAt: story.createdAt,
+    updatedAt: story.updatedAt,
+    author: {
+      id: story.author.id,
+      name: story.author.name,
+      role: authorRole,
+      roleLabel: authorRole === 'admin' ? 'إدارة المنصة' : 'محامٍ موثق',
+      avatar: story.author.lawyerProfile?.avatar || story.author.img || 'https://i.pravatar.cc/150',
+      specialty: story.author.lawyerProfile?.specialty || '',
+    },
+  };
+}
+
 async function getCurrentUser(userId: string) {
   return prisma.user.findUnique({
     where: { id: userId },
     include: { lawyerProfile: true },
   });
+}
+
+export async function listFeedStories() {
+  const stories = await prisma.feedStory.findMany({
+    where: {
+      status: 'active',
+      expiresAt: { gt: new Date() },
+      author: {
+        OR: [
+          { role: 'admin' },
+          { role: 'pro', OR: [{ verified: true }, { lawyerProfile: { licenseStatus: 'verified' } }] },
+        ],
+      },
+    },
+    select: STORY_SELECT,
+    orderBy: [{ createdAt: 'desc' }],
+    take: 20,
+  });
+
+  return stories.map(mapStory);
+}
+
+export async function createFeedStory(userId: string, payload: { text?: string; mediaUrl?: string | null; mediaType?: string | null }) {
+  const user = await getCurrentUser(userId);
+  if (!canPublish(user)) {
+    throw new Error('only verified lawyers and admins can create stories');
+  }
+
+  const text = cleanContent(payload.text, 240);
+  const mediaType = payload.mediaType === 'video' || payload.mediaType === 'image' ? payload.mediaType : null;
+  const mediaUrl = payload.mediaUrl || null;
+
+  if (!text && !mediaUrl) {
+    throw new Error('story text or media is required');
+  }
+
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const story = await prisma.feedStory.create({
+    data: {
+      authorId: userId,
+      text,
+      mediaUrl,
+      mediaType,
+      expiresAt,
+      status: 'active',
+    },
+    select: STORY_SELECT,
+  });
+
+  return mapStory(story);
 }
 
 export async function listFeedPosts(viewerId: string, filter: FeedFilter = 'all') {

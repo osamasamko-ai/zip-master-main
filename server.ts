@@ -134,8 +134,10 @@ import {
 } from './src/server/workspaceData';
 import {
   addFeedComment,
+  createFeedStory,
   createFeedPost,
   deleteFeedPost,
+  listFeedStories,
   listFeedPosts,
   shareFeedPost,
   toggleFeedSave,
@@ -781,6 +783,41 @@ async function startServer() {
     } catch (error) {
       console.error('Feed list error:', error);
       res.status(500).json({ error: 'تعذر تحميل المجتمع القانوني' });
+    }
+  });
+
+  app.get('/api/app/feed/stories', authenticateToken, async (_req, res) => {
+    try {
+      const stories = await listFeedStories();
+      res.json({ data: stories });
+    } catch (error) {
+      console.error('Feed stories list error:', error);
+      res.status(500).json({ error: 'تعذر تحميل القصص' });
+    }
+  });
+
+  app.post('/api/app/feed/stories', authenticateToken, upload.single('media'), async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const mediaType = req.file
+        ? req.file.mimetype.startsWith('video/')
+          ? 'video'
+          : req.file.mimetype.startsWith('image/')
+            ? 'image'
+            : null
+        : null;
+      if (req.file && !mediaType) {
+        return res.status(400).json({ error: 'القصص تقبل الصور أو الفيديو فقط.' });
+      }
+      const story = await createFeedStory(currentUser.userId, {
+        text: req.body.text,
+        mediaUrl: req.file ? `/uploads/${req.file.filename}` : null,
+        mediaType,
+      });
+      res.status(201).json({ data: story });
+    } catch (error: any) {
+      console.error('Feed story create error:', error);
+      res.status(403).json({ error: error.message || 'تعذر نشر القصة' });
     }
   });
 

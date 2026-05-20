@@ -124,17 +124,19 @@ export default function PostCard({
         </div>
 
         {post.mediaUrl && (
-          <div className="-mx-4 mt-4 overflow-hidden border-y border-slate-100 bg-slate-950">
+          <div className="-mx-4 mt-4 overflow-hidden border-y border-slate-100 bg-slate-100">
             {post.mediaType === 'video' ? (
-              <>
-                <video src={post.mediaUrl} controls poster="" className="max-h-[560px] w-full bg-black object-contain" />
+              <div className="relative aspect-square max-h-[680px] w-full bg-black sm:aspect-[4/3]">
+                <video src={post.mediaUrl} controls poster="" className="h-full w-full bg-black object-contain" />
                 <div className="pointer-events-none absolute right-4 top-4 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-black text-white backdrop-blur">
                   <i className="fa-solid fa-play ml-1 text-brand-gold"></i>
                   متابعة المشاهدة
                 </div>
-              </>
+              </div>
             ) : (
-              <img src={post.mediaUrl} alt="" className="max-h-[620px] w-full object-cover" />
+              <div className="flex aspect-square max-h-[680px] w-full items-center justify-center bg-slate-100 sm:aspect-[4/3]">
+                <img src={post.mediaUrl} alt="" className="h-full w-full object-contain" />
+              </div>
             )}
           </div>
         )}

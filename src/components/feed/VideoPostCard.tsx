@@ -15,11 +15,13 @@ export default function VideoPostCard({ post, onOpen }: { post?: FeedPost; onOpe
       onClick={() => onOpen?.(post.id)}
       className="group relative block w-full overflow-hidden rounded-lg bg-slate-950 text-right shadow-sm"
     >
-      {post.mediaUrl ? (
-        <video src={post.mediaUrl} muted className="h-44 w-full object-cover opacity-80 transition duration-500 group-hover:scale-105" />
-      ) : (
-        <div className="h-44 bg-[#1877f2]" />
-      )}
+      <div className="aspect-video w-full bg-black">
+        {post.mediaUrl ? (
+          <video src={post.mediaUrl} muted className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-105" />
+        ) : (
+          <div className="h-full w-full bg-[#1877f2]" />
+        )}
+      </div>
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
       <div className="absolute inset-0 flex items-center justify-center">
         <span className="flex h-14 w-14 items-center justify-center rounded-full bg-white/90 text-[#1877f2] shadow-xl transition group-hover:scale-110">

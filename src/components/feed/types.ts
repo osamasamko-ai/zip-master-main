@@ -39,6 +39,25 @@ export type FeedPost = {
   }>;
 };
 
+export type FeedStory = {
+  id: string;
+  text: string;
+  mediaUrl?: string | null;
+  mediaType?: 'image' | 'video' | null;
+  status: string;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  author: {
+    id: string;
+    name: string;
+    role: 'lawyer' | 'admin';
+    roleLabel: string;
+    avatar: string;
+    specialty?: string;
+  };
+};
+
 export type SuggestedLawyer = {
   id: string;
   name: string;

@@ -8,8 +8,9 @@ import FeedSidebar from './FeedSidebar';
 import PostCard from './PostCard';
 import PostComposer from './PostComposer';
 import SuggestedLawyers from './SuggestedLawyers';
+import StoryStrip from './StoryStrip';
 import TrendingTopics from './TrendingTopics';
-import type { FeedFilter, FeedPost, SuggestedLawyer } from './types';
+import type { FeedFilter, FeedPost, FeedStory, SuggestedLawyer } from './types';
 
 function SkeletonPost() {
   return (
@@ -33,10 +34,12 @@ function SkeletonPost() {
 export default function FeedPage() {
   const { user } = useAuth();
   const [posts, setPosts] = useState<FeedPost[]>([]);
+  const [stories, setStories] = useState<FeedStory[]>([]);
   const [lawyers, setLawyers] = useState<SuggestedLawyer[]>([]);
   const [activeFilter, setActiveFilter] = useState<FeedFilter>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isPublishingStory, setIsPublishingStory] = useState(false);
   const [visibleCount, setVisibleCount] = useState(6);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
@@ -80,11 +83,21 @@ export default function FeedPage() {
     }
   };
 
+  const loadStories = async () => {
+    try {
+      const response = await apiClient.getFeedStories();
+      setStories(response.data || []);
+    } catch {
+      setStories([]);
+    }
+  };
+
   useEffect(() => {
     loadPosts(activeFilter);
   }, [activeFilter]);
 
   useEffect(() => {
+    loadStories();
     apiClient.getLawyers().then((response) => {
       setLawyers((response.data || []).slice(0, 5));
     }).catch(() => undefined);
@@ -101,6 +114,20 @@ export default function FeedPage() {
       setError(err.response?.data?.error || 'تعذر نشر المنشور.');
     } finally {
       setIsPublishing(false);
+    }
+  };
+
+  const publishStory = async (payload: { text: string; media: File | null }) => {
+    setIsPublishingStory(true);
+    setError('');
+    try {
+      const response = await apiClient.createFeedStory(payload);
+      setStories((current) => [response.data, ...current]);
+      flash('تم نشر القصة لمدة 24 ساعة.');
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'تعذر نشر القصة.');
+    } finally {
+      setIsPublishingStory(false);
     }
   };
 
@@ -245,6 +272,13 @@ export default function FeedPage() {
         </aside>
 
         <main className="min-w-0 space-y-4">
+          <StoryStrip
+            user={user}
+            stories={stories}
+            canCreate={canCreatePost}
+            isPublishing={isPublishingStory}
+            onCreate={publishStory}
+          />
           <PostComposer user={user} canCreate={canCreatePost} isPublishing={isPublishing} onPublish={publishPost} />
           <FeedFilters activeFilter={activeFilter} onChange={setActiveFilter} />
           <div className="xl:hidden">

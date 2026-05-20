@@ -340,6 +340,21 @@ class ApiClient {
         return response.data;
     }
 
+    async getFeedStories(): Promise<ApiResponse<any[]>> {
+        const response = await this.client.get('/api/app/feed/stories');
+        return response.data;
+    }
+
+    async createFeedStory(data: { text: string; media?: File | null }): Promise<ApiResponse<any>> {
+        const formData = new FormData();
+        formData.append('text', data.text);
+        if (data.media) formData.append('media', data.media);
+        const response = await this.client.post('/api/app/feed/stories', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    }
+
     async createFeedPost(data: { content: string; category?: string; media?: File | null }): Promise<ApiResponse<any>> {
         const formData = new FormData();
         formData.append('content', data.content);

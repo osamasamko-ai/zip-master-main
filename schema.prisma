@@ -58,6 +58,7 @@ model User {
   feedComments           FeedComment[]
   feedLikes              FeedLike[]
   feedSaves              FeedSave[]
+  feedStories            FeedStory[]
   contractTemplatesOwned ContractTemplate[]
   contractClausesOwned   ContractClause[]
   contractsOwned         Contract[]         @relation("ContractOwner")
@@ -372,6 +373,22 @@ model FeedPost {
   @@index([status, pinned, createdAt])
   @@index([featured, createdAt])
   @@index([mediaType, createdAt])
+}
+
+model FeedStory {
+  id        String   @id @default(uuid())
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  text      String   @default("")
+  mediaUrl  String?
+  mediaType String?
+  status    String   @default("active")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([authorId, createdAt])
+  @@index([status, expiresAt, createdAt])
 }
 
 model FeedComment {
