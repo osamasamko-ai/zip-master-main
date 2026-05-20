@@ -113,6 +113,9 @@ export default function MainLayout() {
     document.title = pageTitle ? `${baseTitle} | ${pageTitle}` : baseTitle;
   }, [location.pathname, pathMap]);
 
+  const ownProfilePath = user?.role === 'pro' && user.id ? `/profile/${user.id}` : '/settings';
+  const ownProfileLabel = user?.role === 'pro' ? 'ملفي العام' : 'الملف الشخصي';
+
   const commandResults = useMemo(() => {
     const query = commandQuery.trim().toLowerCase();
     if (!query) return [];
@@ -128,7 +131,8 @@ export default function MainLayout() {
       { id: 'n7', type: 'ملاحة', title: 'المكتبة', subtitle: 'مراجع ووثائق قانونية جاهزة للبحث', icon: 'fa-book-open', path: '/legal' },
       { id: 'n8', type: 'ملاحة', title: 'مستشارك الذكي', subtitle: 'اسأل واحصل على تلخيص وتحليل قانوني سريع', icon: 'fa-robot', path: '/aichat' },
       { id: 'n9', type: 'ملاحة', title: 'المدفوعات', subtitle: 'الرصيد والفواتير والمعاملات', icon: 'fa-wallet', path: '/billing' },
-      { id: 'n10', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
+      { id: 'n10', type: 'ملاحة', title: 'ملفي الشخصي', subtitle: 'فتح بياناتك وصورتك ومعلومات حسابك', icon: 'fa-id-card', path: ownProfilePath },
+      { id: 'n11', type: 'ملاحة', title: 'الإعدادات', subtitle: 'إدارة الحساب والأمان والتفضيلات', icon: 'fa-user-gear', path: '/settings' },
     ];
 
     if (user?.role === 'admin') {
@@ -144,7 +148,7 @@ export default function MainLayout() {
         item.subtitle.toLowerCase().includes(query) ||
         item.type.toLowerCase().includes(query)
     );
-  }, [commandQuery, user?.role]);
+  }, [commandQuery, ownProfilePath, user?.role]);
 
   const handleLogout = () => {
     if (!user) {
@@ -489,10 +493,17 @@ export default function MainLayout() {
                       {user ? (
                         <>
                           <button
+                            onClick={() => { navigate(ownProfilePath); setIsProfileOpen(false); }}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 hover:text-brand-navy transition-colors"
+                          >
+                            <i className="fa-regular fa-id-card opacity-50"></i>
+                            {ownProfileLabel}
+                          </button>
+                          <button
                             onClick={() => { navigate('/settings'); setIsProfileOpen(false); }}
                             className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 hover:text-brand-navy transition-colors"
                           >
-                            <i className="fa-regular fa-user-circle opacity-50"></i>
+                            <i className="fa-solid fa-user-gear opacity-50"></i>
                             الإعدادات
                           </button>
                           <button
@@ -591,9 +602,17 @@ export default function MainLayout() {
 
               {user ? (
                 <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => { navigate(ownProfilePath); setMobileNavOpen(false); }} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-100 p-5 text-slate-600 transition hover:bg-slate-200">
+                    <i className="fa-regular fa-id-card text-xl"></i>
+                    <span className="text-xs font-black">{ownProfileLabel}</span>
+                  </button>
                   <button onClick={() => { navigate('/settings'); setMobileNavOpen(false); }} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-100 p-5 text-slate-600 transition hover:bg-slate-200">
-                    <i className="fa-regular fa-user-circle text-xl"></i>
+                    <i className="fa-solid fa-user-gear text-xl"></i>
                     <span className="text-xs font-black">الإعدادات</span>
+                  </button>
+                  <button onClick={() => { navigate('/following'); setMobileNavOpen(false); }} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-100 p-5 text-slate-600 transition hover:bg-slate-200">
+                    <i className="fa-solid fa-user-check text-xl"></i>
+                    <span className="text-xs font-black">المحفوظون</span>
                   </button>
                   <button onClick={handleLogout} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-red-50 p-5 text-red-500 transition hover:bg-red-100">
                     <i className="fa-solid fa-arrow-right-from-bracket text-xl"></i>

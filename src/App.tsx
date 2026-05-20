@@ -63,6 +63,20 @@ function RequireRole({
   return children;
 }
 
+function OwnProfileRedirect() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  if (user.role === 'pro') {
+    return <Navigate to={`/profile/${user.id}`} replace />;
+  }
+
+  return <Navigate to="/settings" replace />;
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -113,7 +127,7 @@ export default function App() {
                   </RequireRole>
                 }
               />
-              <Route path="profile" element={<Navigate to="/settings" replace />} />
+              <Route path="profile" element={<OwnProfileRedirect />} />
               <Route path="settings" element={<Settings />} />
               <Route path="*" element={<NotFound />} />
             </Route>
