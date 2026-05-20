@@ -77,7 +77,7 @@ export default function FeedPage() {
       setPosts(response.data || []);
       setVisibleCount(6);
     } catch (err: any) {
-      setError(err.response?.data?.error || 'تعذر تحميل منشورات المجتمع القانوني.');
+      setError(err.response?.data?.error || 'تعذر تحميل منشورات تواصل.');
     } finally {
       setIsLoading(false);
     }
@@ -109,7 +109,7 @@ export default function FeedPage() {
     try {
       const response = await apiClient.createFeedPost(payload);
       setPosts((current) => [response.data, ...current]);
-      flash('تم نشر المنشور في المجتمع القانوني.');
+      flash('تم نشر المنشور في تواصل.');
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر نشر المنشور.');
     } finally {
@@ -220,8 +220,8 @@ export default function FeedPage() {
         <div className="relative p-4 sm:p-5">
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#1877f2]">المجتمع القانوني</p>
-              <h1 className="mt-2 text-2xl font-black text-slate-900 sm:text-3xl">آخر منشورات المجتمع</h1>
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#1877f2]">تواصل</p>
+              <h1 className="mt-2 text-2xl font-black text-slate-900 sm:text-3xl">آخر منشورات تواصل</h1>
               <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">
                 انشر تحديثاً، تابع المحامين، وتفاعل مع الأسئلة والتنبيهات القانونية في تجربة اجتماعية مألوفة وسريعة.
               </p>
