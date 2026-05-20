@@ -160,7 +160,7 @@ export default function Profile() {
 
   if (!lawyer && loadError) {
     return (
-      <div className="app-view text-right">
+      <div className="app-view w-full min-w-0 text-right">
         <div className="rounded-[2rem] border border-red-200 bg-red-50 p-6 text-red-700">
           <p className="text-base font-black">{loadError}</p>
           <button
@@ -176,7 +176,7 @@ export default function Profile() {
   }
 
   if (!lawyer) {
-    return <div className="app-view text-right">جاري تحميل الملف...</div>;
+    return <div className="app-view w-full min-w-0 text-right">جاري تحميل الملف...</div>;
   }
 
   const isFollowing = isFollowed(lawyer.id);
@@ -190,7 +190,7 @@ export default function Profile() {
   ];
 
   return (
-    <div className="app-view mx-auto max-w-[1180px] space-y-5 pb-24 text-right">
+    <div className="app-view mx-auto w-full min-w-0 max-w-[1400px] space-y-5 overflow-x-hidden pb-24 text-right">
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <div className={`relative h-56 bg-gradient-to-br ${lawyer.accent} sm:h-72`}>
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_32%),linear-gradient(180deg,transparent,rgba(0,0,0,0.22))]" />
@@ -256,7 +256,7 @@ export default function Profile() {
         </div>
       </section>
 
-      <div className="sticky top-16 z-30 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md">
+      <div className="sticky top-16 z-30 w-full min-w-0 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap justify-end gap-2">
             {[
@@ -290,8 +290,8 @@ export default function Profile() {
       </div>
 
       {activeTab === 'overview' && (
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
-          <div className="space-y-6">
+        <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <div className="min-w-0 space-y-6">
             <NoticePanel
               title="الخطوة التالية"
               description={`أفضل خطوة الآن هي ${lawyer.isOnline ? 'بدء رسالة مباشرة' : 'فتح قضية جديدة مع هذا المحامي'} إذا كان تخصص ${lawyer.specialty} يطابق حاجتك الحالية.`}
@@ -351,7 +351,7 @@ export default function Profile() {
             <SchedulingCalendar />
           </div>
 
-          <aside className="space-y-6">
+          <aside className="min-w-0 space-y-6">
             <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-base font-black text-brand-dark">إشارات الثقة</h3>
               <div className="mt-4 space-y-3 text-sm font-bold text-slate-600">
@@ -393,8 +393,8 @@ export default function Profile() {
       )}
 
       {activeTab === 'posts' && (
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
-          <div className="space-y-5">
+        <section className="grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="min-w-0 space-y-5">
             <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-right">
@@ -481,7 +481,7 @@ export default function Profile() {
             )}
           </div>
 
-          <aside className="space-y-4">
+          <aside className="min-w-0 space-y-4">
             <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-base font-black text-brand-dark">ملخص المنشورات</h3>
               <div className="mt-4 space-y-3">
