@@ -347,27 +347,27 @@ export default function Lawyers() {
                 )}
               </div>
               <div className="flex flex-wrap justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setVerifiedOnly((current) => !current)}
-                className={`rounded-full px-4 py-2 text-xs font-black transition ${verifiedOnly ? 'bg-brand-navy text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
-              >
-                المحامون الموثقون فقط
-              </button>
-              <button
-                type="button"
-                onClick={() => setOnlineOnly((current) => !current)}
-                className={`rounded-full px-4 py-2 text-xs font-black transition ${onlineOnly ? 'bg-emerald-600 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
-              >
-                المتاحون الآن
-              </button>
-              <button
-                type="button"
-                onClick={resetFilters}
-                className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-500 transition hover:border-brand-navy hover:text-brand-navy"
-              >
-                مسح الفلاتر
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setVerifiedOnly((current) => !current)}
+                  className={`rounded-full px-4 py-2 text-xs font-black transition ${verifiedOnly ? 'bg-brand-navy text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
+                >
+                  المحامون الموثقون فقط
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setOnlineOnly((current) => !current)}
+                  className={`rounded-full px-4 py-2 text-xs font-black transition ${onlineOnly ? 'bg-emerald-600 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
+                >
+                  المتاحون الآن
+                </button>
+                <button
+                  type="button"
+                  onClick={resetFilters}
+                  className="rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-black text-slate-500 transition hover:border-brand-navy hover:text-brand-navy"
+                >
+                  مسح الفلاتر
+                </button>
               </div>
             </div>
           </section>
@@ -412,7 +412,11 @@ export default function Lawyers() {
                   <div className={`absolute inset-y-0 right-0 w-1.5 ${selectedLawyer?.id === lawyer.id ? 'bg-brand-navy' : 'bg-transparent'}`}></div>
                   <div className="flex flex-col gap-4 lg:flex-row-reverse lg:items-start lg:justify-between">
                     <div className="flex items-start gap-4">
-                      <div className="relative shrink-0">
+                      <div
+                        className="relative shrink-0 cursor-pointer"
+                        onClick={() => navigate(`/profile/${lawyer.id}`)}
+                        title="عرض الملف"
+                      >
                         <img src={lawyer.avatar} alt={lawyer.name} className="h-20 w-20 rounded-[1.75rem] object-cover shadow-sm ring-4 ring-slate-50" />
                         {lawyer.isOnline && <span className="absolute bottom-1 left-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500"></span>}
                       </div>

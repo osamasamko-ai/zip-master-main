@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { AuthUser } from '../../context/AuthContext';
 import type { FeedPost } from './types';
 
@@ -36,6 +37,7 @@ export default function PostCard({
   onFeature: (id: string, featured: boolean) => void;
   onFollow: (lawyerId: string) => void;
 }) {
+  const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [comment, setComment] = useState('');
   const [editing, setEditing] = useState(false);
@@ -57,7 +59,7 @@ export default function PostCard({
       <div className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
-            <div className="relative">
+            <div className="relative cursor-pointer" onClick={() => navigate(`/profile/${post.author.id}`)}>
               <img src={post.author.avatar} alt="" className="h-11 w-11 rounded-full object-cover ring-1 ring-slate-200" />
               <span className="absolute -bottom-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#1877f2] text-[9px] text-white ring-2 ring-white">
                 <i className="fa-solid fa-check"></i>

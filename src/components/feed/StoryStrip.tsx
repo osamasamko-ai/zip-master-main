@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { AuthUser } from '../../context/AuthContext';
 import type { FeedStory } from './types';
 
@@ -15,6 +16,7 @@ export default function StoryStrip({
   isPublishing: boolean;
   onCreate: (payload: { text: string; media: File | null }) => void;
 }) {
+  const navigate = useNavigate();
   const [activeStory, setActiveStory] = useState<FeedStory | null>(null);
   const [draftText, setDraftText] = useState('');
   const [draftMedia, setDraftMedia] = useState<File | null>(null);
@@ -69,7 +71,15 @@ export default function StoryStrip({
                 <div className="h-full w-full bg-gradient-to-br from-[#1877f2] to-slate-900" />
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/10 to-black/10" />
-              <img src={story.author.avatar} alt="" className="absolute right-2 top-2 h-9 w-9 rounded-full border-2 border-[#1877f2] object-cover" />
+              <img
+                src={story.author.avatar}
+                alt=""
+                className="absolute right-2 top-2 h-9 w-9 rounded-full border-2 border-[#1877f2] object-cover cursor-pointer"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  navigate(`/profile/${story.author.id}`);
+                }}
+              />
               <div className="absolute inset-x-0 bottom-0 p-2">
                 <p className="line-clamp-2 text-xs font-black leading-5 text-white">{story.text || story.author.name}</p>
                 <p className="mt-1 truncate text-[10px] font-bold text-white/70">{story.author.name}</p>
@@ -151,7 +161,15 @@ export default function StoryStrip({
             <div className="absolute inset-x-0 top-0 bg-gradient-to-b from-black/70 to-transparent p-4">
               <div className="h-1 rounded-full bg-white/80" />
               <div className="mt-3 flex items-center gap-3">
-                <img src={activeStory.author.avatar} alt="" className="h-10 w-10 rounded-full object-cover" />
+                <img
+                  src={activeStory.author.avatar}
+                  alt=""
+                  className="h-10 w-10 rounded-full object-cover cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    navigate(`/profile/${activeStory.author.id}`);
+                  }}
+                />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-black text-white">{activeStory.author.name}</p>
                   <p className="text-[11px] font-bold text-white/70">{activeStory.author.specialty || activeStory.author.roleLabel}</p>

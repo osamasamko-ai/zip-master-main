@@ -886,7 +886,15 @@ export default function Messages() {
                     >
                       <div className="flex flex-row-reverse items-start gap-3">
                         <div className="relative shrink-0">
-                          <img src={conversation.participantImg} alt={conversation.participantName} className="h-11 w-11 rounded-xl object-cover shadow-sm" />
+                          <img
+                            src={conversation.participantImg}
+                            alt={conversation.participantName}
+                            className="h-11 w-11 rounded-xl object-cover shadow-sm cursor-pointer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigate(`/profile/${conversation.participantId}`);
+                            }}
+                          />
                           {conversation.cases.some(c => c.statusText?.includes('خطر') || c.statusText?.includes('عاجل')) && (
                             <span
                               className="absolute -bottom-1 -left-1 h-4 w-4 rounded-full bg-red-50 text-[8px] flex items-center justify-center text-red-500 border border-red-100 shadow-sm"

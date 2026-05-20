@@ -1,6 +1,8 @@
+import { useNavigate } from 'react-router-dom';
 import type { SuggestedLawyer } from './types';
 
 export default function SuggestedLawyers({ lawyers, onFollow }: { lawyers: SuggestedLawyer[]; onFollow: (id: string) => void }) {
+  const navigate = useNavigate();
   return (
     <div className="grid gap-3 sm:grid-cols-2 xl:hidden">
       {lawyers.slice(0, 2).map((lawyer) => (
@@ -13,7 +15,12 @@ export default function SuggestedLawyers({ lawyers, onFollow }: { lawyers: Sugge
               <p className="text-xs font-black text-slate-900">{lawyer.name}</p>
               <p className="text-[10px] font-bold text-slate-400">{lawyer.lawyerProfile?.specialty || lawyer.specialty || 'محامٍ موثق'}</p>
             </div>
-            <img src={lawyer.avatar || lawyer.lawyerProfile?.avatar || lawyer.img || 'https://i.pravatar.cc/150'} alt="" className="h-10 w-10 rounded-full object-cover" />
+            <img
+              src={lawyer.avatar || lawyer.lawyerProfile?.avatar || lawyer.img || 'https://i.pravatar.cc/150'}
+              alt=""
+              className="h-10 w-10 rounded-full object-cover cursor-pointer"
+              onClick={() => navigate(`/profile/${lawyer.id}`)}
+            />
           </div>
         </div>
       ))}
