@@ -59,6 +59,7 @@ model User {
   feedLikes              FeedLike[]
   feedSaves              FeedSave[]
   feedStories            FeedStory[]
+  feedStoryViews         FeedStoryView[]
   contractTemplatesOwned ContractTemplate[]
   contractClausesOwned   ContractClause[]
   contractsOwned         Contract[]         @relation("ContractOwner")
@@ -386,9 +387,21 @@ model FeedStory {
   expiresAt DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+  views     FeedStoryView[]
 
   @@index([authorId, createdAt])
   @@index([status, expiresAt, createdAt])
+}
+
+model FeedStoryView {
+  storyId  String
+  story    FeedStory @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId   String
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  viewedAt DateTime  @default(now())
+
+  @@id([storyId, userId])
+  @@index([userId, viewedAt])
 }
 
 model FeedComment {

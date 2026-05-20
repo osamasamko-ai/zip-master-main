@@ -131,6 +131,25 @@ export default function FeedPage() {
     }
   };
 
+  const viewStory = async (storyId: string) => {
+    const previousStories = stories;
+    setStories((current) =>
+      current.map((story) =>
+        story.id === storyId
+          ? { ...story, seenByMe: true, viewedAt: new Date().toISOString() }
+          : story
+      )
+    );
+
+    try {
+      const response = await apiClient.markFeedStoryViewed(storyId);
+      setStories((current) => current.map((story) => (story.id === storyId ? response.data : story)));
+    } catch (err: any) {
+      setStories(previousStories);
+      setError(err.response?.data?.error || 'تعذر تحديث مشاهدة القصة.');
+    }
+  };
+
   const likePost = async (postId: string) => {
     try {
       const response = await apiClient.likeFeedPost(postId);
@@ -278,6 +297,7 @@ export default function FeedPage() {
             canCreate={canCreatePost}
             isPublishing={isPublishingStory}
             onCreate={publishStory}
+            onView={viewStory}
           />
           <PostComposer user={user} canCreate={canCreatePost} isPublishing={isPublishing} onPublish={publishPost} />
           <FeedFilters activeFilter={activeFilter} onChange={setActiveFilter} />

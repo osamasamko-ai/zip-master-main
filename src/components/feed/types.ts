@@ -48,6 +48,9 @@ export type FeedStory = {
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
+  seenByMe: boolean;
+  viewedAt?: string | null;
+  isArchived: boolean;
   author: {
     id: string;
     name: string;

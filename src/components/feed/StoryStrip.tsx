@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthUser } from '../../context/AuthContext';
 import type { FeedStory } from './types';
@@ -9,21 +9,34 @@ export default function StoryStrip({
   canCreate,
   isPublishing,
   onCreate,
+  onView,
 }: {
   user: AuthUser | null;
   stories: FeedStory[];
   canCreate: boolean;
   isPublishing: boolean;
   onCreate: (payload: { text: string; media: File | null }) => void;
+  onView: (storyId: string) => void;
 }) {
   const navigate = useNavigate();
   const [activeStory, setActiveStory] = useState<FeedStory | null>(null);
+  const [activeTab, setActiveTab] = useState<'new' | 'seen' | 'archive'>('new');
   const [draftText, setDraftText] = useState('');
   const [draftMedia, setDraftMedia] = useState<File | null>(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const userName = user?.name || 'المستخدم';
   const userAvatar = user?.img || `https://ui-avatars.com/api/?name=${encodeURIComponent(userName)}&background=1877f2&color=ffffff&rounded=true`;
+  const activeStories = useMemo(() => stories.filter((story) => !story.isArchived), [stories]);
+  const archiveStories = useMemo(() => stories.filter((story) => story.isArchived), [stories]);
+  const newStories = useMemo(() => activeStories.filter((story) => !story.seenByMe), [activeStories]);
+  const seenStories = useMemo(() => activeStories.filter((story) => story.seenByMe), [activeStories]);
+  const visibleStories = activeTab === 'archive' ? archiveStories : activeTab === 'seen' ? seenStories : newStories;
+  const tabItems = [
+    { id: 'new' as const, label: 'جديد', count: newStories.length },
+    { id: 'seen' as const, label: 'شوهد', count: seenStories.length },
+    { id: 'archive' as const, label: 'الأرشيف', count: archiveStories.length },
+  ];
 
   const publish = () => {
     if (!draftText.trim() && !draftMedia) return;
@@ -34,9 +47,41 @@ export default function StoryStrip({
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const openStory = (story: FeedStory) => {
+    setActiveStory({ ...story, seenByMe: true, viewedAt: story.viewedAt || new Date().toISOString() });
+    if (!story.seenByMe) onView(story.id);
+  };
+
   return (
     <>
       <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
+              <i className="fa-solid fa-clock-rotate-left text-xs"></i>
+            </span>
+            <div>
+              <h2 className="text-sm font-black text-slate-900">قصص المحامين</h2>
+              <p className="text-[10px] font-bold text-slate-400">الجديد والمشاهد والأرشيف</p>
+            </div>
+          </div>
+          <div className="flex w-full rounded-full bg-slate-100 p-1 sm:w-auto sm:shrink-0">
+            {tabItems.map((tab) => (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex flex-1 items-center justify-center gap-1.5 rounded-full px-3 py-1.5 text-[11px] font-black transition sm:flex-none ${activeTab === tab.id ? 'bg-white text-[#1877f2] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+              >
+                {tab.label}
+                <span className={`rounded-full px-1.5 py-0.5 text-[9px] ${activeTab === tab.id ? 'bg-[#e7f3ff] text-[#1877f2]' : 'bg-white text-slate-400'}`}>
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="flex gap-3 overflow-x-auto pb-1 no-scrollbar">
           {canCreate && (
             <button
@@ -54,12 +99,12 @@ export default function StoryStrip({
             </button>
           )}
 
-          {stories.map((story) => (
+          {visibleStories.map((story) => (
             <button
               type="button"
               key={story.id}
-              onClick={() => setActiveStory(story)}
-              className="relative h-48 w-28 shrink-0 overflow-hidden rounded-xl bg-slate-950 text-right shadow-sm ring-1 ring-slate-200"
+              onClick={() => openStory(story)}
+              className={`relative h-48 w-28 shrink-0 overflow-hidden rounded-xl bg-slate-950 text-right shadow-sm transition hover:-translate-y-0.5 ${story.isArchived ? 'opacity-75 ring-1 ring-slate-200' : story.seenByMe ? 'ring-2 ring-slate-300' : 'ring-[3px] ring-[#1877f2]'}`}
             >
               {story.mediaUrl ? (
                 story.mediaType === 'video' ? (
@@ -74,12 +119,18 @@ export default function StoryStrip({
               <img
                 src={story.author.avatar}
                 alt=""
-                className="absolute right-2 top-2 h-9 w-9 rounded-full border-2 border-[#1877f2] object-cover cursor-pointer"
+                className={`absolute right-2 top-2 h-9 w-9 rounded-full border-2 object-cover cursor-pointer ${story.seenByMe || story.isArchived ? 'border-slate-300' : 'border-[#1877f2]'}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate(`/profile/${story.author.id}`);
                 }}
               />
+              {!story.seenByMe && !story.isArchived && (
+                <span className="absolute left-2 top-2 rounded-full bg-[#1877f2] px-2 py-1 text-[9px] font-black text-white shadow-sm">جديد</span>
+              )}
+              {story.isArchived && (
+                <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-1 text-[9px] font-black text-white backdrop-blur">أرشيف</span>
+              )}
               <div className="absolute inset-x-0 bottom-0 p-2">
                 <p className="line-clamp-2 text-xs font-black leading-5 text-white">{story.text || story.author.name}</p>
                 <p className="mt-1 truncate text-[10px] font-bold text-white/70">{story.author.name}</p>
@@ -87,9 +138,9 @@ export default function StoryStrip({
             </button>
           ))}
 
-          {!canCreate && stories.length === 0 && (
+          {visibleStories.length === 0 && (
             <div className="flex h-28 min-w-full items-center justify-center rounded-lg bg-slate-50 text-xs font-black text-slate-400">
-              لا توجد قصص من المحامين حالياً
+              {activeTab === 'archive' ? 'لا توجد قصص مؤرشفة حالياً' : activeTab === 'seen' ? 'لم تشاهد أي قصة بعد' : 'لا توجد قصص جديدة من المحامين حالياً'}
             </div>
           )}
         </div>
@@ -164,7 +215,7 @@ export default function StoryStrip({
                 <img
                   src={activeStory.author.avatar}
                   alt=""
-                  className="h-10 w-10 rounded-full object-cover cursor-pointer"
+                  className={`h-10 w-10 rounded-full border-2 object-cover cursor-pointer ${activeStory.seenByMe || activeStory.isArchived ? 'border-white/60' : 'border-[#1877f2]'}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     navigate(`/profile/${activeStory.author.id}`);

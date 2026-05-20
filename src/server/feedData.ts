@@ -76,6 +76,12 @@ const STORY_SELECT = {
       },
     },
   },
+  views: {
+    select: {
+      userId: true,
+      viewedAt: true,
+    },
+  },
 };
 
 function cleanContent(value: unknown, max = 2000) {
@@ -136,8 +142,10 @@ function mapPost(post: any, viewerId?: string) {
   };
 }
 
-function mapStory(story: any) {
+function mapStory(story: any, viewerId?: string) {
   const authorRole = story.author.role === 'admin' ? 'admin' : 'lawyer';
+  const seenView = viewerId ? story.views?.find((view: any) => view.userId === viewerId) : null;
+  const isArchived = story.status !== 'active' || new Date(story.expiresAt).getTime() <= Date.now();
   return {
     id: story.id,
     text: story.text,
@@ -147,6 +155,9 @@ function mapStory(story: any) {
     expiresAt: story.expiresAt,
     createdAt: story.createdAt,
     updatedAt: story.updatedAt,
+    seenByMe: Boolean(seenView),
+    viewedAt: seenView?.viewedAt || null,
+    isArchived,
     author: {
       id: story.author.id,
       name: story.author.name,
@@ -165,11 +176,22 @@ async function getCurrentUser(userId: string) {
   });
 }
 
-export async function listFeedStories() {
+export async function listFeedStories(viewerId: string, mode: 'active' | 'archive' | 'all' = 'active') {
+  const now = new Date();
+  const activeWhere = {
+    status: 'active',
+    expiresAt: { gt: now },
+  };
+  const archiveWhere = {
+    OR: [
+      { status: { not: 'active' } },
+      { expiresAt: { lte: now } },
+    ],
+  };
+
   const stories = await prisma.feedStory.findMany({
     where: {
-      status: 'active',
-      expiresAt: { gt: new Date() },
+      ...(mode === 'archive' ? archiveWhere : mode === 'all' ? { OR: [activeWhere, archiveWhere] } : activeWhere),
       author: {
         OR: [
           { role: 'admin' },
@@ -179,10 +201,10 @@ export async function listFeedStories() {
     },
     select: STORY_SELECT,
     orderBy: [{ createdAt: 'desc' }],
-    take: 20,
+    take: mode === 'all' ? 60 : 30,
   });
 
-  return stories.map(mapStory);
+  return stories.map((story) => mapStory(story, viewerId));
 }
 
 export async function createFeedStory(userId: string, payload: { text?: string; mediaUrl?: string | null; mediaType?: string | null }) {
@@ -212,7 +234,39 @@ export async function createFeedStory(userId: string, payload: { text?: string; 
     select: STORY_SELECT,
   });
 
-  return mapStory(story);
+  return mapStory(story, userId);
+}
+
+export async function markFeedStoryViewed(userId: string, storyId: string) {
+  const story = await prisma.feedStory.findFirst({
+    where: {
+      id: storyId,
+      author: {
+        OR: [
+          { role: 'admin' },
+          { role: 'pro', OR: [{ verified: true }, { lawyerProfile: { licenseStatus: 'verified' } }] },
+        ],
+      },
+    },
+    select: STORY_SELECT,
+  });
+
+  if (!story) {
+    return null;
+  }
+
+  await prisma.feedStoryView.upsert({
+    where: { storyId_userId: { storyId, userId } },
+    create: { storyId, userId },
+    update: { viewedAt: new Date() },
+  });
+
+  const updatedStory = await prisma.feedStory.findUnique({
+    where: { id: storyId },
+    select: STORY_SELECT,
+  });
+
+  return updatedStory ? mapStory(updatedStory, userId) : null;
 }
 
 export async function listFeedPosts(viewerId: string, filter: FeedFilter = 'all') {

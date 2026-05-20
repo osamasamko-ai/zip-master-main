@@ -340,8 +340,13 @@ class ApiClient {
         return response.data;
     }
 
-    async getFeedStories(): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/app/feed/stories');
+    async getFeedStories(mode: 'active' | 'archive' | 'all' = 'all'): Promise<ApiResponse<any[]>> {
+        const response = await this.client.get('/api/app/feed/stories', { params: { mode } });
+        return response.data;
+    }
+
+    async markFeedStoryViewed(storyId: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/feed/stories/${storyId}/view`);
         return response.data;
     }
 

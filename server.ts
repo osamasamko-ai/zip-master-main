@@ -139,6 +139,7 @@ import {
   deleteFeedPost,
   listFeedStories,
   listFeedPosts,
+  markFeedStoryViewed,
   shareFeedPost,
   toggleFeedSave,
   toggleFeedLike,
@@ -786,13 +787,30 @@ async function startServer() {
     }
   });
 
-  app.get('/api/app/feed/stories', authenticateToken, async (_req, res) => {
+  app.get('/api/app/feed/stories', authenticateToken, async (req, res) => {
     try {
-      const stories = await listFeedStories();
+      const currentUser = (req as any).user;
+      const requestedMode = String(req.query.mode || 'active');
+      const mode = ['active', 'archive', 'all'].includes(requestedMode) ? requestedMode as 'active' | 'archive' | 'all' : 'active';
+      const stories = await listFeedStories(currentUser.userId, mode);
       res.json({ data: stories });
     } catch (error) {
       console.error('Feed stories list error:', error);
       res.status(500).json({ error: 'تعذر تحميل القصص' });
+    }
+  });
+
+  app.post('/api/app/feed/stories/:storyId/view', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const story = await markFeedStoryViewed(currentUser.userId, req.params.storyId);
+      if (!story) {
+        return res.status(404).json({ error: 'القصة غير موجودة' });
+      }
+      res.json({ data: story });
+    } catch (error) {
+      console.error('Feed story view error:', error);
+      res.status(500).json({ error: 'تعذر تحديث مشاهدة القصة' });
     }
   });
 
