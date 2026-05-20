@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import FollowButton from '../components/FollowButton';
 import ActionButton from '../components/ui/ActionButton';
@@ -111,7 +111,10 @@ export default function Profile() {
           apiClient.getLawyers(),
         ]);
         setLoadError('');
-        const profileData = (profileResponse as any).data?.data || (profileResponse as any).data;
+        const profileData = (profileResponse as any).data?.data || (profileResponse as any).data || profileResponse;
+        if (!profileData?.lawyer) {
+          throw new Error('Invalid lawyer profile response');
+        }
         setLawyer(profileData.lawyer);
         setReviews(profileData.reviews || []);
         setLawyerPosts(profileData.posts || []);
@@ -187,160 +190,100 @@ export default function Profile() {
   ];
 
   return (
-    <div className="app-view space-y-6 pb-24 text-right">
-      <section className="rounded-[2.75rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.05] p-8 shadow-premium">
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
-          <div className="space-y-6">
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              {lawyer.verified && (
-                <StatusBadge tone="info">
-                  <i className="fa-solid fa-circle-check"></i>
-                  محامٍ موثق
-                </StatusBadge>
-              )}
-              <StatusBadge tone="warning" className="bg-white text-brand-gold border-brand-gold/20 shadow-sm">
-                {lawyer.specialty}
-              </StatusBadge>
-            </div>
+    <div className="app-view mx-auto max-w-[1180px] space-y-5 pb-24 text-right">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className={`relative h-56 bg-gradient-to-br ${lawyer.accent} sm:h-72`}>
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(255,255,255,0.24),transparent_32%),linear-gradient(180deg,transparent,rgba(0,0,0,0.22))]" />
+          <button
+            type="button"
+            onClick={() => navigate('/feed')}
+            className="absolute left-4 top-4 rounded-md bg-white/90 px-3 py-2 text-xs font-black text-slate-700 shadow-sm transition hover:bg-white"
+          >
+            <i className="fa-solid fa-newspaper ml-2 text-[#1877f2]"></i>
+            منشوراته
+          </button>
+        </div>
 
-            <div className="flex flex-col gap-5 sm:flex-row-reverse sm:items-start">
-              <img src={lawyer.avatar} alt={lawyer.name} className="h-24 w-24 rounded-[2rem] object-cover shadow-lg" />
-              <div className="flex-1 space-y-3">
-                <div>
-                  <h1 className="text-4xl font-black leading-tight text-brand-dark">{lawyer.name}</h1>
-                  <p className="mt-2 text-lg font-bold text-slate-500">{lawyer.tagline}</p>
+        <div className="px-5 pb-5">
+          <div className="-mt-16 flex flex-col gap-4 border-b border-slate-200 pb-5 lg:flex-row-reverse lg:items-end lg:justify-between">
+            <div className="flex flex-col items-center gap-3 text-center sm:flex-row-reverse sm:text-right">
+              <div className="relative">
+                <img src={lawyer.avatar} alt={lawyer.name} className="h-32 w-32 rounded-full border-4 border-white bg-white object-cover shadow-md sm:h-40 sm:w-40" />
+                <span className={`absolute bottom-3 right-3 h-5 w-5 rounded-full border-4 border-white ${lawyer.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
+              </div>
+              <div className="pt-2">
+                <div className="flex flex-wrap items-center justify-center gap-2 sm:justify-end">
+                  {lawyer.verified && (
+                    <StatusBadge tone="info">
+                      <i className="fa-solid fa-circle-check"></i>
+                      محامٍ موثق
+                    </StatusBadge>
+                  )}
+                  <StatusBadge tone="neutral">{lawyer.specialty}</StatusBadge>
                 </div>
-                <div className="flex flex-wrap items-center justify-end gap-4 text-sm font-black text-slate-500">
-                  <span><i className="fa-solid fa-location-dot ml-1 text-brand-gold"></i>{lawyer.location}</span>
-                  <span><i className="fa-solid fa-briefcase ml-1 text-brand-gold"></i>{lawyer.experience}</span>
-                  <span><i className="fa-solid fa-clock ml-1 text-brand-gold"></i>{lawyer.responseTime}</span>
-                </div>
-                <p className="max-w-3xl text-sm font-bold leading-7 text-slate-600">{lawyer.bio}</p>
+                <h1 className="mt-3 text-3xl font-black leading-tight text-slate-950 sm:text-4xl">{lawyer.name}</h1>
+                <p className="mt-2 text-sm font-bold text-slate-600">{lawyer.tagline}</p>
+                <p className="mt-2 text-sm font-black text-slate-500">{socialProofText}</p>
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
-              <PublicStat label="التقييم" value={lawyer.rating.toFixed(1)} note={`${lawyer.reviewCount} مراجعة`} />
-              <PublicStat label="المتابعون" value={lawyer.followers.toLocaleString()} note="دليل اجتماعي قوي" />
-              <PublicStat label="الخبرة" value={`${lawyer.experienceYears}`} note="سنوات ممارسة" />
-              <PublicStat label="القضايا" value={lawyer.casesHandled} note="ملفات أُنجزت بنجاح" />
-            </div>
-          </div>
-
-          <aside className="rounded-[2.25rem] border border-slate-200 bg-white p-5 shadow-sm">
-            <div className={`rounded-[2rem] bg-gradient-to-br ${lawyer.accent} p-5 text-white`}>
-              <p className="text-xs font-black uppercase tracking-[0.28em] text-white/75">Trust Snapshot</p>
-              <p className="mt-3 text-2xl font-black">{lawyer.name}</p>
-              <p className="mt-2 text-sm font-bold text-white/80">{socialProofText}</p>
-              <div className="mt-5 flex items-center justify-between rounded-2xl bg-white/10 px-4 py-3">
-                <span className="text-sm font-black">{lawyer.availability}</span>
-                <span className={`h-3.5 w-3.5 rounded-full ${lawyer.isOnline ? 'bg-emerald-400' : 'bg-white/45'}`}></span>
-              </div>
-            </div>
-
-            <div className="mt-5 space-y-3">
-              <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4 text-right">
-                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">Start Smart</p>
-                <p className="mt-2 text-sm font-black text-brand-dark">
-                  {lawyer.isOnline ? 'يمكنك بدء محادثة الآن ثم تحويلها إلى قضية عند الحاجة.' : 'الأفضل فتح قضية مباشرة إذا كانت لديك مستندات أو تفاصيل جاهزة.'}
-                </p>
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => setNotificationsEnabled((current) => !current)}
-                  className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition ${notificationsEnabled ? 'border-brand-gold bg-brand-gold/10 text-brand-dark' : 'border-slate-200 bg-slate-50 text-slate-400'}`}
-                  title="تنبيهات النشاط"
-                >
-                  <i className={`fa-solid ${notificationsEnabled ? 'fa-bell' : 'fa-bell-slash'}`}></i>
-                </button>
-                <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} className="flex-1" />
-              </div>
+            <div className="flex flex-wrap justify-center gap-2 lg:justify-end">
               <ActionButton
                 onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)}
                 variant="primary"
-                className="w-full"
+                size="sm"
               >
-                تواصل الآن
+                <i className="fa-solid fa-comment"></i>
+                تواصل
               </ActionButton>
-              <ActionButton
-                onClick={() => navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: lawyer.id } })}
-                variant="secondary"
-                className="w-full"
+              <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} className="px-4 py-2 text-xs" />
+              <button
+                onClick={() => setNotificationsEnabled((current) => !current)}
+                className={`flex h-10 w-10 items-center justify-center rounded-md border transition ${notificationsEnabled ? 'border-[#1877f2]/20 bg-[#e7f3ff] text-[#1877f2]' : 'border-slate-200 bg-slate-100 text-slate-400'}`}
+                title="تنبيهات النشاط"
               >
-                افتح قضية مع هذا المحامي
-              </ActionButton>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">نمط البدء</p>
-                  <p className="mt-2 text-sm font-black text-brand-dark">{lawyer.isOnline ? 'محادثة سريعة' : 'فتح ملف منظم'}</p>
-                </div>
-                <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-center shadow-sm">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ملاءمة الطلب</p>
-                  <p className="mt-2 text-sm font-black text-brand-dark">{lawyer.specialty}</p>
-                </div>
-              </div>
+                <i className={`fa-solid ${notificationsEnabled ? 'fa-bell' : 'fa-bell-slash'}`}></i>
+              </button>
             </div>
+          </div>
 
-            <div className="mt-5 rounded-[1.75rem] border border-emerald-100 bg-emerald-50/60 p-4">
-              <p className="text-sm font-black text-emerald-700">لماذا يثق به العملاء؟</p>
-              <ul className="mt-3 space-y-2 text-xs font-bold text-slate-600">
-                {lawyer.highlights.map((item) => (
-                  <li key={item} className="flex items-center justify-end gap-2">
-                    <span>{item}</span>
-                    <i className="fa-solid fa-circle-check text-emerald-500"></i>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-slate-50/60 p-4">
-              <p className="text-sm font-black text-brand-dark">الاعتماد والجاهزية</p>
-              <div className="mt-3 flex flex-wrap justify-end gap-2">
-                {credentialBadges.map((item) => (
-                  <span key={item} className="rounded-full bg-white px-3 py-2 text-[11px] font-black text-slate-600 shadow-sm">
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </aside>
+          <div className="grid gap-3 py-5 sm:grid-cols-4">
+            <PublicStat label="التقييم" value={lawyer.rating.toFixed(1)} note={`${lawyer.reviewCount} مراجعة`} />
+            <PublicStat label="المتابعون" value={lawyer.followers.toLocaleString()} note="متابع" />
+            <PublicStat label="الخبرة" value={`${lawyer.experienceYears}`} note="سنوات ممارسة" />
+            <PublicStat label="القضايا" value={lawyer.casesHandled} note="منجزة" />
+          </div>
         </div>
       </section>
 
-      <div className="sticky top-16 z-30 rounded-[1.75rem] border border-slate-200 bg-white/90 p-4 shadow-sm backdrop-blur-md">
+      <div className="sticky top-16 z-30 rounded-lg border border-slate-200 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap justify-end gap-2">
             {[
-              { id: 'overview' as const, label: 'Overview' },
-              { id: 'posts' as const, label: 'Posts' },
-              { id: 'reviews' as const, label: 'Reviews' },
-              { id: 'activity' as const, label: 'Activity' },
+              { id: 'overview' as const, label: 'حول' },
+              { id: 'posts' as const, label: 'المنشورات' },
+              { id: 'reviews' as const, label: 'المراجعات' },
+              { id: 'activity' as const, label: 'النشاط' },
             ].map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`rounded-full px-4 py-2 text-sm font-black transition ${activeTab === tab.id
-                  ? 'bg-brand-navy text-white'
-                  : 'bg-slate-100 text-slate-600 hover:text-brand-navy'
+                className={`rounded-md px-4 py-2 text-sm font-black transition ${activeTab === tab.id
+                  ? 'bg-[#e7f3ff] text-[#1877f2]'
+                  : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
                   }`}
               >
                 {tab.label}
               </button>
             ))}
           </div>
-          <div className="flex flex-wrap justify-end gap-3">
-            <button
-              onClick={() => setNotificationsEnabled((current) => !current)}
-              className={`flex h-12 w-12 items-center justify-center rounded-2xl border transition ${notificationsEnabled ? 'border-brand-gold bg-brand-gold/10 text-brand-dark' : 'border-slate-200 bg-slate-100 text-slate-400'}`}
-            >
-              <i className={`fa-solid ${notificationsEnabled ? 'fa-bell' : 'fa-bell-slash'}`}></i>
-            </button>
-            <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} />
+          <div className="flex flex-wrap justify-end gap-2">
             <ActionButton
-              onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)}
-              variant="ghost"
+              onClick={() => navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: lawyer.id } })}
+              variant="secondary"
+              size="sm"
             >
-              تواصل
+              افتح قضية
             </ActionButton>
           </div>
         </div>

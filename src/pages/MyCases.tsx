@@ -360,10 +360,12 @@ const CaseSidebar = ({
                       src={c.lawyer.img}
                       className="h-6 w-6 rounded-xl border border-white shadow-sm cursor-pointer"
                       alt={c.lawyer.name}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/profile/${c.lawyer.id}`);
-                      }}
+	                      onClick={(e) => {
+	                        e.stopPropagation();
+	                        if (c.lawyer.id) {
+	                          window.location.assign(`/profile/${c.lawyer.id}`);
+	                        }
+	                      }}
                     />
                     <div className="min-w-0">
                       <p className="truncate text-[11px] font-black text-slate-600">{c.lawyer.name}</p>
