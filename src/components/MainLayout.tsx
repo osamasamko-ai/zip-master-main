@@ -147,9 +147,26 @@ export default function MainLayout() {
   }, [commandQuery, user?.role]);
 
   const handleLogout = () => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+
     logout();
     navigate('/auth');
   };
+
+  const handleLogin = () => {
+    navigate('/auth');
+    setIsProfileOpen(false);
+    setMobileNavOpen(false);
+  };
+
+  const displayName = user?.name || 'زائر';
+  const displayRole = user?.roleDescription || 'تصفح عام';
+  const displayAvatar =
+    user?.img ||
+    'https://ui-avatars.com/api/?name=Guest&background=1B365D&color=ffffff&rounded=true';
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -449,7 +466,7 @@ export default function MainLayout() {
                   transition={headerTransition}
                   className={`${isScrolled ? 'h-7 w-7' : 'h-8 w-8'} overflow-hidden rounded-lg border-2 border-white shadow-sm ring-1 ring-slate-200 transition-all`}
                 >
-                  <img src={user?.img || 'https://i.pravatar.cc/150'} alt="" className="h-full w-full object-cover" />
+                  <img src={displayAvatar} alt="" className="h-full w-full object-cover" />
                 </motion.div>
                 <i className={`fa-solid fa-chevron-down text-[10px] text-slate-400 transition-transform duration-300 ${isProfileOpen ? 'rotate-180' : ''}`}></i>
               </button>
@@ -466,31 +483,43 @@ export default function MainLayout() {
                       className="absolute left-0 mt-2 w-56 origin-top-left rounded-2xl border border-slate-200 bg-white p-2 shadow-2xl z-20 text-right"
                     >
                       <div className="px-3 py-3 border-b border-slate-50 mb-1">
-                        <p className="text-xs font-black text-brand-navy">{user?.name}</p>
-                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">{user?.roleDescription}</p>
+                        <p className="text-xs font-black text-brand-navy">{displayName}</p>
+                        <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-tight">{displayRole}</p>
                       </div>
-                      <button
-                        onClick={() => { navigate('/settings'); setIsProfileOpen(false); }}
-                        className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 hover:text-brand-navy transition-colors"
-                      >
-                        <i className="fa-regular fa-user-circle opacity-50"></i>
-                        الإعدادات
-                      </button>
-                      <button
-                        onClick={() => { navigate('/following'); setIsProfileOpen(false); }}
-                        className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"
-                      >
-                        <i className="fa-solid fa-user-check opacity-50"></i>
-                        المحامون المحفوظون
-                      </button>
-                      <div className="my-1 h-px bg-slate-50"></div>
-                      <button
-                        onClick={handleLogout}
-                        className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-red-500 hover:bg-red-50 transition-colors"
-                      >
-                        <i className="fa-solid fa-arrow-right-from-bracket opacity-70"></i>
-                        تسجيل الخروج
-                      </button>
+                      {user ? (
+                        <>
+                          <button
+                            onClick={() => { navigate('/settings'); setIsProfileOpen(false); }}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 hover:text-brand-navy transition-colors"
+                          >
+                            <i className="fa-regular fa-user-circle opacity-50"></i>
+                            الإعدادات
+                          </button>
+                          <button
+                            onClick={() => { navigate('/following'); setIsProfileOpen(false); }}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-slate-600 hover:bg-slate-50 transition-colors"
+                          >
+                            <i className="fa-solid fa-user-check opacity-50"></i>
+                            المحامون المحفوظون
+                          </button>
+                          <div className="my-1 h-px bg-slate-50"></div>
+                          <button
+                            onClick={handleLogout}
+                            className="flex w-full items-center justify-between rounded-xl px-3 py-2 text-[13px] font-bold text-red-500 hover:bg-red-50 transition-colors"
+                          >
+                            <i className="fa-solid fa-arrow-right-from-bracket opacity-70"></i>
+                            تسجيل الخروج
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={handleLogin}
+                          className="flex w-full items-center justify-between rounded-xl bg-brand-navy px-3 py-2.5 text-[13px] font-bold text-white transition-colors hover:bg-brand-dark"
+                        >
+                          <i className="fa-solid fa-arrow-right-to-bracket opacity-80"></i>
+                          تسجيل الدخول
+                        </button>
+                      )}
                     </motion.div>
                   </>
                 )}
@@ -553,23 +582,30 @@ export default function MainLayout() {
 
             <div className="mt-auto mb-10 space-y-6 pt-8 border-t border-slate-100">
               <div className="flex flex-row-reverse items-center gap-4 px-2">
-                <img src={user?.img || 'https://i.pravatar.cc/150'} className="h-14 w-14 rounded-2xl border-2 border-white shadow-lg" alt="" />
+                <img src={displayAvatar} className="h-14 w-14 rounded-2xl border-2 border-white shadow-lg" alt="" />
                 <div className="text-right">
-                  <p className="text-lg font-black text-brand-dark">{user?.name}</p>
-                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{user?.roleDescription}</p>
+                  <p className="text-lg font-black text-brand-dark">{displayName}</p>
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{displayRole}</p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => { navigate('/settings'); setMobileNavOpen(false); }} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-100 p-5 text-slate-600 transition hover:bg-slate-200">
-                  <i className="fa-regular fa-user-circle text-xl"></i>
-                  <span className="text-xs font-black">الإعدادات</span>
+              {user ? (
+                <div className="grid grid-cols-2 gap-3">
+                  <button onClick={() => { navigate('/settings'); setMobileNavOpen(false); }} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-slate-100 p-5 text-slate-600 transition hover:bg-slate-200">
+                    <i className="fa-regular fa-user-circle text-xl"></i>
+                    <span className="text-xs font-black">الإعدادات</span>
+                  </button>
+                  <button onClick={handleLogout} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-red-50 p-5 text-red-500 transition hover:bg-red-100">
+                    <i className="fa-solid fa-arrow-right-from-bracket text-xl"></i>
+                    <span className="text-xs font-black">تسجيل الخروج</span>
+                  </button>
+                </div>
+              ) : (
+                <button onClick={handleLogin} className="flex w-full items-center justify-center gap-3 rounded-2xl bg-brand-navy p-5 text-white transition hover:bg-brand-dark">
+                  <i className="fa-solid fa-arrow-right-to-bracket text-lg"></i>
+                  <span className="text-sm font-black">تسجيل الدخول</span>
                 </button>
-                <button onClick={handleLogout} className="flex flex-col items-center justify-center gap-2 rounded-2xl bg-red-50 p-5 text-red-500 transition hover:bg-red-100">
-                  <i className="fa-solid fa-arrow-right-from-bracket text-xl"></i>
-                  <span className="text-xs font-black">تسجيل الخروج</span>
-                </button>
-              </div>
+              )}
             </div>
           </motion.div>
         )}
