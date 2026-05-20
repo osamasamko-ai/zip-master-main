@@ -21,7 +21,16 @@ type FollowedSortMode = 'priority' | 'rating' | 'followers';
 
 export default function Following() {
   const navigate = useNavigate();
-  const { followedIds, follow, unfollow, isFollowed, isPending, totalFollowed, reload } = useFollowedLawyers();
+  const {
+    followedIds,
+    follow,
+    unfollow,
+    isFollowed,
+    isPending,
+    totalFollowed,
+    isLoading: isLoadingFollowState,
+    reload,
+  } = useFollowedLawyers();
   const [followedSearch, setFollowedSearch] = useState('');
   const [availabilityFilter, setAvailabilityFilter] = useState<AvailabilityFilter>('all');
   const [specialtyFilter, setSpecialtyFilter] = useState('all');
@@ -32,6 +41,7 @@ export default function Following() {
   const [alerts, setAlerts] = useState<AvailabilityAlert[]>([]);
   const [activeToast, setActiveToast] = useState<AvailabilityAlert | null>(null);
   const [allLawyers, setAllLawyers] = useState<any[]>([]);
+  const [pageFollowedIds, setPageFollowedIds] = useState<string[]>([]);
 
   const loadPageData = useCallback(async () => {
     setIsLoading(true);
@@ -45,6 +55,9 @@ export default function Following() {
 
       const directoryLawyers = lawyersResponse.status === 'fulfilled' ? lawyersResponse.value.data || [] : [];
       const followedLawyersFromApi = followingResponse.status === 'fulfilled' ? followingResponse.value.data || [] : [];
+      if (followingResponse.status === 'fulfilled') {
+        setPageFollowedIds(followedLawyersFromApi.map((lawyer: any) => lawyer.id));
+      }
       const mergedLawyers = [
         ...directoryLawyers,
         ...followedLawyersFromApi.filter((followedLawyer: any) => !directoryLawyers.some((lawyer: any) => lawyer.id === followedLawyer.id)),
@@ -81,6 +94,12 @@ export default function Following() {
       const customEvent = event as CustomEvent<{ lawyerId: string; delta: number; followerCount?: number }>;
       const { lawyerId, delta, followerCount } = customEvent.detail;
 
+      setPageFollowedIds((current) => {
+        if (delta > 0) return current.includes(lawyerId) ? current : [...current, lawyerId];
+        if (delta < 0) return current.filter((id) => id !== lawyerId);
+        return current;
+      });
+
       setAllLawyers((current) =>
         current.map((lawyer) =>
           lawyer.id === lawyerId
@@ -97,9 +116,14 @@ export default function Following() {
     return () => window.removeEventListener(FOLLOW_STATE_EVENT, handleFollowStateChange as EventListener);
   }, []);
 
+  const effectiveFollowedIds = isLoadingFollowState || (followedIds.length === 0 && pageFollowedIds.length > 0)
+    ? pageFollowedIds
+    : followedIds;
+  const displayedTotalFollowed = Math.max(totalFollowed, effectiveFollowedIds.length);
+
   const savedLawyers = useMemo(
-    () => allLawyers.filter((lawyer) => followedIds.includes(lawyer.id)),
-    [allLawyers, followedIds],
+    () => allLawyers.filter((lawyer) => effectiveFollowedIds.includes(lawyer.id)),
+    [allLawyers, effectiveFollowedIds],
   );
 
   const specialties = useMemo(
@@ -132,8 +156,8 @@ export default function Following() {
   }, [availabilityFilter, followedSearch, savedLawyers, sortMode, specialtyFilter]);
 
   const suggestedLawyers = useMemo(
-    () => allLawyers.filter((lawyer) => !followedIds.includes(lawyer.id)).sort((left, right) => right.followers - left.followers),
-    [allLawyers, followedIds]
+    () => allLawyers.filter((lawyer) => !effectiveFollowedIds.includes(lawyer.id)).sort((left, right) => right.followers - left.followers),
+    [allLawyers, effectiveFollowedIds]
   );
 
   const onlineFollowedCount = savedLawyers.filter((lawyer) => lawyer.isOnline).length;
@@ -154,10 +178,10 @@ export default function Following() {
   };
 
   useEffect(() => {
-    if (!followedIds.length) return;
+    if (!effectiveFollowedIds.length) return;
 
     const interval = window.setInterval(() => {
-      const randomFollowed = allLawyers.filter((lawyer) => followedIds.includes(lawyer.id) && lawyer.isOnline);
+      const randomFollowed = allLawyers.filter((lawyer) => effectiveFollowedIds.includes(lawyer.id) && lawyer.isOnline);
       const selected = randomFollowed[Math.floor(Math.random() * randomFollowed.length)];
       if (!selected) return;
 
@@ -175,7 +199,7 @@ export default function Following() {
     }, 15000);
 
     return () => window.clearInterval(interval);
-  }, [allLawyers, followedIds]);
+  }, [allLawyers, effectiveFollowedIds]);
 
   return (
     <div className="app-view fade-in mx-auto w-full min-w-0 max-w-full space-y-6 overflow-x-hidden pb-12 text-right">
@@ -224,7 +248,7 @@ export default function Following() {
                   <i className="fa-solid fa-user-check text-brand-gold"></i>
                   <p className="text-[11px] font-black text-slate-400">المحفوظون</p>
                 </div>
-                <p className="mt-2 text-2xl font-black text-brand-dark">{totalFollowed.toLocaleString('ar-IQ')}</p>
+                <p className="mt-2 text-2xl font-black text-brand-dark">{displayedTotalFollowed.toLocaleString('ar-IQ')}</p>
               </div>
               <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
                 <div className="flex items-center justify-between gap-3">
