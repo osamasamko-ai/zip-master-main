@@ -8,7 +8,7 @@ import apiClient from '../api/client';
 import { DocumentUpload } from '../components/DocumentUpload';
 import { useDocumentUpload } from '../hooks/useDocumentUpload';
 
-type SettingsSection = 'account' | 'security' | 'billing' | 'notifications' | 'integrations' | 'activity' | 'documents';
+type SettingsSection = 'account' | 'publicProfile' | 'security' | 'billing' | 'notifications' | 'integrations' | 'activity' | 'documents';
 
 type SessionItem = {
   id: string;
@@ -40,6 +40,11 @@ type SettingsForm = {
   email: string;
   phone: string;
   company: string;
+  tagline: string;
+  bio: string;
+  specialty: string;
+  experienceYears: string;
+  highlights: string;
   consultationFee: string;
   language: string;
   twoFactor: boolean;
@@ -94,6 +99,24 @@ const SUGGESTED_CONSULTATION_FEES = [
   '50,000 د.ع',
   '75,000 د.ع',
   '100,000 د.ع',
+];
+
+const SUGGESTED_SPECIALTIES = [
+  'أحوال شخصية',
+  'قضايا تجارية',
+  'عقارات',
+  'ملكية فكرية',
+  'قانون العمل',
+  'العقود',
+];
+
+const SUGGESTED_HIGHLIGHTS = [
+  'تفاوض وتسوية النزاعات',
+  'صياغة العقود',
+  'تمثيل أمام المحاكم',
+  'استشارات للشركات',
+  'متابعة الإجراءات العقارية',
+  'حماية العلامات التجارية',
 ];
 
 function SettingsCard({
@@ -198,6 +221,11 @@ export default function Settings() {
     email: user?.email ?? '',
     phone: '',
     company: user?.role === 'pro' ? 'مكتب النعيمي للمحاماة' : 'حساب فردي',
+    tagline: '',
+    bio: '',
+    specialty: '',
+    experienceYears: '',
+    highlights: '',
     consultationFee: '',
     language: 'العربية',
     twoFactor: false,
@@ -243,6 +271,13 @@ export default function Settings() {
           email: data.profile.email || '',
           phone: data.profile.phone || '',
           company: data.profile.company || '',
+          tagline: data.profile.tagline || '',
+          bio: data.profile.bio || '',
+          specialty: data.profile.specialty || '',
+          experienceYears: data.profile.experienceYears ? String(data.profile.experienceYears) : '',
+          highlights: Array.isArray(data.profile.highlights)
+            ? data.profile.highlights.join('\n')
+            : data.profile.highlights || '',
           consultationFee: data.profile.consultationFee || '',
           language: data.profile.language || 'العربية',
           twoFactor: !!data.profile.twoFactor,
@@ -270,9 +305,14 @@ export default function Settings() {
     load();
   }, []);
 
+  const isProfessionalAccount = user?.role === 'pro' || user?.role === 'admin';
+
   const sections = useMemo(
     () => [
       { id: 'account' as const, label: 'الحساب', icon: 'fa-id-card', description: 'الهوية، بيانات الحساب، وبيئة العمل' },
+      ...(isProfessionalAccount
+        ? [{ id: 'publicProfile' as const, label: 'الملف العام', icon: 'fa-address-card', description: 'النبذة، التخصصات، ونقاط التميز' }]
+        : []),
       { id: 'security' as const, label: 'الأمان', icon: 'fa-shield-halved', description: 'كلمة المرور، الحماية، والجلسات' },
       { id: 'documents' as const, label: 'المستندات', icon: 'fa-file-shield', description: 'الهوية، بطاقة المحاماة، وحالة التحقق' },
       { id: 'billing' as const, label: 'الفوترة', icon: 'fa-credit-card', description: 'الخطة، المدفوعات، والفواتير' },
@@ -280,7 +320,7 @@ export default function Settings() {
       { id: 'integrations' as const, label: 'التكاملات', icon: 'fa-link', description: 'الأدوات المتصلة وتصدير البيانات' },
       { id: 'activity' as const, label: 'النشاط', icon: 'fa-clock-rotate-left', description: 'تحليلات الاستخدام وسجل الأحداث' },
     ],
-    []
+    [isProfessionalAccount]
   );
 
   const usageStats = useMemo(
@@ -292,8 +332,6 @@ export default function Settings() {
     ],
     [form.twoFactor, sessions]
   );
-
-  const isProfessionalAccount = user?.role === 'pro' || user?.role === 'admin';
 
   const verificationDocuments = useMemo<VerificationDocument[]>(
     () => [
@@ -326,7 +364,7 @@ export default function Settings() {
   const uploadedDocumentsCount = verificationDocuments.filter((item) => item.previewUrl).length;
   const verifiedDocumentsCount = verificationDocuments.filter((item) => item.isVerified).length;
   const requiredProfileFields = isProfessionalAccount
-    ? [form.name, form.email, form.phone, form.company, form.consultationFee]
+    ? [form.name, form.email, form.phone, form.company, form.consultationFee, form.bio, form.specialty, form.highlights]
     : [form.name, form.email, form.phone, form.company];
   const profileCompletion = Math.round((requiredProfileFields.filter(Boolean).length / requiredProfileFields.length) * 100);
   const securityScore = form.twoFactor ? 92 : 71;
@@ -379,6 +417,11 @@ export default function Settings() {
           name: form.name,
           phone: form.phone,
           company: form.company,
+          tagline: form.tagline,
+          bio: form.bio,
+          specialty: form.specialty,
+          experienceYears: form.experienceYears,
+          highlights: form.highlights,
           consultationFee: form.consultationFee,
           language: form.language,
         }),
@@ -737,6 +780,138 @@ export default function Settings() {
                     <i className="fa-solid fa-headset"></i>
                     طلب مراجعة الحذف
                   </ActionButton>
+                </div>
+              </SettingsCard>
+            </>
+          )}
+
+          {activeSection === 'publicProfile' && isProfessionalAccount && (
+            <>
+              <NoticePanel
+                title="الملف الذي يراه العملاء"
+                description="هذه الحقول تظهر في صفحة ملفك العام، وتساعد العميل على فهم خبرتك بسرعة قبل بدء التواصل أو فتح قضية."
+              />
+
+              <SettingsCard title="نبذة وتعريف" description="اكتب تعريفاً مختصراً وواضحاً عن أسلوبك وخبرتك القانونية.">
+                <div className="grid gap-4">
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-black text-brand-dark">عنوان تعريفي قصير</span>
+                    <input
+                      type="text"
+                      value={form.tagline}
+                      onChange={(event) => updateForm('tagline', event.target.value)}
+                      maxLength={120}
+                      placeholder="مثال: استشارات دقيقة في عقود الشركات والنزاعات التجارية"
+                      className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                    />
+                    <span className="mt-1 block text-xs font-bold text-slate-400">{form.tagline.length}/120</span>
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-black text-brand-dark">نبذة وتعريف</span>
+                    <textarea
+                      value={form.bio}
+                      onChange={(event) => updateForm('bio', event.target.value)}
+                      rows={6}
+                      maxLength={700}
+                      placeholder="عرّف بنفسك: نوع القضايا التي تتابعها، أسلوب العمل، وما الذي يميز تجربة العميل معك."
+                      className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold leading-7 text-slate-700 outline-none transition focus:border-brand-navy"
+                    />
+                    <span className="mt-1 block text-xs font-bold text-slate-400">{form.bio.length}/700</span>
+                  </label>
+                </div>
+              </SettingsCard>
+
+              <SettingsCard title="التخصصات والتميز" description="حدد التخصص الرئيسي ونقاط القوة التي ستظهر كوسوم في الملف العام.">
+                <div className="grid gap-5">
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_180px]">
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-black text-brand-dark">التخصص الرئيسي</span>
+                      <input
+                        type="text"
+                        value={form.specialty}
+                        onChange={(event) => updateForm('specialty', event.target.value)}
+                        placeholder="مثال: قضايا تجارية"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                      />
+                    </label>
+                    <label className="block">
+                      <span className="mb-2 block text-sm font-black text-brand-dark">سنوات الخبرة</span>
+                      <input
+                        type="number"
+                        min="0"
+                        max="60"
+                        value={form.experienceYears}
+                        onChange={(event) => updateForm('experienceYears', event.target.value)}
+                        placeholder="12"
+                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                      />
+                    </label>
+                  </div>
+
+                  <div>
+                    <p className="mb-2 text-sm font-black text-brand-dark">اقتراحات سريعة للتخصص</p>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {SUGGESTED_SPECIALTIES.map((specialty) => (
+                        <button
+                          key={specialty}
+                          type="button"
+                          onClick={() => updateForm('specialty', specialty)}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-black transition ${
+                            form.specialty === specialty
+                              ? 'border-brand-navy bg-brand-navy text-white'
+                              : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy/30'
+                          }`}
+                        >
+                          {specialty}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <label className="block">
+                    <span className="mb-2 block text-sm font-black text-brand-dark">نقاط التميز</span>
+                    <textarea
+                      value={form.highlights}
+                      onChange={(event) => updateForm('highlights', event.target.value)}
+                      rows={5}
+                      placeholder={`اكتب كل نقطة في سطر مستقل، مثل:\nصياغة العقود\nتفاوض وتسوية النزاعات`}
+                      className="w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold leading-7 text-slate-700 outline-none transition focus:border-brand-navy"
+                    />
+                    <span className="mt-1 block text-xs font-bold text-slate-400">ستظهر هذه النقاط كوسوم تحت قسم التخصصات والتميز.</span>
+                  </label>
+
+                  <div>
+                    <p className="mb-2 text-sm font-black text-brand-dark">إضافة نقطة جاهزة</p>
+                    <div className="flex flex-wrap justify-end gap-2">
+                      {SUGGESTED_HIGHLIGHTS.map((highlight) => {
+                        const currentHighlights = form.highlights
+                          .split(/\n|،|,/)
+                          .map((item) => item.trim())
+                          .filter(Boolean);
+                        const isSelected = currentHighlights.includes(highlight);
+                        return (
+                          <button
+                            key={highlight}
+                            type="button"
+                            onClick={() => {
+                              if (isSelected) return;
+                              updateForm('highlights', [...currentHighlights, highlight].join('\n'));
+                            }}
+                            disabled={isSelected}
+                            className={`rounded-full border px-3 py-1.5 text-xs font-black transition ${
+                              isSelected
+                                ? 'cursor-default border-emerald-100 bg-emerald-50 text-emerald-700'
+                                : 'border-slate-200 bg-white text-slate-600 hover:border-brand-navy/30 hover:bg-slate-50'
+                            }`}
+                          >
+                            <i className={`fa-solid ${isSelected ? 'fa-check' : 'fa-plus'} ml-1 text-[10px]`}></i>
+                            {highlight}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               </SettingsCard>
             </>

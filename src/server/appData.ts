@@ -108,6 +108,25 @@ function normalizeConsultationFee(value?: string | null) {
   return `${Number(digitsOnly).toLocaleString('en-US')} د.ع`;
 }
 
+function normalizeHighlights(value: unknown) {
+  const items = Array.isArray(value)
+    ? value
+    : String(value || '').split(/\n|،|,/);
+
+  return JSON.stringify(
+    items
+      .map((item) => String(item).trim())
+      .filter(Boolean)
+      .slice(0, 12)
+  );
+}
+
+function normalizeExperienceYears(value: unknown) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return 0;
+  return Math.max(0, Math.min(60, Math.round(numericValue)));
+}
+
 function buildLawyerCard(user: any, followerCount: number, reviewCount: number, isFollowing = false) {
   const profile = user.lawyerProfile;
   return {
@@ -201,6 +220,11 @@ export async function getCurrentUserProfile(userId: string) {
     securityAlerts: user.securityAlerts,
     marketingEmails: user.marketingEmails,
     roleDescription: user.roleDescription || '',
+    tagline: user.lawyerProfile?.tagline || '',
+    bio: user.lawyerProfile?.bio || '',
+    specialty: user.lawyerProfile?.specialty || '',
+    experienceYears: user.lawyerProfile?.experienceYears || 0,
+    highlights: parseJsonArray(user.lawyerProfile?.highlights),
     consultationFee: normalizeConsultationFee(user.lawyerProfile?.consultationFee),
     nationalIdUrl: user.lawyerProfile?.nationalIdUrl || '',
     nationalIdVerified: user.lawyerProfile?.nationalIdVerified || false,
@@ -237,10 +261,20 @@ export async function updateCurrentUserProfile(userId: string, updates: Record<s
     await prisma.lawyerProfile.upsert({
       where: { userId },
       update: {
+        tagline: updates.tagline,
+        bio: updates.bio,
+        specialty: updates.specialty,
+        experienceYears: normalizeExperienceYears(updates.experienceYears),
+        highlights: normalizeHighlights(updates.highlights),
         consultationFee: normalizeConsultationFee(updates.consultationFee),
       },
       create: {
         userId,
+        tagline: updates.tagline,
+        bio: updates.bio,
+        specialty: updates.specialty,
+        experienceYears: normalizeExperienceYears(updates.experienceYears),
+        highlights: normalizeHighlights(updates.highlights),
         consultationFee: normalizeConsultationFee(updates.consultationFee),
       },
     });
