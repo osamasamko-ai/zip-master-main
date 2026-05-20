@@ -25,7 +25,9 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
     const [isDragging, setIsDragging] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [uploadProgress, setUploadProgress] = useState(0);
+    const [localError, setLocalError] = useState('');
     const fileInputRef = React.useRef<HTMLInputElement>(null);
+    const maxFileSize = 5 * 1024 * 1024;
 
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
@@ -46,6 +48,25 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
     };
 
     const handleFileUpload = async (file: File) => {
+        setLocalError('');
+
+        const isSupportedFile =
+            file.type.startsWith('image/') ||
+            file.type === 'application/pdf' ||
+            file.name.toLowerCase().endsWith('.pdf');
+
+        if (!isSupportedFile) {
+            setLocalError('نوع الملف غير مدعوم. يرجى رفع صورة أو ملف PDF.');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
+        if (file.size > maxFileSize) {
+            setLocalError('حجم الملف أكبر من 5MB. اختر ملفاً أصغر.');
+            if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
+
         setIsUploading(true);
         setUploadProgress(0);
 
@@ -59,9 +80,11 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
             setUploadProgress(100);
         } catch (error) {
             console.error('Upload failed:', error);
+            setLocalError(error instanceof Error ? error.message : 'تعذر رفع الملف. حاول مرة أخرى.');
             setUploadProgress(0);
         } finally {
             clearInterval(progressInterval);
+            if (fileInputRef.current) fileInputRef.current.value = '';
             setTimeout(() => {
                 setIsUploading(false);
                 setUploadProgress(0);
@@ -190,6 +213,13 @@ export const DocumentUpload: React.FC<DocumentUploadProps> = ({
                     className="hidden"
                     disabled={isLoading || isUploading}
                 />
+
+                {localError && (
+                    <div className="flex items-center justify-end gap-2 rounded-xl bg-red-50 px-4 py-3">
+                        <span className="text-sm font-bold text-red-600">{localError}</span>
+                        <i className="fa-solid fa-circle-exclamation text-red-600"></i>
+                    </div>
+                )}
 
                 {isVerified && (
                     <motion.div

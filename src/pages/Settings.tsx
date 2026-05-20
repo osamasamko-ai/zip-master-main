@@ -5,7 +5,6 @@ import NoticePanel from '../components/ui/NoticePanel';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useAuth } from '../context/AuthContext';
 import apiClient from '../api/client';
-import { motion, AnimatePresence } from 'framer-motion';
 import { DocumentUpload } from '../components/DocumentUpload';
 import { useDocumentUpload } from '../hooks/useDocumentUpload';
 
@@ -35,6 +34,36 @@ type InvoiceItem = {
   date: string;
   status: 'paid' | 'pending';
 };
+
+type SettingsForm = {
+  name: string;
+  email: string;
+  phone: string;
+  company: string;
+  consultationFee: string;
+  language: string;
+  twoFactor: boolean;
+  emailAlerts: boolean;
+  pushNotifications: boolean;
+  billingReminders: boolean;
+  securityAlerts: boolean;
+  marketingEmails: boolean;
+};
+
+type ConnectedApp = {
+  id: string;
+  name: string;
+  status: 'connected' | 'disconnected';
+  icon: string;
+  desc: string;
+};
+
+type NotificationPreferenceKey =
+  | 'emailAlerts'
+  | 'pushNotifications'
+  | 'billingReminders'
+  | 'securityAlerts'
+  | 'marketingEmails';
 
 type VerificationDocument = {
   key: 'nationalId' | 'lawyerLicense';
@@ -143,7 +172,13 @@ export default function Settings() {
 
   const [activeSection, setActiveSection] = useState<SettingsSection>('account');
   const [savedToast, setSavedToast] = useState('');
+  const [isLoadingSettings, setIsLoadingSettings] = useState(true);
+  const [settingsError, setSettingsError] = useState('');
+  const [isSaving, setIsSaving] = useState(false);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [sessionsNotice, setSessionsNotice] = useState('');
+  const [billingNotice, setBillingNotice] = useState('');
+  const [integrationNotice, setIntegrationNotice] = useState('');
   const [billingStatus, setBillingStatus] = useState<'active' | 'past_due'>('active');
   const [documentNotice, setDocumentNotice] = useState('');
   const [sessions, setSessions] = useState<SessionItem[]>(INITIAL_SESSIONS);
@@ -158,7 +193,7 @@ export default function Settings() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isSubmittingPassword, setIsSubmittingPassword] = useState(false);
   const [consultationFeeError, setConsultationFeeError] = useState('');
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<SettingsForm>({
     name: user?.name ?? 'أحمد العراقي',
     email: user?.email ?? '',
     phone: '',
@@ -178,17 +213,32 @@ export default function Settings() {
     lawyerLicenseUrl: '',
     lawyerLicenseVerified: false,
   });
+  const [connectedApps, setConnectedApps] = useState<ConnectedApp[]>([
+    { id: 'google', name: 'Google Workspace', status: 'connected', icon: 'fa-brands fa-google', desc: 'لمزامنة المواعيد والملفات' },
+    { id: 'zain', name: 'Zain Cash', status: 'connected', icon: 'fa-solid fa-mobile-screen', desc: 'للمدفوعات السريعة' },
+    { id: 'dropbox', name: 'Dropbox', status: 'disconnected', icon: 'fa-brands fa-dropbox', desc: 'تخزين سحابي إضافي' },
+  ]);
+
+  const updateForm = <K extends keyof SettingsForm>(key: K, value: SettingsForm[K]) => {
+    setForm((current) => ({ ...current, [key]: value }));
+    setHasUnsavedChanges(true);
+  };
+
+  const togglePreference = (key: NotificationPreferenceKey) => {
+    updateForm(key, !form[key]);
+  };
 
   React.useEffect(() => {
     const load = async () => {
       try {
+        setIsLoadingSettings(true);
+        setSettingsError('');
         const response = await apiClient.getSettings();
         const data = response.data;
         if (!data?.profile) return;
         setSessions(data.sessions || []);
         setActivityItems(data.activityItems || []);
-        setForm((current) => ({
-          ...current,
+        setForm({
           name: data.profile.name || '',
           email: data.profile.email || '',
           phone: data.profile.phone || '',
@@ -201,7 +251,7 @@ export default function Settings() {
           billingReminders: !!data.profile.billingReminders,
           securityAlerts: !!data.profile.securityAlerts,
           marketingEmails: !!data.profile.marketingEmails,
-        }));
+        });
         setInvoices(data.invoices || []);
         setDocuments({
           nationalIdUrl: data.profile.nationalIdUrl || '',
@@ -209,8 +259,12 @@ export default function Settings() {
           lawyerLicenseUrl: data.profile.lawyerLicenseUrl || '',
           lawyerLicenseVerified: !!data.profile.lawyerLicenseVerified,
         });
+        setHasUnsavedChanges(false);
       } catch (error) {
         console.error('Failed to load settings', error);
+        setSettingsError('تعذر تحميل الإعدادات. تحقق من الاتصال وحاول مرة أخرى.');
+      } finally {
+        setIsLoadingSettings(false);
       }
     };
     load();
@@ -237,15 +291,6 @@ export default function Settings() {
       { label: 'الجلسات', value: String(sessions.length), note: `${sessions.filter((item) => item.current).length} جهاز نشط حالياً` },
     ],
     [form.twoFactor, sessions]
-  );
-
-  const connectedApps = useMemo(
-    () => [
-      { id: 'google', name: 'Google Workspace', status: 'connected', icon: 'fa-brands fa-google', desc: 'لمزامنة المواعيد والملفات' },
-      { id: 'zain', name: 'Zain Cash', status: 'connected', icon: 'fa-solid fa-mobile-screen', desc: 'للمدفوعات السريعة' },
-      { id: 'dropbox', name: 'Dropbox', status: 'disconnected', icon: 'fa-brands fa-dropbox', desc: 'تخزين سحابي إضافي' },
-    ],
-    []
   );
 
   const isProfessionalAccount = user?.role === 'pro' || user?.role === 'admin';
@@ -280,6 +325,17 @@ export default function Settings() {
 
   const uploadedDocumentsCount = verificationDocuments.filter((item) => item.previewUrl).length;
   const verifiedDocumentsCount = verificationDocuments.filter((item) => item.isVerified).length;
+  const requiredProfileFields = isProfessionalAccount
+    ? [form.name, form.email, form.phone, form.company, form.consultationFee]
+    : [form.name, form.email, form.phone, form.company];
+  const profileCompletion = Math.round((requiredProfileFields.filter(Boolean).length / requiredProfileFields.length) * 100);
+  const securityScore = form.twoFactor ? 92 : 71;
+  const alertChannelsCount = [
+    form.emailAlerts,
+    form.pushNotifications,
+    form.billingReminders,
+    form.securityAlerts,
+  ].filter(Boolean).length;
 
   const handleNationalIdUpload = async (file: File) => {
     const fileUrl = await uploadNationalId(file);
@@ -317,6 +373,7 @@ export default function Settings() {
 
     setConsultationFeeError('');
     try {
+      setIsSaving(true);
       await Promise.all([
         apiClient.updateSettingsProfile({
           name: form.name,
@@ -335,24 +392,33 @@ export default function Settings() {
           language: form.language,
         }),
       ]);
+      setHasUnsavedChanges(false);
       setSavedToast('تم حفظ الإعدادات بنجاح');
       window.setTimeout(() => setSavedToast(''), 2200);
     } catch (error) {
       console.error('Failed to save settings', error);
       setSavedToast('تعذر حفظ الإعدادات');
+    } finally {
+      setIsSaving(false);
     }
   };
 
   const revokeSession = async (sessionId: string) => {
-    await apiClient.revokeSession(sessionId);
-    setSessions((current) => current.filter((item) => item.id !== sessionId));
-    setSessionsNotice('تم إنهاء الجلسة بنجاح');
+    try {
+      await apiClient.revokeSession(sessionId);
+      setSessions((current) => current.filter((item) => item.id !== sessionId));
+      setSessionsNotice('تم إنهاء الجلسة بنجاح');
+    } catch (error) {
+      console.error('Failed to revoke session', error);
+      setSessionsNotice('تعذر إنهاء الجلسة. حاول مرة أخرى.');
+    }
     window.setTimeout(() => setSessionsNotice(''), 2200);
   };
 
   const toggleTwoFactor = () => {
     const next = !form.twoFactor;
     setForm((current) => ({ ...current, twoFactor: next }));
+    setHasUnsavedChanges(true);
     setActivityItems((current) => [
       {
         id: `activity-${Date.now()}`,
@@ -363,6 +429,48 @@ export default function Settings() {
       },
       ...current,
     ]);
+  };
+
+  const handleBillingAction = (message: string, status?: 'active' | 'past_due') => {
+    if (status) setBillingStatus(status);
+    setBillingNotice(message);
+    window.setTimeout(() => setBillingNotice(''), 2600);
+  };
+
+  const toggleIntegration = (appId: string) => {
+    let nextStatus: ConnectedApp['status'] = 'connected';
+    setConnectedApps((current) =>
+      current.map((app) => {
+        if (app.id !== appId) return app;
+        nextStatus = app.status === 'connected' ? 'disconnected' : 'connected';
+        return { ...app, status: nextStatus };
+      })
+    );
+    setIntegrationNotice(nextStatus === 'connected' ? 'تم ربط التطبيق بنجاح.' : 'تم فصل التطبيق عن الحساب.');
+    window.setTimeout(() => setIntegrationNotice(''), 2400);
+  };
+
+  const exportData = () => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      profile: form,
+      sessions,
+      invoices,
+      documents,
+      connectedApps,
+      activityItems,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `qistas-settings-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setIntegrationNotice('تم تجهيز أرشيف البيانات وبدأ التحميل.');
+    window.setTimeout(() => setIntegrationNotice(''), 2400);
   };
 
   const submitPasswordChange = (event: React.FormEvent<HTMLFormElement>) => {
@@ -407,35 +515,88 @@ export default function Settings() {
   };
 
   return (
-    <div className="app-view space-y-6 text-right">
-      <section className="rounded-[2.5rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.04] p-8 shadow-premium">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <div className="app-view fade-in mx-auto max-w-[1440px] space-y-6 pb-12 text-right">
+      <section className="overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-white shadow-premium">
+        <div className="grid gap-6 p-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8">
           <div>
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">Private Workspace</p>
-            <h1 className="mt-3 text-3xl font-black text-brand-dark">الإعدادات</h1>
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-xs font-black text-brand-dark">
+              <i className="fa-solid fa-sliders text-brand-gold"></i>
+              Private Workspace
+            </div>
+            <h1 className="mt-4 text-3xl font-black text-brand-dark">الإعدادات</h1>
             <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
               مساحة خاصة لإدارة الحساب والأمان والتفضيلات والفوترة والنشاط. لا تظهر هذه المعلومات للزوار أو العملاء.
             </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <StatusBadge tone={hasUnsavedChanges ? 'warning' : 'success'}>
+                {hasUnsavedChanges ? 'تغييرات غير محفوظة' : 'كل شيء محفوظ'}
+              </StatusBadge>
+              <StatusBadge tone={securityScore >= 90 ? 'success' : 'warning'}>
+                الأمان {securityScore}/100
+              </StatusBadge>
+              <StatusBadge tone={profileCompletion === 100 ? 'success' : 'info'}>
+                اكتمال الملف {profileCompletion}%
+              </StatusBadge>
+            </div>
           </div>
+          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
+            <div className="space-y-4">
+              <div>
+                <div className="mb-2 flex items-center justify-between text-xs font-black text-slate-500">
+                  <span>{profileCompletion}%</span>
+                  <span>جاهزية الحساب</span>
+                </div>
+                <div className="h-2 rounded-full bg-white">
+                  <div className="h-full rounded-full bg-brand-navy transition-all" style={{ width: `${profileCompletion}%` }}></div>
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="rounded-xl bg-white p-3">
+                  <p className="text-lg font-black text-brand-dark">{sessions.length}</p>
+                  <p className="text-[10px] font-bold text-slate-400">جلسات</p>
+                </div>
+                <div className="rounded-xl bg-white p-3">
+                  <p className="text-lg font-black text-brand-dark">{alertChannelsCount}</p>
+                  <p className="text-[10px] font-bold text-slate-400">قنوات</p>
+                </div>
+                <div className="rounded-xl bg-white p-3">
+                  <p className="text-lg font-black text-brand-dark">{uploadedDocumentsCount}</p>
+                  <p className="text-[10px] font-bold text-slate-400">مستندات</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/60 px-6 py-4 sm:flex-row sm:items-center sm:justify-between lg:px-8">
+          <p className="text-xs font-bold text-slate-500">
+            {isLoadingSettings ? 'جاري تحميل آخر نسخة من الإعدادات...' : 'آخر تحديثات الحساب جاهزة للمراجعة والحفظ.'}
+          </p>
           <div className="flex flex-wrap justify-end gap-3">
             <ActionButton
-              onClick={() => navigate('/profile/lawyer-1')}
+              onClick={() => user?.id ? navigate(`/profile/${user.id}`) : navigate('/settings')}
               variant="secondary"
             >
+              <i className="fa-solid fa-eye"></i>
               عرض نموذج الملف العام
             </ActionButton>
             <ActionButton
               onClick={saveChanges}
               variant="primary"
+              disabled={isSaving || isLoadingSettings}
             >
-              حفظ التغييرات
+              <i className={`fa-solid ${isSaving ? 'fa-circle-notch fa-spin' : 'fa-floppy-disk'}`}></i>
+              {isSaving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
             </ActionButton>
           </div>
         </div>
       </section>
 
+      {settingsError && (
+        <NoticePanel title="تعذر التحميل" description={settingsError} tone="warning" />
+      )}
+
       {savedToast && (
-        <NoticePanel title="تم الحفظ" description={savedToast} tone="success" />
+        <NoticePanel title={savedToast.includes('تعذر') ? 'تنبيه' : 'تم الحفظ'} description={savedToast} tone={savedToast.includes('تعذر') ? 'warning' : 'success'} />
       )}
 
       <div className="grid gap-6 xl:grid-cols-[300px_minmax(0,1fr)]">
@@ -490,9 +651,13 @@ export default function Settings() {
                       <input
                         type={field.type}
                         value={form[field.key as keyof typeof form] as string}
-                        onChange={(event) => setForm((current) => ({ ...current, [field.key]: event.target.value }))}
-                        className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                        readOnly={field.key === 'email'}
+                        onChange={(event) => updateForm(field.key as keyof SettingsForm, event.target.value)}
+                        className={`w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy ${field.key === 'email' ? 'bg-slate-100 text-slate-500' : 'bg-slate-50'}`}
                       />
+                      {field.key === 'email' && (
+                        <span className="mt-1 block text-xs font-bold text-slate-400">لتغيير البريد الإلكتروني تواصل مع الدعم حفاظاً على أمان الحساب.</span>
+                      )}
                     </label>
                   ))}
                 </div>
@@ -506,7 +671,7 @@ export default function Settings() {
                               key={suggestion}
                               type="button"
                               onClick={() => {
-                                setForm((current) => ({ ...current, consultationFee: suggestion }));
+                                updateForm('consultationFee', suggestion);
                                 setConsultationFeeError('');
                               }}
                               className={`rounded-full border px-3 py-1 text-[10px] font-black transition ${
@@ -526,7 +691,7 @@ export default function Settings() {
                         value={form.consultationFee}
                         onChange={(event) => {
                           const nextValue = formatConsultationFeeInput(event.target.value);
-                          setForm((current) => ({ ...current, consultationFee: nextValue }));
+                          updateForm('consultationFee', nextValue);
                           setConsultationFeeError(nextValue ? '' : 'يرجى إدخال سعر استشارة قانونية صحيح.');
                         }}
                         placeholder="مثال: 50,000 د.ع"
@@ -568,8 +733,9 @@ export default function Settings() {
                       تحذير: سيتم حذف كافة المستندات والقضايا والمراسلات بشكل نهائي ولا يمكن استعادتها.
                     </p>
                   </div>
-                  <ActionButton variant="danger">
-                    حذف الحساب
+                  <ActionButton type="button" variant="danger" onClick={() => navigate('/support')}>
+                    <i className="fa-solid fa-headset"></i>
+                    طلب مراجعة الحذف
                   </ActionButton>
                 </div>
               </SettingsCard>
@@ -771,6 +937,10 @@ export default function Settings() {
 
           {activeSection === 'billing' && (
             <>
+              {billingNotice && (
+                <NoticePanel title="تحديث الفوترة" description={billingNotice} tone={billingStatus === 'past_due' ? 'warning' : 'success'} />
+              )}
+
               <div className="grid gap-4 xl:grid-cols-[minmax(0,1.2fr)_360px]">
                 <SettingsCard title="خطة الاشتراك" description="حالة الاشتراك الحالي، المميزات المتاحة، وتفاصيل التجديد.">
                   <div className="rounded-xl border border-brand-gold/20 bg-gradient-to-l from-white to-brand-gold/10 p-4">
@@ -788,7 +958,7 @@ export default function Settings() {
                       <div className="flex flex-wrap justify-end gap-2">
                         <ActionButton
                           type="button"
-                          onClick={() => setBillingStatus('active')}
+                          onClick={() => handleBillingAction('تم فتح مسار ترقية الخطة. يمكنك متابعة التفاصيل من صفحة المدفوعات.', 'active')}
                           variant="primary"
                           size="sm"
                         >
@@ -796,7 +966,7 @@ export default function Settings() {
                         </ActionButton>
                         <ActionButton
                           type="button"
-                          onClick={() => setBillingStatus('past_due')}
+                          onClick={() => handleBillingAction('تم عرض حالة المتأخرات لتجربة التنبيه المالي.', 'past_due')}
                           variant="secondary"
                           size="sm"
                         >
@@ -849,10 +1019,10 @@ export default function Settings() {
                         <p className="text-sm font-bold text-brand-dark">وسيلة الدفع الأساسية</p>
                         <p className="mt-1 text-sm text-slate-500">بطاقة Visa تنتهي بـ 4242 مرتبطة بالاشتراك الشهري.</p>
                         <div className="mt-4 flex flex-wrap justify-end gap-2">
-                          <ActionButton variant="secondary" size="sm">
+                          <ActionButton type="button" variant="secondary" size="sm" onClick={() => handleBillingAction('تم توجيهك لمراجعة وسيلة الدفع من صفحة المدفوعات.')}>
                             تغيير البطاقة
                           </ActionButton>
-                          <ActionButton variant="primary" size="sm">
+                          <ActionButton type="button" variant="primary" size="sm" onClick={() => handleBillingAction('تم بدء إضافة وسيلة دفع احتياطية.')}>
                             إضافة وسيلة احتياطية
                           </ActionButton>
                         </div>
@@ -920,7 +1090,7 @@ export default function Settings() {
                         <p className="mt-1 text-xs text-slate-500">{item.desc}</p>
                       </div>
                       <button
-                        onClick={() => setForm((prev) => ({ ...prev, [item.key]: !prev[item.key as keyof typeof prev] }))}
+                        onClick={() => togglePreference(item.key as NotificationPreferenceKey)}
                         className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${form[item.key as keyof typeof form] ? 'bg-brand-navy' : 'bg-slate-200'}`}
                       >
                         <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${form[item.key as keyof typeof form] ? '-translate-x-5' : 'translate-x-0'}`} />
@@ -935,7 +1105,7 @@ export default function Settings() {
                   <span className="mb-2 block text-sm font-black text-brand-dark">اللغة المفضلة</span>
                   <select
                     value={form.language}
-                    onChange={(event) => setForm((current) => ({ ...current, language: event.target.value }))}
+                    onChange={(event) => updateForm('language', event.target.value)}
                     className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
                   >
                     <option>العربية</option>
@@ -960,6 +1130,10 @@ export default function Settings() {
 
           {activeSection === 'integrations' && (
             <>
+              {integrationNotice && (
+                <NoticePanel title="تحديث التكاملات" description={integrationNotice} tone="success" />
+              )}
+
               <SettingsCard title="التطبيقات المتصلة" description="إدارة الربط مع الأدوات الخارجية لتسريع سير عملك القانوني.">
                 <div className="grid gap-4">
                   {connectedApps.map((app) => (
@@ -977,7 +1151,12 @@ export default function Settings() {
                         <span className={`text-[10px] font-bold uppercase tracking-wider ${app.status === 'connected' ? 'text-emerald-600' : 'text-slate-400'}`}>
                           {app.status === 'connected' ? 'متصل' : 'غير متصل'}
                         </span>
-                        <ActionButton variant={app.status === 'connected' ? 'danger' : 'primary'} size="sm">
+                        <ActionButton
+                          type="button"
+                          onClick={() => toggleIntegration(app.id)}
+                          variant={app.status === 'connected' ? 'danger' : 'primary'}
+                          size="sm"
+                        >
                           {app.status === 'connected' ? 'فصل' : 'ربط الآن'}
                         </ActionButton>
                       </div>
@@ -992,7 +1171,8 @@ export default function Settings() {
                     <p className="text-sm font-bold text-brand-dark">تحميل أرشيف البيانات</p>
                     <p className="mt-1 text-xs text-slate-500">نسخة من كافة بياناتك وسجلاتك والملفات المرفوعة بصيغة JSON.</p>
                   </div>
-                  <ActionButton variant="secondary" size="sm">
+                  <ActionButton type="button" onClick={exportData} variant="secondary" size="sm">
+                    <i className="fa-solid fa-download"></i>
                     بدء التصدير
                   </ActionButton>
                 </div>
