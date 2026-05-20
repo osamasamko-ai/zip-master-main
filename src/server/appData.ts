@@ -525,6 +525,28 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
         orderBy: { createdAt: 'desc' },
         take: 6,
       },
+      feedPosts: {
+        where: { status: 'published' },
+        select: {
+          id: true,
+          content: true,
+          category: true,
+          mediaUrl: true,
+          mediaType: true,
+          pinned: true,
+          featured: true,
+          shareCount: true,
+          createdAt: true,
+          updatedAt: true,
+          likes: { select: { userId: true } },
+          saves: { select: { userId: true } },
+          comments: {
+            select: { id: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 8,
+      },
     },
   });
 
@@ -553,6 +575,23 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
       title: item.title,
       note: item.description,
       time: item.timeLabel,
+    })),
+    posts: user.feedPosts.map((post) => ({
+      id: post.id,
+      content: post.content,
+      category: post.category,
+      mediaUrl: post.mediaUrl,
+      mediaType: post.mediaType,
+      pinned: post.pinned,
+      featured: post.featured,
+      shareCount: post.shareCount,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+      likesCount: post.likes.length,
+      savesCount: post.saves.length,
+      commentsCount: post.comments.length,
+      likedByMe: Boolean(currentUserId && post.likes.some((like) => like.userId === currentUserId)),
+      savedByMe: Boolean(currentUserId && post.saves.some((save) => save.userId === currentUserId)),
     })),
   };
 }

@@ -8,7 +8,16 @@ import StatusBadge from '../components/ui/StatusBadge';
 import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 import apiClient from '../api/client';
 
-type PublicTab = 'overview' | 'reviews' | 'activity';
+type PublicTab = 'overview' | 'posts' | 'reviews' | 'activity';
+
+function formatPostDate(value: string) {
+  return new Intl.DateTimeFormat('ar-IQ', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value));
+}
 
 function SchedulingCalendar() {
   const [selectedDate, setSelectedDate] = useState(0);
@@ -82,6 +91,7 @@ export default function Profile() {
   const { isFollowed, isPending, toggleFollow } = useFollowedLawyers();
   const [lawyer, setLawyer] = useState<any | null>(null);
   const [reviews, setReviews] = useState<any[]>([]);
+  const [lawyerPosts, setLawyerPosts] = useState<any[]>([]);
   const [activityItems, setActivityItems] = useState<any[]>([]);
   const [relatedLawyers, setRelatedLawyers] = useState<any[]>([]);
   const [loadError, setLoadError] = useState('');
@@ -101,10 +111,12 @@ export default function Profile() {
           apiClient.getLawyers(),
         ]);
         setLoadError('');
-        setLawyer(profileResponse.data.data.lawyer);
-        setReviews(profileResponse.data.data.reviews || []);
-        setActivityItems(profileResponse.data.data.activity || []);
-        setRelatedLawyers((lawyersResponse.data || []).filter((item: any) => item.id !== params.id && item.specialty === profileResponse.data.data.lawyer.specialty).slice(0, 2));
+        const profileData = (profileResponse as any).data?.data || (profileResponse as any).data;
+        setLawyer(profileData.lawyer);
+        setReviews(profileData.reviews || []);
+        setLawyerPosts(profileData.posts || []);
+        setActivityItems(profileData.activity || []);
+        setRelatedLawyers((lawyersResponse.data || []).filter((item: any) => item.id !== params.id && item.specialty === profileData.lawyer.specialty).slice(0, 2));
       } catch (error) {
         console.error('Failed to load lawyer profile', error);
         setLoadError('تعذر فتح ملف المحامي حالياً. حاول مرة أخرى.');
@@ -300,6 +312,7 @@ export default function Profile() {
           <div className="flex flex-wrap justify-end gap-2">
             {[
               { id: 'overview' as const, label: 'Overview' },
+              { id: 'posts' as const, label: 'Posts' },
               { id: 'reviews' as const, label: 'Reviews' },
               { id: 'activity' as const, label: 'Activity' },
             ].map((tab) => (
@@ -430,6 +443,117 @@ export default function Profile() {
                     <img src={item.avatar} alt={item.name} className="h-12 w-12 rounded-2xl object-cover" />
                   </button>
                 ))}
+              </div>
+            </div>
+          </aside>
+        </section>
+      )}
+
+      {activeTab === 'posts' && (
+        <section className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="space-y-5">
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-right">
+                  <h3 className="text-xl font-black text-brand-dark">منشورات {lawyer.name}</h3>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    آخر المنشورات القانونية التي شاركها هذا المحامي في تواصل.
+                  </p>
+                </div>
+                <ActionButton onClick={() => navigate('/feed')} variant="secondary" size="sm">
+                  عرض تواصل
+                </ActionButton>
+              </div>
+            </div>
+
+            {lawyerPosts.length === 0 ? (
+              <div className="rounded-[2rem] border border-dashed border-slate-200 bg-white p-8 text-center shadow-sm">
+                <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-slate-100 text-slate-400">
+                  <i className="fa-solid fa-newspaper text-xl"></i>
+                </div>
+                <h3 className="mt-4 text-base font-black text-brand-dark">لا توجد منشورات بعد</h3>
+                <p className="mt-2 text-sm font-bold text-slate-500">عند نشر المحامي في تواصل ستظهر منشوراته هنا.</p>
+              </div>
+            ) : (
+              <div className="space-y-5">
+                {lawyerPosts.map((post) => (
+                  <article key={post.id} className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
+                    <div className="p-5">
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1 text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            {post.pinned && (
+                              <StatusBadge tone="warning" className="px-2.5 py-1 text-[11px]">
+                                <i className="fa-solid fa-thumbtack"></i>
+                                مثبت
+                              </StatusBadge>
+                            )}
+                            {post.featured && (
+                              <StatusBadge tone="info" className="px-2.5 py-1 text-[11px]">
+                                <i className="fa-solid fa-star"></i>
+                                مميز
+                              </StatusBadge>
+                            )}
+                            <span className="rounded-full bg-[#e7f3ff] px-3 py-1 text-[11px] font-black text-[#1877f2]">
+                              #{post.category}
+                            </span>
+                          </div>
+                          <p className="mt-2 text-xs font-bold text-slate-400">{formatPostDate(post.createdAt)}</p>
+                        </div>
+                        <img src={lawyer.avatar} alt={lawyer.name} className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-slate-200" />
+                      </div>
+
+                      {post.content && (
+                        <p className="mt-4 whitespace-pre-wrap text-sm font-bold leading-8 text-slate-700">{post.content}</p>
+                      )}
+                    </div>
+
+                    {post.mediaUrl && (
+                      <div className="border-y border-slate-100 bg-slate-100">
+                        {post.mediaType === 'video' ? (
+                          <div className="relative aspect-square max-h-[620px] w-full bg-black sm:aspect-[4/3]">
+                            <video src={post.mediaUrl} controls className="h-full w-full object-contain" />
+                          </div>
+                        ) : (
+                          <div className="flex aspect-square max-h-[620px] w-full items-center justify-center bg-slate-100 sm:aspect-[4/3]">
+                            <img src={post.mediaUrl} alt="" className="h-full w-full object-contain" />
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-4 text-xs font-black text-slate-500">
+                      <span>{post.likesCount.toLocaleString('ar-IQ')} إعجاب · {post.commentsCount.toLocaleString('ar-IQ')} تعليق · {post.shareCount.toLocaleString('ar-IQ')} مشاركة</span>
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/feed#${post.id}`)}
+                        className="rounded-full bg-slate-100 px-4 py-2 text-[#1877f2] transition hover:bg-[#e7f3ff]"
+                      >
+                        فتح المنشور
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <aside className="space-y-4">
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
+              <h3 className="text-base font-black text-brand-dark">ملخص المنشورات</h3>
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="font-black text-brand-dark">{lawyerPosts.length.toLocaleString('ar-IQ')}</span>
+                  <span className="text-sm font-bold text-slate-500">منشور</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="font-black text-brand-dark">{lawyerPosts.reduce((sum, post) => sum + post.likesCount, 0).toLocaleString('ar-IQ')}</span>
+                  <span className="text-sm font-bold text-slate-500">إعجاب</span>
+                </div>
+                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                  <span className="font-black text-brand-dark">{lawyerPosts.filter((post) => post.mediaUrl).length.toLocaleString('ar-IQ')}</span>
+                  <span className="text-sm font-bold text-slate-500">وسائط</span>
+                </div>
               </div>
             </div>
           </aside>
