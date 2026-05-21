@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
@@ -36,6 +36,15 @@ const tabs: Array<{
     { id: 'categories', label: 'الفئات', icon: 'fa-table-cells-large', description: 'تصفح منظم حسب المجال القانوني' },
     { id: 'workspace', label: 'مساحة العمل', icon: 'fa-bookmark', description: 'المحفوظات والمراجع الأخيرة' }
   ];
+
+const quickSearchSuggestions = [
+  'نفقة وحضانة',
+  'عقد إيجار',
+  'ضمان اجتماعي',
+  'مخدرات',
+  'تسجيل شركة',
+  'نزاع عمالي'
+];
 
 const HighlightText = ({ text, highlight }: { text: string; highlight: string }) => {
   if (!highlight.trim()) return <>{text}</>;
@@ -110,6 +119,7 @@ export default function LegalDocs() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
+  const exploreSearchRef = useRef<HTMLInputElement>(null);
   const [docs, setDocs] = useState<LawSource[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -119,8 +129,24 @@ export default function LegalDocs() {
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [isFullView, setIsFullView] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
-  const [pinnedDocIds, setPinnedDocIds] = useState<string[]>([]);
-  const [recentDocIds, setRecentDocIds] = useState<string[]>([]);
+  const [pinnedDocIds, setPinnedDocIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = window.localStorage.getItem('lexigate-legal-doc-pins');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [recentDocIds, setRecentDocIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const stored = window.localStorage.getItem('lexigate-legal-doc-recent');
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
 
   const [docComments, setDocComments] = useState<Record<string, Comment[]>>(() => {
     if (typeof window === 'undefined') return {};
@@ -134,6 +160,7 @@ export default function LegalDocs() {
   const [commentInput, setCommentInput] = useState('');
 
   const [exploreQuery, setExploreQuery] = useState('');
+  const [quickQuestion, setQuickQuestion] = useState('');
   const [exploreCategoryFilter, setExploreCategoryFilter] = useState('all');
   const [workspaceQuery, setWorkspaceQuery] = useState('');
   const [categorySearchQuery, setCategorySearchQuery] = useState('');
@@ -172,6 +199,36 @@ export default function LegalDocs() {
     if (typeof window === 'undefined') return;
     window.localStorage.setItem('lexigate-legal-doc-comments', JSON.stringify(docComments));
   }, [docComments]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('lexigate-legal-doc-pins', JSON.stringify(pinnedDocIds));
+  }, [pinnedDocIds]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    window.localStorage.setItem('lexigate-legal-doc-recent', JSON.stringify(recentDocIds));
+  }, [recentDocIds]);
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const isTyping =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'TEXTAREA' ||
+        target?.tagName === 'SELECT' ||
+        target?.isContentEditable;
+
+      if (event.key === '/' && !isTyping) {
+        event.preventDefault();
+        setActiveTab('explore');
+        window.setTimeout(() => exploreSearchRef.current?.focus(), 0);
+      }
+    };
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => window.removeEventListener('keydown', handleShortcut);
+  }, []);
 
   const categories = useMemo(() => {
     const categorySet = new Set<string>();
@@ -221,9 +278,29 @@ export default function LegalDocs() {
     docs[0] ??
     null;
 
+  const relatedDocs = useMemo(() => {
+    if (!selectedDoc) return [];
+    return docs
+      .filter((doc) => doc.id !== selectedDoc.id && (doc.category === selectedDoc.category || doc.law === selectedDoc.law))
+      .slice(0, 5);
+  }, [docs, selectedDoc]);
+
   const selectDoc = (docId: string) => {
     setSelectedDocId(docId);
     setRecentDocIds((prev) => [docId, ...prev.filter((id) => id !== docId)].slice(0, 8));
+  };
+
+  const runQuickSearch = (query: string) => {
+    const trimmedQuery = query.trim();
+    if (!trimmedQuery) return;
+
+    setActiveTab('explore');
+    setExploreQuery(trimmedQuery);
+    setExploreCategoryFilter('all');
+    setQuickQuestion(trimmedQuery);
+
+    const firstMatch = filterExploreDocs(docs, trimmedQuery, 'all')[0];
+    if (firstMatch) selectDoc(firstMatch.id);
   };
 
   const togglePinnedDoc = (docId: string) => {
@@ -473,6 +550,42 @@ export default function LegalDocs() {
             <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">
               ابحث، صفّي النتائج، احفظ المراجع، وافتح قراءة مركزة للمادة القانونية.
             </p>
+            <p className="mt-1 text-xs font-bold leading-6 text-slate-400">
+              القاعدة تتضمن مراجع موسعة ومحدثة قدر الإمكان، ويُرجع للنص المنشور في الوقائع العراقية عند الإجراء الرسمي.
+            </p>
+            <form
+              className="mt-4 flex max-w-3xl flex-col gap-2 sm:flex-row"
+              onSubmit={(event) => {
+                event.preventDefault();
+                runQuickSearch(quickQuestion);
+              }}
+            >
+              <div className="relative flex-1">
+                <input
+                  type="search"
+                  value={quickQuestion}
+                  onChange={(event) => setQuickQuestion(event.target.value)}
+                  placeholder="اكتب سؤالك القانوني أو موضوعك..."
+                  className="h-12 w-full rounded-lg border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white"
+                />
+                <i className="fa-solid fa-wand-magic-sparkles absolute left-4 top-1/2 -translate-y-1/2 text-brand-gold"></i>
+              </div>
+              <ActionButton type="submit" variant="primary" className="h-12 sm:w-28">
+                بحث
+              </ActionButton>
+            </form>
+            <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+              {quickSearchSuggestions.map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => runQuickSearch(suggestion)}
+                  className="shrink-0 rounded-full border border-slate-200 bg-white px-3 py-2 text-[10px] font-black text-slate-500 transition hover:border-brand-navy hover:text-brand-navy"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="grid grid-cols-4 gap-2 text-center">
@@ -582,6 +695,7 @@ export default function LegalDocs() {
                     <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row">
                       <div className="relative min-w-[280px]">
                         <input
+                          ref={exploreSearchRef}
                           type="text"
                           value={exploreQuery}
                           onChange={(event) => setExploreQuery(event.target.value)}
@@ -782,6 +896,28 @@ export default function LegalDocs() {
                         </div>
                         <p className="text-sm font-bold leading-7 text-slate-600 text-justify">{selectedDoc.summary}</p>
                       </div>
+
+                      {relatedDocs.length > 0 && (
+                        <div className="mt-4 rounded-lg border border-slate-200 bg-white p-4">
+                          <div className="mb-3 flex items-center justify-between">
+                            <span className="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-500">{relatedDocs.length.toLocaleString('ar-IQ')}</span>
+                            <h4 className="text-sm font-black text-brand-dark">مواد مرتبطة</h4>
+                          </div>
+                          <div className="space-y-2">
+                            {relatedDocs.map((doc) => (
+                              <button
+                                key={doc.id}
+                                type="button"
+                                onClick={() => selectDoc(doc.id)}
+                                className="group w-full rounded-lg border border-slate-100 bg-slate-50 p-3 text-right transition hover:border-brand-navy/30 hover:bg-white"
+                              >
+                                <p className="line-clamp-1 text-xs font-black text-brand-dark group-hover:text-brand-navy">{doc.title}</p>
+                                <p className="mt-1 text-[10px] font-bold text-slate-400">{doc.category} • المادة {doc.article}</p>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
 
                       <div className="mt-5 grid gap-3 sm:grid-cols-2">
                         <ActionButton
