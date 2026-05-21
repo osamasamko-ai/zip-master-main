@@ -428,6 +428,9 @@ export default function ContractWizard() {
     );
     const isReviewReady = Boolean(generatedContractText.trim());
     const isSignatureReady = Boolean(sellerSignature && buyerSignature && agreedToTerms);
+    const completionPercent = Math.round(((step + 1) / totalSteps) * 100);
+    const currentStepTitle = stepTitles[step] || 'إنشاء العقد';
+    const savedContractsCount = userContracts.length;
 
     const nextStep = () => setStep(prev => prev + 1);
     const prevStep = () => setStep(prev => prev - 1);
@@ -834,9 +837,25 @@ export default function ContractWizard() {
     }, [user?.id, currentDraftId, step, setShowShareModal, setBuyerSignature, setContractError]);
 
     const renderStepHeader = () => (
-        <div className="mb-10">
-            <div className="flex justify-between items-start mb-4 relative">
-                <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-100 -z-0"></div>
+        <div className="mb-8 rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="mb-4 flex flex-col gap-3 text-right sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                    <p className="text-[10px] font-black uppercase tracking-[0.22em] text-slate-400">مسار إنشاء العقد</p>
+                    <p className="mt-1 text-lg font-black text-brand-dark">{currentStepTitle}</p>
+                </div>
+                <div className="min-w-[180px]">
+                    <div className="mb-1 flex items-center justify-between text-[10px] font-black text-slate-400">
+                        <span>{completionPercent}%</span>
+                        <span>الاكتمال</span>
+                    </div>
+                    <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-brand-navy transition-all" style={{ width: `${completionPercent}%` }} />
+                    </div>
+                </div>
+            </div>
+            <div className="relative mb-4 overflow-x-auto pb-2 no-scrollbar">
+                <div className="absolute top-5 left-0 right-0 h-0.5 bg-slate-100"></div>
+                <div className="relative z-10 flex min-w-[760px] justify-between">
                 {Array.from({ length: totalSteps }).map((_, index) => {
                     const sNum = index;
                     const isActive = step === sNum;
@@ -852,8 +871,9 @@ export default function ContractWizard() {
                         </div>
                     );
                 })}
+                </div>
             </div>
-            <motion.div key={step} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="rounded-3xl border border-slate-100 bg-slate-50/50 p-5 text-right flex items-start gap-4">
+            <motion.div key={step} initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4 text-right flex items-start gap-4">
                 <div className="h-10 w-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-brand-gold shrink-0"><i className="fa-solid fa-lightbulb"></i></div>
                 <div className="flex-1"><p className="text-sm font-black text-brand-dark">{stepTitles[step]}</p><p className="text-xs font-bold text-slate-500 mt-1 leading-relaxed">{stepDescriptions[step]}</p></div>
             </motion.div>
@@ -974,22 +994,39 @@ export default function ContractWizard() {
     };
 
     return (
-        <div className="app-view fade-in space-y-8 pb-12 text-center">
-            {/* Premium Header Banner */}
-            <section className="relative overflow-hidden rounded-[2.5rem] border border-brand-navy/10 bg-gradient-to-l from-white via-slate-50 to-brand-navy/[0.03] p-8 shadow-premium">
-                <div className="absolute -left-20 -top-20 h-56 w-56 rounded-full bg-brand-gold/10 blur-3xl"></div>
-                <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-                    <div className="text-center lg:text-right">
-                        <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-gold">Professional Contract Engine</p>
-                        <h2 className="mt-3 text-3xl font-black text-brand-dark">منشئ العقود الذكي</h2>
-                        <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">
-                            أداة احترافية لتوليد عقود بيع السيارات بضمانات قانونية، توقيع إلكتروني ملزم، وتوثيق فوري في محفظتك الرقمية.
+        <div className="app-view fade-in space-y-6 pb-12 text-center">
+            <section className="overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-white shadow-premium">
+                <div className="grid gap-5 p-5 text-right lg:grid-cols-[minmax(0,1fr)_360px] lg:p-6">
+                    <div>
+                        <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.2em] text-brand-dark">
+                            <i className="fa-solid fa-file-contract text-brand-gold"></i>
+                            Professional Contract Engine
+                        </div>
+                        <h1 className="mt-3 text-3xl font-black text-brand-dark">منشئ العقود الذكي</h1>
+                        <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">
+                            أنشئ عقد مركبة، راجع البنود، ادفع من المحفظة، ثم أرسل رابط التوقيع للطرف الآخر من مسار واحد واضح.
                         </p>
+                        <div className="mt-4 flex flex-wrap justify-end gap-2">
+                            <StatusBadge tone={isFastMode ? 'warning' : 'info'}>{isFastMode ? 'توليد سريع' : 'توليد ذكي'}</StatusBadge>
+                            <StatusBadge tone={(user?.accountBalance || 0) >= 25000 ? 'success' : 'warning'}>
+                                الرصيد {(user?.accountBalance || 0).toLocaleString()} د.ع
+                            </StatusBadge>
+                            {step > 0 && activeTab === 'create' && <StatusBadge tone="neutral">{currentStepTitle}</StatusBadge>}
+                        </div>
                     </div>
-                    <div className="flex gap-3">
-                        <div className="rounded-3xl border border-white bg-white/90 p-4 shadow-sm min-w-[140px] text-center mx-auto lg:mx-0">
-                            <p className="text-[11px] font-black uppercase text-slate-400">العقود</p>
-                            <p className="mt-1 text-2xl font-black text-brand-navy">{userContracts.length}</p>
+
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">عقودي</p>
+                            <p className="mt-2 text-2xl font-black text-brand-dark">{savedContractsCount}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">مسودات</p>
+                            <p className="mt-2 text-2xl font-black text-brand-navy">{contractStatusCounts.draft || 0}</p>
+                        </div>
+                        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">مكتملة</p>
+                            <p className="mt-2 text-2xl font-black text-emerald-600">{contractStatusCounts.signed || contractStatusCounts.active || 0}</p>
                         </div>
                     </div>
                 </div>
@@ -997,10 +1034,10 @@ export default function ContractWizard() {
 
             {/* Tab Navigation */}
             <div className="flex justify-center">
-                <div className="bg-white rounded-2xl p-1.5 border border-slate-200 shadow-sm">
+                <div className="grid w-full max-w-xl grid-cols-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm">
                     <button
                         onClick={() => setActiveTab('create')}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'create'
+                        className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'create'
                             ? 'bg-brand-navy text-white shadow-lg'
                             : 'text-slate-600 hover:text-brand-navy hover:bg-slate-50'
                             }`}
@@ -1010,7 +1047,7 @@ export default function ContractWizard() {
                     </button>
                     <button
                         onClick={() => setActiveTab('contracts')}
-                        className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'contracts'
+                        className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${activeTab === 'contracts'
                             ? 'bg-brand-navy text-white shadow-lg'
                             : 'text-slate-600 hover:text-brand-navy hover:bg-slate-50'
                             }`}
@@ -1021,30 +1058,14 @@ export default function ContractWizard() {
                 </div>
             </div>
 
-            {activeTab === 'create' && (
-                <div className="grid gap-4 md:grid-cols-3 max-w-6xl mx-auto mt-6">
-                    <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm text-right">
-                        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">اجمالي العقود</p>
-                        <p className="mt-3 text-3xl font-black text-brand-dark">{userContracts.length}</p>
-                        <p className="text-xs text-slate-500 mt-2">العقود المحملة أو الموثقة لديك حتى الآن</p>
-                    </div>
-                    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-5 shadow-sm text-right">
-                        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">المسودات</p>
-                        <p className="mt-3 text-3xl font-black text-brand-navy">{contractStatusCounts.draft || 0}</p>
-                        <p className="text-xs text-slate-500 mt-2">عقود لم تُكمل بعد ويمكن استئنافها لاحقاً</p>
-                    </div>
-                    <div className="rounded-[2rem] border border-slate-200 bg-slate-50 p-5 shadow-sm text-right">
-                        <p className="text-[10px] font-black uppercase tracking-[0.28em] text-slate-400">المكتملات</p>
-                        <p className="mt-3 text-3xl font-black text-emerald-600">{contractStatusCounts.signed || contractStatusCounts.active || 0}</p>
-                        <p className="text-xs text-slate-500 mt-2">العقود التي تم توقيعها وتوثيقها بنجاح</p>
-                    </div>
-                </div>
-            )}
-
-            <div className="max-w-6xl mx-auto bg-white rounded-[2.5rem] border border-slate-200 p-8 md:p-12 shadow-premium relative">
-                {step > 0 && activeTab === 'create' && renderStepHeader()}
-                {activeTab === 'create' && (
-                    <div>
+            <div className="mx-auto max-w-6xl rounded-[2rem] border border-slate-200 bg-white p-4 shadow-premium sm:p-6 md:p-8">
+                {activeTab === 'contracts' ? (
+                    renderContractsTab()
+                ) : (
+                    <div className="text-right">
+                        {step > 0 && renderStepHeader()}
+                        {step === 0 && (
+                            <>
                         <h2 className="text-2xl font-black text-brand-dark mb-8 flex items-center justify-center gap-3">
                             <i className="fa-solid fa-file-signature text-brand-gold"></i>
                             إصدار عقد مركبة جديد
@@ -1138,8 +1159,8 @@ export default function ContractWizard() {
 
                             <ActionButton onClick={() => handleTemplateSelect(null)} variant="secondary" className="w-full mt-6 py-4">البدء من الصفر</ActionButton>
                         </motion.div>
-                    </div>
-                )}
+                            </>
+                        )}
 
                 {/* Stepper replaced by renderStepHeader() call above when step > 0 */}
 
@@ -2006,6 +2027,8 @@ export default function ContractWizard() {
                         )}
                     </motion.div>
                 </AnimatePresence>
+                    </div>
+                )}
             </div>
         </div>
     );
