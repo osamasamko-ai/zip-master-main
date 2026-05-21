@@ -35,9 +35,9 @@ export default function PostComposer({
 
   if (!canCreate) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+      <section className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
-          <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
             <i className="fa-solid fa-eye"></i>
           </div>
           <div>
@@ -50,37 +50,41 @@ export default function PostComposer({
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    <section className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
       <div className="flex items-center gap-3">
-        <img src={avatar} alt="" className="h-11 w-11 rounded-full object-cover ring-1 ring-slate-200" />
+        <img src={avatar} alt="" loading="lazy" decoding="async" className="h-10 w-10 rounded-full object-cover ring-1 ring-slate-200" />
         <button
           type="button"
           onClick={() => setIsExpanded(true)}
-          className="min-w-0 flex-1 rounded-full bg-slate-100 px-4 py-3 text-right text-sm font-bold text-slate-500 transition hover:bg-slate-200"
+          className="min-w-0 flex-1 rounded-full bg-slate-100 px-4 py-2.5 text-right text-sm font-bold text-slate-500 transition hover:bg-slate-200"
         >
           بماذا تفكر، {displayName.split(' ')[0]}؟
         </button>
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 transition hover:bg-emerald-100 sm:flex"
+          title="إضافة صورة أو فيديو"
+        >
+          <i className="fa-solid fa-photo-film text-sm"></i>
+        </button>
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-1 border-t border-slate-100 pt-3">
-        <button type="button" onClick={() => setIsExpanded(true)} className="flex items-center justify-center gap-2 rounded-md px-2 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-100">
-          <i className="fa-solid fa-video text-red-500"></i>
-          فيديو مباشر
-        </button>
-        <button type="button" onClick={() => fileInputRef.current?.click()} className="flex items-center justify-center gap-2 rounded-md px-2 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-100">
+      <div className="mt-3 flex gap-1 border-t border-slate-100 pt-2 sm:hidden">
+        <button type="button" onClick={() => fileInputRef.current?.click()} className="flex flex-1 items-center justify-center gap-2 rounded-md px-2 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-100">
           <i className="fa-solid fa-images text-emerald-500"></i>
           صورة/فيديو
         </button>
-        <button type="button" onClick={() => setIsExpanded(true)} className="flex items-center justify-center gap-2 rounded-md px-2 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-100">
-          <i className="fa-solid fa-face-smile text-amber-400"></i>
-          شعور
+        <button type="button" onClick={() => setIsExpanded(true)} className="flex flex-1 items-center justify-center gap-2 rounded-md px-2 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-100">
+          <i className="fa-solid fa-pen text-[#1877f2]"></i>
+          كتابة
         </button>
       </div>
 
       {(isExpanded || media) && (
         <div className="mt-4 border-t border-slate-100 pt-4">
           <div className="mb-3 flex items-center gap-3">
-            <img src={avatar} alt="" className="h-10 w-10 rounded-full object-cover ring-1 ring-slate-200" />
+            <img src={avatar} alt="" loading="lazy" decoding="async" className="h-10 w-10 rounded-full object-cover ring-1 ring-slate-200" />
             <div className="min-w-0">
               <p className="truncate text-sm font-black text-slate-900">{displayName}</p>
               <p className="text-[11px] font-bold text-slate-500">{user?.role === 'admin' ? 'إدارة المنصة' : 'محامٍ موثق'} · عام</p>

@@ -167,14 +167,13 @@ export default function StoryStrip({
   return (
     <>
       <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
-        <div className="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
               <i className="fa-solid fa-clock-rotate-left text-xs"></i>
             </span>
             <div>
               <h2 className="text-sm font-black text-slate-900">قصص المحامين</h2>
-              <p className="text-[10px] font-bold text-slate-400">الجديد والمشاهد والأرشيف</p>
             </div>
           </div>
           <div className="flex w-full rounded-full bg-slate-100 p-1 sm:w-auto sm:shrink-0">
@@ -199,14 +198,14 @@ export default function StoryStrip({
             <button
               type="button"
               onClick={() => setComposerOpen(true)}
-              className="relative h-48 w-28 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 text-right shadow-sm transition hover:bg-slate-200"
+              className="relative h-40 w-24 shrink-0 overflow-hidden rounded-xl border border-slate-200 bg-slate-100 text-right shadow-sm transition hover:bg-slate-200"
             >
-              <img src={userAvatar} alt="" className="h-32 w-full object-cover" />
-              <div className="absolute inset-x-0 bottom-0 bg-white px-2 pb-3 pt-5">
-                <span className="absolute -top-5 right-1/2 flex h-10 w-10 translate-x-1/2 items-center justify-center rounded-full border-4 border-white bg-[#1877f2] text-white">
-                  <i className="fa-solid fa-plus"></i>
+              <img src={userAvatar} alt="" loading="lazy" decoding="async" className="h-24 w-full object-cover" />
+              <div className="absolute inset-x-0 bottom-0 bg-white px-2 pb-2 pt-4">
+                <span className="absolute -top-4 right-1/2 flex h-8 w-8 translate-x-1/2 items-center justify-center rounded-full border-4 border-white bg-[#1877f2] text-white">
+                  <i className="fa-solid fa-plus text-xs"></i>
                 </span>
-                <p className="text-center text-xs font-black text-slate-900">إنشاء قصة</p>
+                <p className="text-center text-[11px] font-black text-slate-900">إنشاء قصة</p>
               </div>
             </button>
           )}
@@ -216,13 +215,13 @@ export default function StoryStrip({
               type="button"
               key={`${activeTab}-${group.authorId}`}
               onClick={() => openGroup(group)}
-              className={`relative h-48 w-28 shrink-0 overflow-hidden rounded-xl bg-slate-950 text-right shadow-sm transition hover:-translate-y-0.5 ${group.isArchived ? 'opacity-75 ring-1 ring-slate-200' : group.hasUnseen ? 'ring-[3px] ring-[#1877f2]' : 'ring-2 ring-slate-300'}`}
+              className={`relative h-40 w-24 shrink-0 overflow-hidden rounded-xl bg-slate-950 text-right shadow-sm transition hover:-translate-y-0.5 ${group.isArchived ? 'opacity-75 ring-1 ring-slate-200' : group.hasUnseen ? 'ring-[3px] ring-[#1877f2]' : 'ring-2 ring-slate-300'}`}
             >
               {group.coverStory.mediaUrl ? (
                 group.coverStory.mediaType === 'video' ? (
-                  <video src={group.coverStory.mediaUrl} muted className="h-full w-full object-cover opacity-90" />
+                  <video src={group.coverStory.mediaUrl} muted preload="none" className="h-full w-full object-cover opacity-90" />
                 ) : (
-                  <img src={group.coverStory.mediaUrl} alt="" className="h-full w-full object-cover" />
+                  <img src={group.coverStory.mediaUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-cover" />
                 )
               ) : (
                 <div className="h-full w-full bg-gradient-to-br from-[#1877f2] to-slate-900" />
@@ -231,14 +230,16 @@ export default function StoryStrip({
               <img
                 src={group.author.avatar}
                 alt=""
-                className={`absolute right-2 top-2 h-9 w-9 rounded-full border-2 object-cover cursor-pointer ${group.hasUnseen ? 'border-[#1877f2]' : 'border-slate-300'}`}
+                loading="lazy"
+                decoding="async"
+                className={`absolute right-2 top-2 h-8 w-8 rounded-full border-2 object-cover cursor-pointer ${group.hasUnseen ? 'border-[#1877f2]' : 'border-slate-300'}`}
                 onClick={(e) => {
                   e.stopPropagation();
                   navigate(`/profile/${group.author.id}`);
                 }}
               />
               {group.stories.length > 1 && (
-                <span className="absolute right-2 top-12 rounded-full bg-black/55 px-2 py-1 text-[9px] font-black text-white backdrop-blur">
+                <span className="absolute right-2 top-11 rounded-full bg-black/55 px-2 py-1 text-[9px] font-black text-white backdrop-blur">
                   {group.stories.length} قصص
                 </span>
               )}
@@ -249,7 +250,7 @@ export default function StoryStrip({
                 <span className="absolute left-2 top-2 rounded-full bg-black/55 px-2 py-1 text-[9px] font-black text-white backdrop-blur">أرشيف</span>
               )}
               <div className="absolute inset-x-0 bottom-0 p-2">
-                <p className="line-clamp-2 text-xs font-black leading-5 text-white">{group.coverStory.text || group.author.name}</p>
+                <p className="line-clamp-2 text-[11px] font-black leading-5 text-white">{group.coverStory.text || group.author.name}</p>
                 <p className="mt-1 truncate text-[10px] font-bold text-white/70">{group.author.name}</p>
               </div>
             </button>
@@ -348,9 +349,9 @@ export default function StoryStrip({
             )}
             {activeStory.mediaUrl ? (
               activeStory.mediaType === 'video' ? (
-                <video src={activeStory.mediaUrl} controls autoPlay className="h-full w-full object-contain" />
+                <video src={activeStory.mediaUrl} controls autoPlay preload="metadata" className="h-full w-full object-contain" />
               ) : (
-                <img src={activeStory.mediaUrl} alt="" className="h-full w-full object-contain" />
+                <img src={activeStory.mediaUrl} alt="" loading="eager" decoding="async" className="h-full w-full object-contain" />
               )
             ) : (
               <div className="h-full w-full bg-gradient-to-br from-[#1877f2] to-slate-950" />
@@ -387,6 +388,8 @@ export default function StoryStrip({
                 <img
                   src={activeStory.author.avatar}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className={`h-10 w-10 rounded-full border-2 object-cover cursor-pointer ${activeStory.seenByMe || activeStory.isArchived ? 'border-white/60' : 'border-[#1877f2]'}`}
                   onClick={(e) => {
                     e.stopPropagation();

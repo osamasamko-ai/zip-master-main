@@ -236,14 +236,11 @@ export default function FeedPage() {
   return (
     <div className="w-full min-w-0 bg-[#f0f2f5] px-0 pb-10 text-right sm:px-2" dir="rtl">
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="relative p-4 sm:p-5">
+        <div className="relative px-4 py-3 sm:px-5 sm:py-4">
           <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-[0.22em] text-[#1877f2]">تواصل</p>
-              <h1 className="mt-2 text-2xl font-black text-slate-900 sm:text-3xl">آخر منشورات تواصل</h1>
-              <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">
-                انشر تحديثاً، تابع المحامين، وتفاعل مع الأسئلة والتنبيهات القانونية في تجربة اجتماعية مألوفة وسريعة.
-              </p>
+              <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">آخر منشورات تواصل</h1>
             </div>
             <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[320px]">
               <Stat label="منشور" value={stats.total} />
@@ -291,15 +288,17 @@ export default function FeedPage() {
         </aside>
 
         <main className="min-w-0 space-y-4">
-          <StoryStrip
-            user={user}
-            stories={stories}
-            canCreate={canCreatePost}
-            isPublishing={isPublishingStory}
-            onCreate={publishStory}
-            onView={viewStory}
-          />
-          <PostComposer user={user} canCreate={canCreatePost} isPublishing={isPublishing} onPublish={publishPost} />
+          <div className="space-y-3">
+            <PostComposer user={user} canCreate={canCreatePost} isPublishing={isPublishing} onPublish={publishPost} />
+            <StoryStrip
+              user={user}
+              stories={stories}
+              canCreate={canCreatePost}
+              isPublishing={isPublishingStory}
+              onCreate={publishStory}
+              onView={viewStory}
+            />
+          </div>
           <FeedFilters activeFilter={activeFilter} onChange={setActiveFilter} />
           <div className="xl:hidden">
             <SuggestedLawyers lawyers={lawyers} onFollow={followLawyer} />

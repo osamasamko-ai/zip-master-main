@@ -60,7 +60,7 @@ export default function PostCard({
         <div className="flex items-start justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
             <div className="relative cursor-pointer" onClick={() => navigate(`/profile/${post.author.id}`)}>
-              <img src={post.author.avatar} alt="" className="h-11 w-11 rounded-full object-cover ring-1 ring-slate-200" />
+              <img src={post.author.avatar} alt="" loading="lazy" decoding="async" className="h-11 w-11 rounded-full object-cover ring-1 ring-slate-200" />
               <span className="absolute -bottom-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full bg-[#1877f2] text-[9px] text-white ring-2 ring-white">
                 <i className="fa-solid fa-check"></i>
               </span>
@@ -129,7 +129,7 @@ export default function PostCard({
           <div className="-mx-4 mt-4 overflow-hidden border-y border-slate-100 bg-slate-100">
             {post.mediaType === 'video' ? (
               <div className="relative aspect-square max-h-[680px] w-full bg-black sm:aspect-[4/3]">
-                <video src={post.mediaUrl} controls poster="" className="h-full w-full bg-black object-contain" />
+                <video src={post.mediaUrl} controls preload="metadata" poster="" className="h-full w-full bg-black object-contain" />
                 <div className="pointer-events-none absolute right-4 top-4 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-black text-white backdrop-blur">
                   <i className="fa-solid fa-play ml-1 text-brand-gold"></i>
                   متابعة المشاهدة
@@ -137,7 +137,7 @@ export default function PostCard({
               </div>
             ) : (
               <div className="flex aspect-square max-h-[680px] w-full items-center justify-center bg-slate-100 sm:aspect-[4/3]">
-                <img src={post.mediaUrl} alt="" className="h-full w-full object-contain" />
+                <img src={post.mediaUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
               </div>
             )}
           </div>
@@ -163,7 +163,7 @@ export default function PostCard({
         <div className="mt-4 space-y-3">
           {post.comments.slice(-3).map((item) => (
             <div key={item.id} className="flex gap-2">
-              <img src={item.author.avatar} alt="" className="h-8 w-8 rounded-full object-cover" />
+              <img src={item.author.avatar} alt="" loading="lazy" decoding="async" className="h-8 w-8 rounded-full object-cover" />
               <div className="rounded-2xl bg-slate-100 px-3 py-2">
                 <p className="text-xs font-black text-slate-900">{item.author.name}</p>
                 <p className="mt-0.5 text-xs font-bold leading-6 text-slate-700">{item.content}</p>
@@ -171,7 +171,7 @@ export default function PostCard({
             </div>
           ))}
           <div className="flex gap-2">
-            <img src={user?.img || 'https://i.pravatar.cc/150'} alt="" className="h-9 w-9 rounded-full object-cover" />
+            <img src={user?.img || 'https://i.pravatar.cc/150'} alt="" loading="lazy" decoding="async" className="h-9 w-9 rounded-full object-cover" />
             <input
               id={`comment-${post.id}`}
               value={comment}
