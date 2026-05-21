@@ -269,34 +269,54 @@ export async function markFeedStoryViewed(userId: string, storyId: string) {
   return updatedStory ? mapStory(updatedStory, userId) : null;
 }
 
-export async function listFeedPosts(viewerId: string, filter: FeedFilter = 'all') {
+export async function listFeedPosts(
+  viewerId: string,
+  filter: FeedFilter = 'all',
+  options: { limit?: number; offset?: number } = {}
+) {
   const roleFilter =
     filter === 'lawyers'
       ? { role: 'pro' }
       : filter === 'admins'
         ? { role: 'admin' }
         : undefined;
-
-  const posts = await prisma.feedPost.findMany({
-    where: {
-      status: 'published',
-      mediaType: filter === 'videos' ? 'video' : undefined,
-      AND: filter === 'articles' ? [{ mediaType: { not: 'video' } }] : undefined,
-      author: {
-        role: roleFilter?.role,
-        OR: [
-          { role: 'admin' },
-          { role: 'pro', OR: [{ verified: true }, { lawyerProfile: { licenseStatus: 'verified' } }] },
-        ],
-      },
+  const limit = Math.min(Math.max(Number(options.limit) || 8, 1), 20);
+  const offset = Math.max(Number(options.offset) || 0, 0);
+  const where = {
+    status: 'published',
+    mediaType: filter === 'videos' ? 'video' : undefined,
+    AND: filter === 'articles' ? [{ mediaType: { not: 'video' } }] : undefined,
+    author: {
+      role: roleFilter?.role,
+      OR: [
+        { role: 'admin' },
+        { role: 'pro', OR: [{ verified: true }, { lawyerProfile: { licenseStatus: 'verified' } }] },
+      ],
     },
-    select: POST_SELECT,
-    orderBy: filter === 'popular'
-      ? [{ pinned: 'desc' }, { likes: { _count: 'desc' } }, { comments: { _count: 'desc' } }, { createdAt: 'desc' }]
-      : [{ pinned: 'desc' }, { featured: 'desc' }, { createdAt: 'desc' }],
-  });
+  };
+  const orderBy = filter === 'popular'
+    ? [{ pinned: 'desc' as const }, { likes: { _count: 'desc' as const } }, { comments: { _count: 'desc' as const } }, { createdAt: 'desc' as const }]
+    : [{ pinned: 'desc' as const }, { featured: 'desc' as const }, { createdAt: 'desc' as const }];
 
-  return posts.map((post) => mapPost(post, viewerId));
+  const [posts, total] = await Promise.all([
+    prisma.feedPost.findMany({
+      where,
+      select: POST_SELECT,
+      orderBy,
+      skip: offset,
+      take: limit,
+    }),
+    prisma.feedPost.count({ where }),
+  ]);
+
+  return {
+    posts: posts.map((post) => mapPost(post, viewerId)),
+    total,
+    limit,
+    offset,
+    nextOffset: offset + posts.length,
+    hasMore: offset + posts.length < total,
+  };
 }
 
 export async function createFeedPost(userId: string, payload: { content?: string; category?: string; mediaUrl?: string | null; mediaType?: string | null }) {

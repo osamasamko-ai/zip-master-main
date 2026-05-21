@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +11,8 @@ import SuggestedLawyers from './SuggestedLawyers';
 import StoryStrip from './StoryStrip';
 import TrendingTopics from './TrendingTopics';
 import type { FeedFilter, FeedPost, FeedStory, SuggestedLawyer } from './types';
+
+const FEED_PAGE_SIZE = 8;
 
 function SkeletonPost() {
   return (
@@ -38,11 +40,14 @@ export default function FeedPage() {
   const [lawyers, setLawyers] = useState<SuggestedLawyer[]>([]);
   const [activeFilter, setActiveFilter] = useState<FeedFilter>('all');
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [isPublishingStory, setIsPublishingStory] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(6);
+  const [nextOffset, setNextOffset] = useState(0);
+  const [hasMorePosts, setHasMorePosts] = useState(false);
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
   const canCreatePost = user?.role === 'admin' || (user?.role === 'pro' && (user.verified || user.licenseStatus === 'verified'));
 
@@ -58,8 +63,6 @@ export default function FeedPage() {
   );
 
   const relatedPosts = useMemo(() => posts.filter((post) => post.featured || post.pinned).slice(0, 3), [posts]);
-  const visiblePosts = posts.slice(0, visibleCount);
-
   const flash = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(''), 2400);
@@ -69,19 +72,30 @@ export default function FeedPage() {
     setPosts((current) => current.map((post) => (post.id === updated.id ? updated : post)));
   };
 
-  const loadPosts = async (filter = activeFilter) => {
-    setIsLoading(true);
-    setError('');
+  const loadPosts = useCallback(async (filter = activeFilter, offset = 0, append = false) => {
+    if (append) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
+    if (!append) setError('');
     try {
-      const response = await apiClient.getFeedPosts(filter);
-      setPosts(response.data || []);
-      setVisibleCount(6);
+      const response = await apiClient.getFeedPosts(filter, { limit: FEED_PAGE_SIZE, offset });
+      const incomingPosts = response.data || [];
+      setPosts((current) => {
+        if (!append) return incomingPosts;
+        const existingIds = new Set(current.map((post) => post.id));
+        return [...current, ...incomingPosts.filter((post) => !existingIds.has(post.id))];
+      });
+      setNextOffset(response.meta?.nextOffset ?? offset + incomingPosts.length);
+      setHasMorePosts(Boolean(response.meta?.hasMore));
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر تحميل منشورات تواصل.');
     } finally {
       setIsLoading(false);
+      setIsLoadingMore(false);
     }
-  };
+  }, [activeFilter]);
 
   const loadStories = async () => {
     try {
@@ -93,8 +107,28 @@ export default function FeedPage() {
   };
 
   useEffect(() => {
-    loadPosts(activeFilter);
-  }, [activeFilter]);
+    setPosts([]);
+    setNextOffset(0);
+    setHasMorePosts(false);
+    loadPosts(activeFilter, 0, false);
+  }, [activeFilter, loadPosts]);
+
+  useEffect(() => {
+    const target = loadMoreRef.current;
+    if (!target || isLoading || isLoadingMore || !hasMorePosts) return undefined;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          loadPosts(activeFilter, nextOffset, true);
+        }
+      },
+      { rootMargin: '520px 0px' }
+    );
+
+    observer.observe(target);
+    return () => observer.disconnect();
+  }, [activeFilter, hasMorePosts, isLoading, isLoadingMore, loadPosts, nextOffset]);
 
   useEffect(() => {
     loadStories();
@@ -109,6 +143,7 @@ export default function FeedPage() {
     try {
       const response = await apiClient.createFeedPost(payload);
       setPosts((current) => [response.data, ...current]);
+      setNextOffset((offset) => offset + 1);
       flash('تم نشر المنشور في تواصل.');
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر نشر المنشور.');
@@ -214,6 +249,7 @@ export default function FeedPage() {
     try {
       await apiClient.deleteFeedPost(postId);
       setPosts((current) => current.filter((post) => post.id !== postId));
+      setNextOffset((offset) => Math.max(0, offset - 1));
       flash('تم حذف المنشور.');
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر حذف المنشور.');
@@ -333,7 +369,7 @@ export default function FeedPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {visiblePosts.map((post) => (
+              {posts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
@@ -350,11 +386,24 @@ export default function FeedPage() {
                   onFollow={followLawyer}
                 />
               ))}
-              {visibleCount < posts.length && (
-                <button onClick={() => setVisibleCount((count) => count + 5)} className="w-full rounded-lg border border-slate-200 bg-white px-5 py-4 text-sm font-black text-[#1877f2] shadow-sm transition hover:bg-slate-50">
-                  تحميل المزيد من المنشورات
-                </button>
-              )}
+              <div ref={loadMoreRef} className="min-h-10">
+                {isLoadingMore && (
+                  <div className="space-y-4">
+                    <SkeletonPost />
+                    <SkeletonPost />
+                  </div>
+                )}
+                {!isLoadingMore && hasMorePosts && (
+                  <div className="rounded-lg border border-slate-200 bg-white px-5 py-4 text-center text-xs font-black text-slate-400 shadow-sm">
+                    جاري تجهيز المزيد عند التمرير...
+                  </div>
+                )}
+                {!hasMorePosts && posts.length > 0 && (
+                  <div className="rounded-lg border border-slate-200 bg-white px-5 py-4 text-center text-xs font-black text-slate-400 shadow-sm">
+                    وصلت إلى نهاية المنشورات
+                  </div>
+                )}
+              </div>
             </div>
           )}
         </main>

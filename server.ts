@@ -820,9 +820,20 @@ async function startServer() {
     try {
       const currentUser = (req as any).user;
       const filter = typeof req.query.filter === 'string' ? req.query.filter : 'all';
+      const limit = Number(req.query.limit || 8);
+      const offset = Number(req.query.offset || 0);
       const allowedFilters = ['all', 'videos', 'articles', 'lawyers', 'admins', 'popular'];
-      const posts = await listFeedPosts(currentUser.userId, allowedFilters.includes(filter) ? filter as any : 'all');
-      res.json({ data: posts });
+      const result = await listFeedPosts(currentUser.userId, allowedFilters.includes(filter) ? filter as any : 'all', { limit, offset });
+      res.json({
+        data: result.posts,
+        meta: {
+          total: result.total,
+          limit: result.limit,
+          offset: result.offset,
+          nextOffset: result.nextOffset,
+          hasMore: result.hasMore,
+        },
+      });
     } catch (error) {
       console.error('Feed list error:', error);
       res.status(500).json({ error: 'تعذر تحميل المجتمع القانوني' });

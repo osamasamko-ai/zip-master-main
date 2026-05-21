@@ -345,8 +345,8 @@ class ApiClient {
         return response.data;
     }
 
-    async getFeedPosts(filter: string = 'all'): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/app/feed', { params: { filter } });
+    async getFeedPosts(filter: string = 'all', options: { limit?: number; offset?: number } = {}): Promise<ApiResponse<any[]> & { meta?: any }> {
+        const response = await this.client.get('/api/app/feed', { params: { filter, ...options } });
         return response.data;
     }
 
