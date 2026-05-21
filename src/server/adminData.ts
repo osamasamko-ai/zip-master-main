@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { prisma } from './prisma';
+import { getAllLawDocs } from './iraqiLawDataset';
 function parseAttachments(value: string | string[] | null | undefined): string[] {
     if (Array.isArray(value)) return value;
     if (!value) return [];
@@ -871,7 +872,15 @@ export async function deleteModerationRule(id: string) {
 }
 
 export async function getLegalDocs(): Promise<LegalDoc[]> {
-    return getCached('legal-docs', async () => prisma.legalDoc.findMany() as any);
+    return getCached('legal-docs', async () => {
+        const databaseDocs = await prisma.legalDoc.findMany({
+            where: { status: 'published' },
+            orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+        }) as any[];
+        const databaseDocIds = new Set(databaseDocs.map((doc) => doc.id));
+        const defaultDocs = getAllLawDocs().filter((doc) => !databaseDocIds.has(doc.id));
+        return [...databaseDocs, ...defaultDocs] as LegalDoc[];
+    });
 }
 
 export async function addLegalDoc(doc: Omit<LegalDoc, 'id'>) {

@@ -299,7 +299,6 @@ export default function LegalDocs() {
 
   const totalArticles = docs.length;
   const totalCategories = categories.length - 1;
-  const categoryWithMostDocs = categoryStats[0];
 
   const copyCitation = (doc: LawSource) => {
     const citation = `${doc.title}، ${doc.law}، المادة ${doc.article}`;
@@ -390,18 +389,18 @@ export default function LegalDocs() {
   const renderDocList = (items: LawSource[], emptyMessage: string) => {
     const query = getActiveSearchQuery();
     return (
-      <motion.div layout className="space-y-3">
+      <motion.div layout className="space-y-2">
         <AnimatePresence mode="popLayout">
           {items.length === 0 ? (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="rounded-[2rem] border-2 border-dashed border-slate-200 bg-slate-50/50 p-12 text-center"
+              className="rounded-lg border border-dashed border-slate-200 bg-slate-50/70 p-10 text-center"
             >
-              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white text-slate-300 shadow-sm">
-                <i className="fa-solid fa-magnifying-glass text-2xl"></i>
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-lg bg-white text-slate-300 shadow-sm">
+                <i className="fa-solid fa-magnifying-glass text-xl"></i>
               </div>
-              <p className="text-base font-bold text-slate-500">{emptyMessage}</p>
+              <p className="text-sm font-bold text-slate-500">{emptyMessage}</p>
             </motion.div>
           ) : (
             items.map((doc) => (
@@ -416,34 +415,36 @@ export default function LegalDocs() {
                 <button
                   type="button"
                   onClick={() => selectDoc(doc.id)}
-                  className={`w-full rounded-[1.75rem] border p-5 text-right transition-all duration-300 ${selectedDoc?.id === doc.id ? 'border-brand-navy bg-white shadow-xl ring-4 ring-brand-navy/5' : 'border-slate-100 bg-white hover:border-brand-gold/50 hover:shadow-md'}`}
+                  className={`w-full rounded-lg border p-4 text-right transition-all duration-200 ${selectedDoc?.id === doc.id ? 'border-brand-navy bg-brand-navy/[0.03] shadow-sm ring-2 ring-brand-navy/5' : 'border-slate-200 bg-white hover:border-brand-navy/30 hover:bg-slate-50'}`}
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-3">
-                        <span className="rounded-lg bg-brand-gold/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-brand-gold">{doc.category}</span>
+                      <div className="mb-2 flex flex-wrap items-center justify-end gap-2">
+                        <span className="rounded-md bg-brand-gold/10 px-2 py-1 text-[9px] font-black text-brand-dark">{doc.category}</span>
+                        <span className="rounded-md bg-slate-100 px-2 py-1 text-[9px] font-black text-slate-500">المادة {doc.article}</span>
                         {pinnedDocIds.includes(doc.id) && (
-                          <span className="rounded-lg bg-brand-navy/10 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-brand-navy">محفوظ</span>
+                          <span className="rounded-md bg-brand-navy/10 px-2 py-1 text-[9px] font-black text-brand-navy">محفوظ</span>
                         )}
                       </div>
-                      <h3 className="truncate text-base font-black text-brand-dark group-hover:text-brand-navy transition-colors">
+                      <h3 className="line-clamp-2 text-sm font-black leading-6 text-brand-dark transition-colors group-hover:text-brand-navy">
                         <HighlightText text={doc.title} highlight={query} />
                       </h3>
-                      <p className="mt-1 text-[11px] font-bold text-slate-400">{doc.law} • المادة {doc.article}</p>
-                      <p className="mt-3 line-clamp-2 text-xs leading-relaxed text-slate-500">
+                      <p className="mt-1 truncate text-[11px] font-bold text-slate-400">{doc.law}</p>
+                      <p className="mt-2 line-clamp-2 text-xs leading-6 text-slate-500">
                         <HighlightText text={doc.summary} highlight={query} />
                       </p>
                     </div>
-                    <div className="flex flex-col gap-2">
+                    <div className="flex shrink-0 flex-col gap-2">
                       <button
                         onClick={(e) => { e.stopPropagation(); togglePinnedDoc(doc.id); }}
-                        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all ${pinnedDocIds.includes(doc.id) ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20' : 'bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-brand-navy'}`}
+                        className={`flex h-9 w-9 items-center justify-center rounded-lg transition-all ${pinnedDocIds.includes(doc.id) ? 'bg-brand-navy text-white shadow-sm' : 'bg-slate-100 text-slate-400 hover:bg-white hover:text-brand-navy'}`}
+                        title={pinnedDocIds.includes(doc.id) ? 'إزالة من المحفوظات' : 'حفظ المرجع'}
                       >
-                        <i className="fa-solid fa-bookmark"></i>
+                        <i className="fa-solid fa-bookmark text-xs"></i>
                       </button>
                       <button
                         onClick={(e) => { e.stopPropagation(); copyCitation(doc); }}
-                        className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:bg-slate-100 hover:text-brand-navy transition-all"
+                        className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-400 transition-all hover:bg-white hover:text-brand-navy"
                         title="نسخ الاقتباس"
                       >
                         <i className="fa-solid fa-quote-right text-[10px]"></i>
@@ -460,54 +461,36 @@ export default function LegalDocs() {
   };
 
   return (
-    <div className="app-view fade-in min-h-[calc(100vh-140px)] space-y-5 text-right">
-      <section className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-white/80 shadow-premium backdrop-blur">
-        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_400px]">
-          <div className="p-6 md:p-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-gold">
-              <i className="fa-solid fa-gavel"></i>
-              Legal Research Workspace
+    <div className="app-view fade-in min-h-[calc(100vh-140px)] space-y-4 text-right">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-5">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-brand-dark">
+              <i className="fa-solid fa-gavel text-brand-gold"></i>
+              Legal Research
             </div>
-            <h2 className="mt-4 max-w-3xl text-3xl font-black leading-tight text-brand-dark md:text-4xl">قاعدة القوانين العراقية</h2>
-            <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-slate-500">
-              مساحة بحث قانونية أكثر وضوحاً: نتائج قابلة للتصفية، مراجع محفوظة، ملخص قراءة، وتعليقات خاصة على كل مادة.
+            <h1 className="mt-3 text-2xl font-black leading-tight text-brand-dark md:text-3xl">قاعدة القوانين العراقية</h1>
+            <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">
+              ابحث، صفّي النتائج، احفظ المراجع، وافتح قراءة مركزة للمادة القانونية.
             </p>
-
-            <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">المواد المتاحة</p>
-                <p className="mt-2 text-2xl font-black text-brand-dark">{totalArticles.toLocaleString('ar-IQ')}</p>
-              </div>
-              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">الفئات</p>
-                <p className="mt-2 text-2xl font-black text-brand-dark">{totalCategories.toLocaleString('ar-IQ')}</p>
-              </div>
-              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">الفئة الأوسع</p>
-                <p className="mt-2 truncate text-sm font-black text-brand-dark">{categoryWithMostDocs?.category ?? '...'}</p>
-              </div>
-            </div>
           </div>
 
-          <div className="bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-6 text-white md:p-8">
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-lightgold">Research Pulse</p>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
-                <p className="text-[11px] font-black text-white/60">نتائج العرض</p>
-                <p className="mt-2 text-3xl font-black">{currentResultCount.toLocaleString('ar-IQ')}</p>
-              </div>
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
-                <p className="text-[11px] font-black text-white/60">محفوظات</p>
-                <p className="mt-2 text-3xl font-black">{pinnedDocIds.length.toLocaleString('ar-IQ')}</p>
-              </div>
+          <div className="grid grid-cols-4 gap-2 text-center">
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[9px] font-black text-slate-400">المواد</p>
+              <p className="mt-1 text-xl font-black text-brand-dark">{totalArticles.toLocaleString('ar-IQ')}</p>
             </div>
-            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/10 p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-white/60">المادة المحددة</p>
-              <p className="mt-2 line-clamp-2 text-sm font-black">{selectedDoc?.title || 'اختر مادة من القائمة'}</p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button type="button" onClick={() => selectedDoc && copyCitation(selectedDoc)} disabled={!selectedDoc} className="rounded-xl bg-white/10 px-3 py-2 text-[10px] font-black text-white transition hover:bg-white/20 disabled:opacity-40">نسخ الاقتباس</button>
-                <button type="button" onClick={() => selectedDoc && setIsFullView(true)} disabled={!selectedDoc} className="rounded-xl bg-brand-gold px-3 py-2 text-[10px] font-black text-brand-dark transition hover:bg-brand-lightgold disabled:opacity-40">قراءة موسعة</button>
-              </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[9px] font-black text-slate-400">الفئات</p>
+              <p className="mt-1 text-xl font-black text-brand-dark">{totalCategories.toLocaleString('ar-IQ')}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[9px] font-black text-slate-400">النتائج</p>
+              <p className="mt-1 text-xl font-black text-brand-navy">{currentResultCount.toLocaleString('ar-IQ')}</p>
+            </div>
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[9px] font-black text-slate-400">محفوظة</p>
+              <p className="mt-1 text-xl font-black text-brand-navy">{pinnedDocIds.length.toLocaleString('ar-IQ')}</p>
             </div>
           </div>
         </div>
@@ -526,7 +509,7 @@ export default function LegalDocs() {
         />
       ) : (
         <>
-          <section className="rounded-[2rem] border border-slate-200 bg-white p-4 shadow-sm">
+          <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">نطاق البحث الحالي</p>
@@ -541,7 +524,7 @@ export default function LegalDocs() {
               </div>
             </div>
           </section>
-          <section className="sticky top-[72px] z-20 rounded-[2rem] border border-slate-200 bg-white/90 p-2 shadow-premium backdrop-blur-md transition-all duration-300">
+          <section className="sticky top-[72px] z-20 rounded-lg border border-slate-200 bg-white/95 p-2 shadow-sm backdrop-blur-md transition-all duration-300">
             <div
               role="tablist"
               aria-label="Legal docs sections"
@@ -556,17 +539,17 @@ export default function LegalDocs() {
                   aria-controls={`legal-panel-${tab.id}`}
                   type="button"
                   onClick={() => setActiveTab(tab.id)}
-                  className={`group relative rounded-2xl px-4 py-3 text-right transition-all ${activeTab === tab.id ? 'text-white' : 'text-gray-700 hover:text-brand-dark'}`}
+                  className={`group relative rounded-lg px-4 py-3 text-right transition-all ${activeTab === tab.id ? 'text-white' : 'text-gray-700 hover:text-brand-dark'}`}
                 >
                   {activeTab === tab.id && (
                     <motion.div
                       layoutId="activeLegalTab"
-                      className="absolute inset-0 z-0 rounded-2xl bg-brand-navy shadow-lg shadow-brand-navy/15"
+                      className="absolute inset-0 z-0 rounded-lg bg-brand-navy shadow-sm"
                       transition={{ type: 'spring', bounce: 0.2, duration: 0.6 }}
                     />
                   )}
                   <div className="flex items-start gap-3">
-                    <div className={`relative z-10 mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl transition-colors ${activeTab === tab.id ? 'bg-white/10 text-white' : 'bg-white text-brand-navy group-hover:bg-brand-navy/5 group-hover:text-brand-navy'}`}>
+                    <div className={`relative z-10 mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg transition-colors ${activeTab === tab.id ? 'bg-white/10 text-white' : 'bg-slate-50 text-brand-navy group-hover:bg-brand-navy/5 group-hover:text-brand-navy'}`}>
                       <i className={`fa-solid ${tab.icon} transition-transform group-hover:scale-110`}></i>
                     </div>
                     <div className="min-w-0">
@@ -583,14 +566,14 @@ export default function LegalDocs() {
             id={`legal-panel-${activeTab}`}
             role="tabpanel"
             aria-labelledby={`legal-tab-${activeTab}`}
-            className="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.95fr]"
+            className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_390px]"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
             <div className="space-y-5">
               {activeTab === 'explore' && (
-                <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <h3 className="text-xl font-black text-brand-dark">استكشاف القاعدة القانونية</h3>
@@ -603,14 +586,14 @@ export default function LegalDocs() {
                           value={exploreQuery}
                           onChange={(event) => setExploreQuery(event.target.value)}
                           placeholder="ابحث في العناوين أو المواد..."
-                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-5 text-sm font-bold text-slate-700 focus:border-brand-navy outline-none transition-all focus:bg-white"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-11 pr-5 text-sm font-bold text-slate-700 outline-none transition-all focus:border-brand-navy focus:bg-white"
                         />
                         <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                       </div>
                       <select
                         value={exploreCategoryFilter}
                         onChange={(event) => setExploreCategoryFilter(event.target.value)}
-                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 focus:border-brand-navy outline-none lg:w-48"
+                        className="w-full rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none focus:border-brand-navy lg:w-48"
                       >
                         {categories.map((category) => (
                           <option key={category} value={category}>
@@ -626,7 +609,7 @@ export default function LegalDocs() {
                         key={category}
                         type="button"
                         onClick={() => setExploreCategoryFilter(category)}
-                        className={`shrink-0 rounded-full px-4 py-2 text-xs font-black transition ${exploreCategoryFilter === category ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+                        className={`shrink-0 rounded-lg px-4 py-2 text-xs font-black transition ${exploreCategoryFilter === category ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
                       >
                         {category === 'all' ? 'كل التصنيفات' : category}
                       </button>
@@ -638,7 +621,7 @@ export default function LegalDocs() {
 
               {activeTab === 'categories' && (
                 <div className="space-y-5">
-                  <div className="rounded-[2.5rem] border border-slate-200 bg-white p-7 shadow-sm">
+                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <h3 className="text-xl font-black text-brand-dark">خريطة الفئات القانونية</h3>
@@ -650,16 +633,16 @@ export default function LegalDocs() {
                           value={categorySearchQuery}
                           onChange={(event) => setCategorySearchQuery(event.target.value)}
                           placeholder="ابحث داخل الفئة أو العنوان..."
-                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-bold outline-none focus:border-brand-navy transition-all"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-10 pr-4 text-sm font-bold outline-none transition-all focus:border-brand-navy"
                         />
                         <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                       </div>
                     </div>
-                    <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-4">
+                    <div className="mt-5 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
                       <button
                         type="button"
                         onClick={() => setSelectedCategory('all')}
-                        className={`group relative rounded-3xl border p-5 text-right transition-all ${selectedCategory === 'all' ? 'border-brand-navy bg-brand-navy text-white shadow-xl shadow-brand-navy/20' : 'border-slate-100 bg-slate-50 text-slate-600 hover:bg-white hover:border-brand-gold hover:shadow-md'}`}
+                        className={`group relative rounded-lg border p-4 text-right transition-all ${selectedCategory === 'all' ? 'border-brand-navy bg-brand-navy text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy/30 hover:bg-white'}`}
                       >
                         <p className="relative z-10 text-sm font-black">كل الفئات</p>
                         <p className={`relative z-10 mt-2 text-[10px] font-bold ${selectedCategory === 'all' ? 'text-white/60' : 'text-slate-400'}`}>{totalArticles} مادة</p>
@@ -672,7 +655,7 @@ export default function LegalDocs() {
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
                           whileHover={{ y: -4 }}
-                          className={`group relative rounded-3xl border p-5 text-right transition-all ${selectedCategory === item.category ? 'border-brand-navy bg-brand-navy text-white shadow-xl shadow-brand-navy/20' : 'border-slate-100 bg-slate-50 text-slate-600 hover:bg-white hover:border-brand-gold hover:shadow-md'}`}
+                          className={`group relative rounded-lg border p-4 text-right transition-all ${selectedCategory === item.category ? 'border-brand-navy bg-brand-navy text-white shadow-sm' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy/30 hover:bg-white'}`}
                         >
                           <p className="relative z-10 text-sm font-black">{item.category}</p>
                           <p className={`relative z-10 mt-2 text-[10px] font-bold ${selectedCategory === item.category ? 'text-white/60' : 'text-slate-400'}`}>{item.count} مادة</p>
@@ -680,7 +663,7 @@ export default function LegalDocs() {
                       ))}
                     </div>
                   </div>
-                  <section className="rounded-[2.5rem] bg-white border border-slate-100 p-6 shadow-inner">
+                  <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     {renderDocList(categoryDocs, 'لا توجد مواد ضمن هذه الفئة حالياً.')}
                   </section>
                 </div>
@@ -688,7 +671,7 @@ export default function LegalDocs() {
 
               {activeTab === 'workspace' && (
                 <div className="space-y-5">
-                  <div className="rounded-3xl border border-gray-200 bg-white p-5 shadow-sm">
+                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between relative">
                       {/* Drag & Drop Overlay */}
                       <AnimatePresence>
@@ -697,7 +680,7 @@ export default function LegalDocs() {
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
                             exit={{ opacity: 0 }}
-                            className="absolute inset-0 z-[30] rounded-2xl bg-brand-navy/90 backdrop-blur-sm border-4 border-dashed border-brand-gold flex flex-col items-center justify-center text-white"
+                            className="absolute inset-0 z-[30] flex flex-col items-center justify-center rounded-lg border-4 border-dashed border-brand-gold bg-brand-navy/90 text-white backdrop-blur-sm"
                           >
                             <i className="fa-solid fa-cloud-arrow-up text-4xl mb-4 text-brand-gold"></i>
                             <p className="text-lg font-black">أفلت الملفات هنا لإضافتها للمرجعية</p>
@@ -715,23 +698,23 @@ export default function LegalDocs() {
                           value={workspaceQuery}
                           onChange={(event) => setWorkspaceQuery(event.target.value)}
                           placeholder="ابحث في محفوظاتك..."
-                          className="w-full rounded-2xl border border-slate-200 bg-slate-50 py-3 pl-11 pr-5 text-sm font-bold outline-none focus:border-brand-navy focus:bg-white"
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-11 pr-5 text-sm font-bold outline-none focus:border-brand-navy focus:bg-white"
                         />
                         <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
                       </div>
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3">
-                      <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50/50 p-5 shadow-inner">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">المواد المثبّتة</p>
                         <p className="mt-2 text-3xl font-black text-brand-navy">{pinnedDocs.length}</p>
                       </div>
-                      <div className="rounded-[1.75rem] border border-slate-100 bg-slate-50/50 p-5 shadow-inner">
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">سجل القراءة الأخير</p>
                         <p className="mt-2 text-3xl font-black text-brand-dark">{recentDocs.length}</p>
                       </div>
                     </div>
                   </div>
-                  <section className="rounded-[2.5rem] bg-white border border-slate-100 p-6 shadow-inner">
+                  <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     {renderDocList(workspaceDocs, 'لا توجد مراجع محفوظة أو حديثة تطابق البحث الحالي.')}
                   </section>
                 </div>
@@ -739,9 +722,9 @@ export default function LegalDocs() {
             </div>
 
             <aside className="space-y-5">
-              <div className="rounded-[2.5rem] border border-slate-200 bg-white p-6 shadow-premium">
+              <div className="sticky top-36 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 {!selectedDoc ? (
-                  <div className="rounded-2xl bg-slate-50 p-12 text-center text-sm font-bold text-slate-400 border border-dashed border-slate-200">
+                  <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm font-bold text-slate-400">
                     اختر مادة قانونية من القائمة لعرض التفاصيل هنا.
                   </div>
                 ) : (
@@ -754,10 +737,10 @@ export default function LegalDocs() {
                       transition={{ duration: 0.2 }}
                     >
                       <div className="flex flex-col gap-4">
-                        <div className="flex flex-wrap gap-2">
-                          <span className="rounded-lg bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand-gold">{selectedDoc.category}</span>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <span className="rounded-md bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black text-brand-dark">{selectedDoc.category}</span>
                           {pinnedDocIds.includes(selectedDoc.id) && (
-                            <span className="rounded-lg bg-brand-navy/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand-navy">مرجع محفوظ</span>
+                            <span className="rounded-md bg-brand-navy/10 px-2.5 py-1 text-[10px] font-black text-brand-navy">مرجع محفوظ</span>
                           )}
                         </div>
                         <div className="flex justify-between items-start">
@@ -765,7 +748,7 @@ export default function LegalDocs() {
                             <h3 className="text-2xl font-black leading-tight text-brand-dark">{selectedDoc.title}</h3>
                             <p className="mt-2 text-sm font-bold text-slate-500">{selectedDoc.law} • المادة {selectedDoc.article}</p>
                           </div>
-                          <button onClick={() => setIsFullView(true)} className="h-10 w-10 flex items-center justify-center rounded-xl bg-slate-50 text-slate-400 hover:text-brand-navy transition-all" title="تكبير العرض">
+                          <button onClick={() => setIsFullView(true)} className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-400 transition-all hover:bg-slate-50 hover:text-brand-navy" title="تكبير العرض">
                             <i className="fa-solid fa-expand"></i>
                           </button>
                         </div>
@@ -773,7 +756,7 @@ export default function LegalDocs() {
                           <button
                             type="button"
                             onClick={() => togglePinnedDoc(selectedDoc.id)}
-                            className={`flex-1 rounded-xl px-4 py-3 text-xs font-black transition-all ${pinnedDocIds.includes(selectedDoc.id) ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
+                            className={`flex-1 rounded-lg px-4 py-3 text-xs font-black transition-all ${pinnedDocIds.includes(selectedDoc.id) ? 'bg-brand-navy text-white shadow-sm' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                           >
                             <i className="fa-solid fa-bookmark ml-2"></i>
                             {pinnedDocIds.includes(selectedDoc.id) ? 'محفوظة' : 'حفظ المرجع'}
@@ -782,25 +765,25 @@ export default function LegalDocs() {
                       </div>
 
                       <div className="mt-6 flex flex-wrap gap-2 text-sm">
-                        <span className="rounded-full bg-slate-50 px-3 py-1.5 border border-slate-100 text-[10px] font-black text-slate-500">
+                        <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black text-slate-500">
                           <i className="fa-solid fa-scale-balanced ml-1.5 opacity-50"></i>
                           {selectedDoc.law}
                         </span>
-                        <span className="rounded-full bg-slate-50 px-3 py-1.5 border border-slate-100 text-[10px] font-black text-slate-500">
+                        <span className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-[10px] font-black text-slate-500">
                           <i className="fa-solid fa-hashtag ml-1.5 opacity-50"></i>
                           المادة {selectedDoc.article}
                         </span>
                       </div>
 
-                      <div className="mt-6 rounded-3xl border border-slate-100 bg-slate-50/50 p-6 shadow-inner">
+                      <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50 p-4">
                         <div className="flex items-center gap-2 mb-3">
                           <i className="fa-solid fa-file-invoice text-brand-gold text-xs"></i>
                           <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ملخص المادة</p>
                         </div>
-                        <p className="text-sm font-bold leading-relaxed text-slate-600 text-justify">{selectedDoc.summary}</p>
+                        <p className="text-sm font-bold leading-7 text-slate-600 text-justify">{selectedDoc.summary}</p>
                       </div>
 
-                      <div className="mt-6 grid grid-cols-2 gap-3">
+                      <div className="mt-5 grid gap-3 sm:grid-cols-2">
                         <ActionButton
                           onClick={() => window.open(selectedDoc.source, '_blank', 'noreferrer')}
                           variant="primary"
@@ -808,14 +791,14 @@ export default function LegalDocs() {
                         >
                           عرض المصدر
                         </ActionButton>
-                        <div className="flex gap-2">
+                        <div className="grid grid-cols-3 gap-2">
                           <ActionButton
                             type="button"
                             onClick={handleExportPdf}
                             disabled={isExportingPdf}
                             variant="secondary"
                             size="sm"
-                            className="flex-1"
+                            className="w-full"
                           >
                             {isExportingPdf ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-file-pdf"></i>}
                             PDF
@@ -825,7 +808,7 @@ export default function LegalDocs() {
                             onClick={() => { setActiveTab('workspace'); togglePinnedDoc(selectedDoc.id); }}
                             variant="secondary"
                             size="sm"
-                            className="flex-1"
+                            className="w-full"
                           >
                             حفظ
                           </ActionButton>
@@ -834,7 +817,7 @@ export default function LegalDocs() {
                             onClick={() => consultAI(selectedDoc)}
                             variant="ghost"
                             size="sm"
-                            className="flex-1 border-brand-gold/20 bg-brand-gold/10 text-brand-dark hover:bg-brand-gold/20"
+                            className="w-full border-brand-gold/20 bg-brand-gold/10 text-brand-dark hover:bg-brand-gold/20"
                           >
                             استشارة AI
                           </ActionButton>
@@ -853,7 +836,7 @@ export default function LegalDocs() {
                             <p className="text-xs font-bold text-slate-400 italic text-center py-4">لم تضف أي ملاحظات على هذه المادة بعد.</p>
                           ) : (
                             selectedDocComments.map(comment => (
-                              <div key={comment.id} className="bg-slate-50 rounded-2xl p-4 text-right group/comment relative border border-slate-100">
+                              <div key={comment.id} className="group/comment relative rounded-lg border border-slate-200 bg-slate-50 p-4 text-right">
                                 <div className="flex justify-between items-center mb-1">
                                   <span className="text-[9px] font-black text-brand-navy uppercase tracking-widest">{comment.userName}</span>
                                   <span className="text-[9px] font-bold text-slate-400">{comment.timestamp}</span>
@@ -878,7 +861,7 @@ export default function LegalDocs() {
                             value={commentInput}
                             onChange={(e) => setCommentInput(e.target.value)}
                             placeholder="اكتب ملاحظة مهنية هنا..."
-                            className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs font-bold text-slate-700 text-right focus:border-brand-navy focus:bg-white outline-none resize-none min-h-[90px] shadow-inner transition-all"
+                            className="min-h-[90px] w-full resize-none rounded-lg border border-slate-200 bg-slate-50 p-4 text-right text-xs font-bold text-slate-700 outline-none transition-all focus:border-brand-navy focus:bg-white"
                           />
                           <ActionButton
                             onClick={handleAddComment}
@@ -896,13 +879,13 @@ export default function LegalDocs() {
                 )}
               </div>
 
-              <div className="rounded-[2.5rem] border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                 <h3 className="text-base font-black text-brand-dark">أدوات الوصول السريع</h3>
                 <div className="mt-5 space-y-3">
                   <button
                     type="button"
                     onClick={() => setActiveTab('explore')}
-                    className="flex w-full items-center justify-between rounded-2xl bg-slate-50 p-4 text-right transition hover:bg-brand-navy hover:text-white group"
+                    className="group flex w-full items-center justify-between rounded-lg bg-slate-50 p-3 text-right transition hover:bg-brand-navy hover:text-white"
                   >
                     <span className="text-xs font-black">البحث الشامل</span>
                     <i className="fa-solid fa-search text-xs opacity-40 group-hover:opacity-100"></i>
@@ -910,7 +893,7 @@ export default function LegalDocs() {
                   <button
                     type="button"
                     onClick={() => setActiveTab('categories')}
-                    className="flex w-full items-center justify-between rounded-2xl bg-slate-50 p-4 text-right transition hover:bg-brand-navy hover:text-white group"
+                    className="group flex w-full items-center justify-between rounded-lg bg-slate-50 p-3 text-right transition hover:bg-brand-navy hover:text-white"
                   >
                     <span className="text-xs font-black">التصنيفات القانونية</span>
                     <i className="fa-solid fa-table-cells text-xs opacity-40 group-hover:opacity-100"></i>
@@ -918,7 +901,7 @@ export default function LegalDocs() {
                   <button
                     type="button"
                     onClick={() => setActiveTab('workspace')}
-                    className="flex w-full items-center justify-between rounded-2xl bg-slate-50 p-4 text-right transition hover:bg-brand-navy hover:text-white group"
+                    className="group flex w-full items-center justify-between rounded-lg bg-slate-50 p-3 text-right transition hover:bg-brand-navy hover:text-white"
                   >
                     <span className="text-xs font-black">المواد المحفوظة</span>
                     <i className="fa-solid fa-bookmark text-xs opacity-40 group-hover:opacity-100"></i>
@@ -949,21 +932,21 @@ export default function LegalDocs() {
               initial={{ y: 24, scale: 0.98, opacity: 0 }}
               animate={{ y: 0, scale: 1, opacity: 1 }}
               exit={{ y: 24, scale: 0.98, opacity: 0 }}
-              className="relative z-[221] flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-[2.5rem] bg-white shadow-2xl"
+              className="relative z-[221] flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-lg bg-white shadow-2xl"
             >
               <header className="border-b border-slate-100 bg-slate-50/70 p-5 md:p-6">
                 <div className="flex items-start justify-between gap-4">
                   <button
                     type="button"
                     onClick={() => setIsFullView(false)}
-                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-slate-400 shadow-sm transition hover:text-red-500"
+                    className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-white text-slate-400 shadow-sm transition hover:text-red-500"
                   >
                     <i className="fa-solid fa-times"></i>
                   </button>
                   <div className="min-w-0 text-right">
                     <div className="mb-3 flex flex-wrap justify-end gap-2">
-                      <span className="rounded-lg bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand-gold">{selectedDoc.category}</span>
-                      <span className="rounded-lg bg-brand-navy/10 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-brand-navy">المادة {selectedDoc.article}</span>
+                      <span className="rounded-md bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black text-brand-dark">{selectedDoc.category}</span>
+                      <span className="rounded-md bg-brand-navy/10 px-2.5 py-1 text-[10px] font-black text-brand-navy">المادة {selectedDoc.article}</span>
                     </div>
                     <h2 className="text-2xl font-black leading-tight text-brand-dark md:text-3xl">{selectedDoc.title}</h2>
                     <p className="mt-2 text-sm font-bold text-slate-500">{selectedDoc.law}</p>
@@ -972,7 +955,7 @@ export default function LegalDocs() {
               </header>
 
               <div className="flex-1 overflow-y-auto p-6 custom-scrollbar md:p-8">
-                <div className="rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
+                <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                   <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ملخص المادة</p>
                   <p className="mt-4 text-base font-bold leading-9 text-slate-700">{selectedDoc.summary}</p>
                 </div>
