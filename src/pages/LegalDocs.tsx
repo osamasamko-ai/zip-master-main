@@ -835,8 +835,8 @@ export default function LegalDocs() {
               )}
             </div>
 
-            <aside className="space-y-5">
-              <div className="sticky top-36 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+            <aside className="min-w-0 space-y-5">
+              <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm custom-scrollbar lg:max-h-[calc(100vh-148px)] lg:overflow-y-auto lg:overscroll-contain xl:sticky xl:top-32">
                 {!selectedDoc ? (
                   <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 p-10 text-center text-sm font-bold text-slate-400">
                     اختر مادة قانونية من القائمة لعرض التفاصيل هنا.
