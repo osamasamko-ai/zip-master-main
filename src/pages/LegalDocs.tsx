@@ -538,10 +538,10 @@ export default function LegalDocs() {
   };
 
   return (
-    <div className="app-view fade-in min-h-[calc(100vh-140px)] space-y-4 text-right">
+    <div className="app-view fade-in mx-auto min-h-[calc(100vh-140px)] w-full min-w-0 max-w-full space-y-4 overflow-x-hidden pb-8 text-right">
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-5">
-          <div>
+        <div className="grid min-w-0 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_340px] 2xl:grid-cols-[minmax(0,1fr)_360px] lg:p-5">
+          <div className="min-w-0">
             <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[10px] font-black uppercase tracking-[0.18em] text-brand-dark">
               <i className="fa-solid fa-gavel text-brand-gold"></i>
               Legal Research
@@ -554,13 +554,13 @@ export default function LegalDocs() {
               القاعدة تتضمن مراجع موسعة ومحدثة قدر الإمكان، ويُرجع للنص المنشور في الوقائع العراقية عند الإجراء الرسمي.
             </p>
             <form
-              className="mt-4 flex max-w-3xl flex-col gap-2 sm:flex-row"
+              className="mt-4 flex w-full max-w-3xl min-w-0 flex-col gap-2 sm:flex-row"
               onSubmit={(event) => {
                 event.preventDefault();
                 runQuickSearch(quickQuestion);
               }}
             >
-              <div className="relative flex-1">
+              <div className="relative min-w-0 flex-1">
                 <input
                   type="search"
                   value={quickQuestion}
@@ -588,7 +588,7 @@ export default function LegalDocs() {
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-2 text-center">
+          <div className="grid min-w-0 grid-cols-2 gap-2 text-center sm:grid-cols-4 xl:grid-cols-2 2xl:grid-cols-4">
             <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
               <p className="text-[9px] font-black text-slate-400">المواد</p>
               <p className="mt-1 text-xl font-black text-brand-dark">{totalArticles.toLocaleString('ar-IQ')}</p>
@@ -679,21 +679,21 @@ export default function LegalDocs() {
             id={`legal-panel-${activeTab}`}
             role="tabpanel"
             aria-labelledby={`legal-tab-${activeTab}`}
-            className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_390px]"
+            className="grid min-w-0 grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px] 2xl:grid-cols-[minmax(0,1fr)_390px]"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
           >
-            <div className="space-y-5">
+            <div className="min-w-0 space-y-5">
               {activeTab === 'explore' && (
-                <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                   <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <h3 className="text-xl font-black text-brand-dark">استكشاف القاعدة القانونية</h3>
                       <p className="mt-1 text-xs font-bold text-slate-400 uppercase tracking-widest">Global Law Search</p>
                     </div>
-                    <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row">
-                      <div className="relative min-w-[280px]">
+                    <div className="flex w-full min-w-0 flex-col gap-3 lg:w-auto lg:flex-row">
+                      <div className="relative w-full min-w-0 lg:min-w-[280px]">
                         <input
                           ref={exploreSearchRef}
                           type="text"
@@ -735,13 +735,13 @@ export default function LegalDocs() {
 
               {activeTab === 'categories' && (
                 <div className="space-y-5">
-                  <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                       <div>
                         <h3 className="text-xl font-black text-brand-dark">خريطة الفئات القانونية</h3>
                         <p className="mt-1 text-sm font-bold text-slate-400">تصفح القاعدة القانونية حسب التخصص والنوع.</p>
                       </div>
-                      <div className="relative min-w-[280px]">
+                      <div className="relative w-full min-w-0 lg:min-w-[280px]">
                         <input
                           type="text"
                           value={categorySearchQuery}
@@ -784,8 +784,8 @@ export default function LegalDocs() {
               )}
 
               {activeTab === 'workspace' && (
-                <div className="space-y-5">
-                <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
+                <div className="min-w-0 space-y-5">
+                <div className="min-w-0 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between relative">
                       {/* Drag & Drop Overlay */}
                       <AnimatePresence>
@@ -806,7 +806,7 @@ export default function LegalDocs() {
                         <h3 className="text-xl font-black text-brand-dark">مساحة المراجع الشخصية</h3>
                         <p className="mt-1 text-sm font-bold text-slate-400">احتفظ بالمواد الأكثر استخداماً والعودة السريعة إلى آخر ما قرأته.</p>
                       </div>
-                      <div className="relative min-w-[280px]">
+                      <div className="relative w-full min-w-0 lg:min-w-[280px]">
                         <input
                           type="text"
                           value={workspaceQuery}
@@ -850,19 +850,19 @@ export default function LegalDocs() {
                       exit={{ opacity: 0, y: -10 }}
                       transition={{ duration: 0.2 }}
                     >
-                      <div className="flex flex-col gap-4">
+                      <div className="min-w-0 flex flex-col gap-4">
                         <div className="flex flex-wrap justify-end gap-2">
                           <span className="rounded-md bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black text-brand-dark">{selectedDoc.category}</span>
                           {pinnedDocIds.includes(selectedDoc.id) && (
                             <span className="rounded-md bg-brand-navy/10 px-2.5 py-1 text-[10px] font-black text-brand-navy">مرجع محفوظ</span>
                           )}
                         </div>
-                        <div className="flex justify-between items-start">
-                          <div className="max-w-[80%]">
-                            <h3 className="text-2xl font-black leading-tight text-brand-dark">{selectedDoc.title}</h3>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <h3 className="break-words text-xl font-black leading-tight text-brand-dark 2xl:text-2xl">{selectedDoc.title}</h3>
                             <p className="mt-2 text-sm font-bold text-slate-500">{selectedDoc.law} • المادة {selectedDoc.article}</p>
                           </div>
-                          <button onClick={() => setIsFullView(true)} className="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-slate-400 transition-all hover:bg-slate-50 hover:text-brand-navy" title="تكبير العرض">
+                          <button onClick={() => setIsFullView(true)} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-400 transition-all hover:bg-slate-50 hover:text-brand-navy" title="تكبير العرض">
                             <i className="fa-solid fa-expand"></i>
                           </button>
                         </div>
@@ -919,7 +919,7 @@ export default function LegalDocs() {
                         </div>
                       )}
 
-                      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className="mt-5 grid min-w-0 gap-3">
                         <ActionButton
                           onClick={() => window.open(selectedDoc.source, '_blank', 'noreferrer')}
                           variant="primary"
