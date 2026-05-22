@@ -71,6 +71,7 @@ export const getUserIntelligence = async (userId: string) => {
   const categoryCounts = new Map<string, number>();
   const searchCounts = new Map<string, number>();
   const pageCounts = new Map<string, number>();
+  const authorCounts = new Map<string, { label: string; count: number }>();
   const recentResources: Array<{ id: string; label: string; page: string }> = [];
 
   for (const event of events) {
@@ -79,9 +80,15 @@ export const getUserIntelligence = async (userId: string) => {
     const category = cleanText(metadata.category);
     const query = cleanText(metadata.query || metadata.question);
     const label = cleanText(metadata.title || metadata.label || metadata.law || event.resourceId);
+    const authorId = cleanText(metadata.authorId || metadata.lawyerId);
+    const authorLabel = cleanText(metadata.authorName || metadata.lawyerName || metadata.author || authorId);
 
     if (category) categoryCounts.set(category, (categoryCounts.get(category) || 0) + 1);
     if (query && query.length > 2) searchCounts.set(query, (searchCounts.get(query) || 0) + 1);
+    if (authorId) {
+      const current = authorCounts.get(authorId) || { label: authorLabel || authorId, count: 0 };
+      authorCounts.set(authorId, { ...current, count: current.count + 1 });
+    }
     if (event.resourceId && label && !recentResources.some((item) => item.id === event.resourceId)) {
       recentResources.push({ id: event.resourceId, label, page: event.page });
     }
@@ -101,6 +108,11 @@ export const getUserIntelligence = async (userId: string) => {
     .sort((left, right) => right[1] - left[1])
     .slice(0, 5)
     .map(([label, count]) => ({ label, count }));
+
+  const topAuthors = Array.from(authorCounts.entries())
+    .sort((left, right) => right[1].count - left[1].count)
+    .slice(0, 8)
+    .map(([id, value]) => ({ id, label: value.label, count: value.count }));
 
   const recommendations = [
     topCategories[0]
@@ -140,6 +152,7 @@ export const getUserIntelligence = async (userId: string) => {
     },
     topCategories,
     topSearches,
+    topAuthors,
     topPages,
     recentResources: recentResources.slice(0, 6),
     recommendations,

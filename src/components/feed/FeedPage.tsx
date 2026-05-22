@@ -55,12 +55,6 @@ export default function FeedPage() {
 
   const canCreatePost = user?.role === 'admin' || (user?.role === 'pro' && (user.verified || user.licenseStatus === 'verified'));
 
-  const stats = useMemo(() => ({
-    total: posts.length,
-    videos: posts.filter((post) => post.mediaType === 'video').length,
-    admins: posts.filter((post) => post.author.role === 'admin').length,
-  }), [posts]);
-
   const topics = useMemo(
     () => Array.from(new Set(posts.map((post) => post.category))).filter(Boolean).slice(0, 8),
     [posts]
@@ -73,6 +67,12 @@ export default function FeedPage() {
     return [...categories, ...searches].map((item) => String(item).toLowerCase()).filter(Boolean);
   }, [intelligence]);
 
+  const authorAffinity = useMemo(() => {
+    const entries = (intelligence?.topAuthors || []) as Array<{ id: string; count: number }>;
+    const maxCount = Math.max(1, ...entries.map((item) => item.count || 0));
+    return new Map(entries.map((item) => [item.id, (item.count || 0) / maxCount]));
+  }, [intelligence]);
+
   const scoreText = useCallback((...parts: Array<string | undefined | null>) => {
     const text = parts.join(' ').toLowerCase();
     if (!interestTerms.length) return 0;
@@ -80,26 +80,66 @@ export default function FeedPage() {
   }, [interestTerms]);
 
   const scorePost = useCallback((post: FeedPost) => {
+    const ageHours = Math.max(0, (Date.now() - new Date(post.createdAt).getTime()) / 36e5);
+    const recencyScore = Math.max(0, 1.2 - ageHours / 72);
+    const engagementScore = Math.log1p(post.likesCount + post.commentsCount * 2 + post.savesCount * 2 + post.shareCount) / 4;
+    const authorScore = authorAffinity.get(post.author.id) || 0;
+    const mediaScore = post.mediaType === 'video' ? 0.25 : post.mediaType === 'image' ? 0.15 : 0;
+
     return (
-      scoreText(post.category, post.content, post.author.specialty, post.author.name) +
+      scoreText(post.category, post.content, post.author.specialty, post.author.name) * 1.6 +
+      authorScore * 1.4 +
+      engagementScore +
+      recencyScore +
+      mediaScore +
       (post.featured ? 1.5 : 0) +
       (post.pinned ? 1 : 0) +
       (post.savedByMe ? 0.5 : 0) +
       (post.likedByMe ? 0.25 : 0)
     );
-  }, [scoreText]);
+  }, [authorAffinity, scoreText]);
+
+  const diversifyPosts = useCallback((items: FeedPost[]) => {
+    const selected: FeedPost[] = [];
+    const remaining = [...items];
+    const categoryCounts = new Map<string, number>();
+    const authorCounts = new Map<string, number>();
+
+    while (remaining.length) {
+      let bestIndex = 0;
+      let bestScore = Number.NEGATIVE_INFINITY;
+
+      remaining.forEach((post, index) => {
+        const categoryPenalty = (categoryCounts.get(post.category) || 0) * 0.75;
+        const authorPenalty = (authorCounts.get(post.author.id) || 0) * 0.9;
+        const score = scorePost(post) - categoryPenalty - authorPenalty;
+        if (score > bestScore) {
+          bestScore = score;
+          bestIndex = index;
+        }
+      });
+
+      const [nextPost] = remaining.splice(bestIndex, 1);
+      selected.push(nextPost);
+      categoryCounts.set(nextPost.category, (categoryCounts.get(nextPost.category) || 0) + 1);
+      authorCounts.set(nextPost.author.id, (authorCounts.get(nextPost.author.id) || 0) + 1);
+    }
+
+    return selected;
+  }, [scorePost]);
 
   const sortedPosts = useMemo(() => {
     if (postSortMode === 'latest') return posts;
 
-    return [...posts].sort((left, right) => {
+    const sorted = [...posts].sort((left, right) => {
       const scoreDelta = scorePost(right) - scorePost(left);
       if (scoreDelta !== 0) return scoreDelta;
       if (right.pinned !== left.pinned) return Number(right.pinned) - Number(left.pinned);
       if (right.featured !== left.featured) return Number(right.featured) - Number(left.featured);
       return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
     });
-  }, [postSortMode, posts, scorePost]);
+    return diversifyPosts(sorted);
+  }, [diversifyPosts, postSortMode, posts, scorePost]);
 
   const smartStories = useMemo(() => {
     const scored = stories
@@ -108,27 +148,30 @@ export default function FeedPage() {
         story,
         score:
           scoreText(story.text, story.author.specialty, story.author.name) +
-          (!story.seenByMe ? 1 : 0),
+          (authorAffinity.get(story.author.id) || 0) * 1.2 +
+          (!story.seenByMe ? 1 : 0) +
+          Math.max(0, 1 - (Date.now() - new Date(story.createdAt).getTime()) / 36e5 / 24),
       }))
       .sort((left, right) => right.score - left.score)
-      .slice(0, 3)
       .map((item) => item.story);
 
     return scored;
-  }, [scoreText, stories]);
+  }, [authorAffinity, scoreText, stories]);
 
   const smartLawyers = useMemo(() => {
     const scored = lawyers
       .map((lawyer) => ({
         lawyer,
-        score: scoreText(lawyer.specialty, lawyer.lawyerProfile?.specialty, lawyer.name) + ((lawyer.followers || 0) / 1000),
+        score:
+          scoreText(lawyer.specialty, lawyer.lawyerProfile?.specialty, lawyer.name) * 1.5 +
+          (authorAffinity.get(lawyer.id) || 0) * 1.8 +
+          Math.min(1, (lawyer.followers || 0) / 1000),
       }))
       .sort((left, right) => right.score - left.score)
-      .slice(0, 3)
       .map((item) => item.lawyer);
 
     return scored;
-  }, [lawyers, scoreText]);
+  }, [authorAffinity, lawyers, scoreText]);
 
   const flash = (message: string) => {
     setToast(message);
@@ -370,22 +413,6 @@ export default function FeedPage() {
 
   return (
     <div className="w-full min-w-0 bg-[#f0f2f5] px-0 pb-10 text-right sm:px-2" dir="rtl">
-      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <div className="relative px-4 py-3 sm:px-5 sm:py-4">
-          <div className="relative flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-[0.22em] text-[#1877f2]">تواصل</p>
-              <h1 className="mt-1 text-2xl font-black text-slate-900 sm:text-3xl">آخر منشورات تواصل</h1>
-            </div>
-            <div className="grid grid-cols-3 gap-2 text-center sm:min-w-[320px]">
-              <Stat label="منشور" value={stats.total} />
-              <Stat label="فيديو" value={stats.videos} />
-              <Stat label="إعلان" value={stats.admins} />
-            </div>
-          </div>
-        </div>
-      </section>
-
       <AnimatePresence>
         {(error || toast) && (
           <motion.div
@@ -542,15 +569,6 @@ export default function FeedPage() {
           <FeedSidebar posts={posts} suggestedLawyers={smartLawyers.length ? smartLawyers : lawyers} onFollow={followLawyer} onOpenPost={openPost} />
         </aside>
       </div>
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-3">
-      <p className="text-xl font-black text-slate-900">{value}</p>
-      <p className="text-[10px] font-black text-slate-400">{label}</p>
     </div>
   );
 }
