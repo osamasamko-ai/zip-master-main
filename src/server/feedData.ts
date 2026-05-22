@@ -1,5 +1,10 @@
 import { prisma } from './prisma';
 
+const getInitialsAvatar = (name = 'User') =>
+  `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0d2a59&color=ffffff&rounded=true&font-size=0.4`;
+
+const getProfileImage = (user: any) => user?.img || user?.lawyerProfile?.avatar || getInitialsAvatar(user?.name || 'User');
+
 type FeedFilter = 'all' | 'videos' | 'articles' | 'lawyers' | 'admins' | 'popular';
 
 const POST_SELECT = {
@@ -119,7 +124,7 @@ function mapPost(post: any, viewerId?: string) {
       name: post.author.name,
       role: authorRole,
       roleLabel: authorRole === 'admin' ? 'إدارة المنصة' : 'محامٍ موثق',
-      avatar: post.author.lawyerProfile?.avatar || post.author.img || 'https://i.pravatar.cc/150',
+      avatar: getProfileImage(post.author),
       specialty: post.author.lawyerProfile?.specialty || '',
     },
     likesCount: post.likes.length,
@@ -136,7 +141,7 @@ function mapPost(post: any, viewerId?: string) {
         id: comment.author.id,
         name: comment.author.name,
         role: comment.author.role,
-        avatar: comment.author.lawyerProfile?.avatar || comment.author.img || 'https://i.pravatar.cc/150',
+        avatar: getProfileImage(comment.author),
       },
     })),
   };
@@ -163,7 +168,7 @@ function mapStory(story: any, viewerId?: string) {
       name: story.author.name,
       role: authorRole,
       roleLabel: authorRole === 'admin' ? 'إدارة المنصة' : 'محامٍ موثق',
-      avatar: story.author.lawyerProfile?.avatar || story.author.img || 'https://i.pravatar.cc/150',
+      avatar: getProfileImage(story.author),
       specialty: story.author.lawyerProfile?.specialty || '',
     },
   };
