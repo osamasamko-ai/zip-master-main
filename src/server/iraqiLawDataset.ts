@@ -733,25 +733,74 @@ const normalizeText = (value: string) =>
         .trim();
 
 const tokenize = (value: string) => {
-    return Array.from(new Set(normalizeText(value).split(' ').filter(Boolean)));
+    const stopWords = new Set([
+        'ما', 'هي', 'هو', 'هل', 'عن', 'على', 'الى', 'إلى', 'في', 'من', 'مع', 'او', 'أو', 'و',
+        'ماهي', 'كيف', 'متى', 'اين', 'أين', 'الذي', 'التي', 'هذا', 'هذه', 'ذلك', 'تلك',
+        'القانون', 'العراقي', 'العراقية', 'قانون', 'حقوق', 'اجراءات', 'إجراءات'
+    ]);
+
+    return Array.from(
+        new Set(
+            normalizeText(value)
+                .split(' ')
+                .filter((token) => token.length > 2 && !stopWords.has(token))
+        )
+    );
+};
+
+const keywordExpansions: Record<string, string[]> = {
+    تزوير: ['عقوبات', 'جنائي', 'جريمة', 'جرائم', 'التزوير', 'محرر', 'المحررات'],
+    عقوبة: ['عقوبات', 'جنائي', 'جريمة', 'جرائم'],
+    قتل: ['عقوبات', 'جنائي', 'جريمة'],
+    سرقة: ['عقوبات', 'جنائي', 'جريمة'],
+    مخدرات: ['مخدرات', 'جنائي', 'جريمة'],
+    حضانة: ['احوال', 'شخصية', 'اسرة', 'الاحوال'],
+    نفقة: ['احوال', 'شخصية', 'اسرة', 'الاحوال'],
+    طلاق: ['احوال', 'شخصية', 'اسرة', 'الاحوال'],
+    شركة: ['شركات', 'تجاري', 'تأسيس'],
+    شركات: ['شركة', 'تجاري', 'تأسيس'],
+    مستاجر: ['ايجار', 'إيجار', 'مدني', 'عقار'],
+    مستأجر: ['ايجار', 'إيجار', 'مدني', 'عقار'],
+    ايجار: ['مستاجر', 'مستأجر', 'عقار', 'مدني'],
+    إيجار: ['مستاجر', 'مستأجر', 'عقار', 'مدني'],
+    علامة: ['علامات', 'تجارية', 'ملكية', 'فكرية'],
+    تجارية: ['تجارة', 'شركات', 'علامات']
 };
 
 const scoreDocument = (question: string, doc: IraqiLawDoc) => {
-    const queryTokens = tokenize(question);
+    const baseTokens = tokenize(question);
+    const expandedTokens = baseTokens.flatMap((token) => [token, ...(keywordExpansions[token] || [])]);
+    const queryTokens = Array.from(new Set(expandedTokens.map(normalizeText).filter(Boolean)));
     const title = normalizeText(doc.title);
+    const law = normalizeText(doc.law);
     const summary = normalizeText(doc.summary);
     const content = normalizeText(doc.content);
     const category = normalizeText(doc.category);
     let score = 0;
 
-    for (const token of queryTokens) {
+    for (const token of baseTokens) {
         if (!token) continue;
-        if (title.includes(token)) score += 10;
-        if (summary.includes(token)) score += 6;
-        if (content.includes(token)) score += 3;
+        if (title.includes(token)) score += 18;
+        if (law.includes(token)) score += 12;
+        if (summary.includes(token)) score += 8;
+        if (content.includes(token)) score += 4;
+        if (category.includes(token)) score += 3;
+        if (normalizeText(doc.article).includes(token)) score += 1;
+    }
+
+    for (const token of queryTokens.filter((token) => !baseTokens.includes(token))) {
+        if (!token) continue;
+        if (title.includes(token)) score += 6;
+        if (law.includes(token)) score += 5;
+        if (summary.includes(token)) score += 3;
+        if (content.includes(token)) score += 2;
         if (category.includes(token)) score += 2;
-        if (doc.law.toLowerCase().includes(token)) score += 4;
-        if (doc.article.toLowerCase().includes(token)) score += 1;
+    }
+
+    if (baseTokens.length > 0) {
+        const joinedTitle = `${title} ${law} ${category}`;
+        const titleMatches = baseTokens.filter((token) => joinedTitle.includes(token)).length;
+        if (titleMatches >= Math.min(2, baseTokens.length)) score += 12;
     }
 
     return score;

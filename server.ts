@@ -164,6 +164,7 @@ type ChatHistoryItem = {
 const geminiClient = process.env.GEMINI_API_KEY
   ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
   : null;
+let geminiAvailable = Boolean(geminiClient);
 
 const TONE_INSTRUCTIONS: Record<ToneMode, string> = {
   formal: 'اعتمد أسلوباً رسمياً كلاسيكياً، دقيقاً، ومناسباً للمحامين والباحثين القانونيين.',
@@ -228,12 +229,15 @@ async function startServer() {
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${process.env.GEMINI_API_KEY}`);
       const data = await response.json() as any;
       if (data.models) {
+        geminiAvailable = true;
         console.log('🤖 [AI-Discovery] Available Models for your API Key:');
         data.models.forEach((m: any) => console.log(`   - ${m.name}`));
       } else {
+        geminiAvailable = false;
         console.warn('⚠️ [AI-Discovery] Could not retrieve models. Check your API key permissions.', data);
       }
     } catch (err) {
+      geminiAvailable = false;
       console.error('❌ [AI-Discovery] Failed to connect to Gemini discovery service:', err);
     }
   }
@@ -2635,7 +2639,7 @@ ${additionalConditions}
     };
 
     // API Key safety check
-    if (!geminiClient) {
+    if (!geminiClient || !geminiAvailable) {
       console.warn("Gemini Client not initialized. Check GEMINI_API_KEY environment variable.");
     }
 
@@ -2679,7 +2683,7 @@ ${additionalConditions}
       const selectedTone: ToneMode = tone === 'simple' || tone === 'friendly' || tone === 'formal' ? tone : 'formal';
       const sources = getTopRelevantDocuments(question, Number(topK) || aiConfig.topK);
 
-      if (!geminiClient) {
+      if (!geminiClient || !geminiAvailable) {
         return res.json({
           question,
           answer: buildLocalAnswer(question, sources),
@@ -2747,6 +2751,7 @@ ${additionalConditions}
 
     } catch (error) {
       console.error('❌ [AI Error] RAG query failed:', error);
+      geminiAvailable = false;
 
       // Check if headers have already been sent (meaning SSE stream has started)
       if (res.headersSent) {

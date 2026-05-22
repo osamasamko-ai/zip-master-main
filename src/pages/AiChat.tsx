@@ -37,14 +37,18 @@ export default function AIChat() {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isLocalOnlyMode, setIsLocalOnlyMode] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [tone, setTone] = useState<'formal' | 'simple' | 'friendly'>('formal');
   const [activeSources, setActiveSources] = useState<Source[] | null>(null);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const initialQueryHandledRef = useRef(false);
 
   // Handle initial query from dashboard/cases
   useEffect(() => {
     const state = location.state as { initialQuery?: string };
-    if (state?.initialQuery) {
+    if (state?.initialQuery && !initialQueryHandledRef.current) {
+      initialQueryHandledRef.current = true;
       handleSend(state.initialQuery);
     }
   }, [location.state]);
@@ -57,16 +61,20 @@ export default function AIChat() {
 
   const handleSend = async (text: string = input) => {
     if (!text.trim() || isLoading) return;
+    const question = text.trim();
+    const history = messages.map(m => ({ role: m.role, content: m.content }));
+    const assistantId = `${Date.now()}-assistant`;
 
     const userMsg: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: text,
+      content: question,
       timestamp: new Date(),
     };
 
     setMessages((prev) => [...prev, userMsg]);
     setInput('');
+    setErrorMessage(null);
     setIsLoading(true);
 
     try {
@@ -74,11 +82,93 @@ export default function AIChat() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          question: text,
+          question,
           tone,
-          history: messages.map(m => ({ role: m.role, content: m.content })),
+          history,
         }),
       });
+
+      if (!response.ok) {
+        throw new Error('تعذر الاتصال بالمساعد القانوني.');
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+
+      if (contentType.includes('text/event-stream') && response.body) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: assistantId,
+            role: 'assistant',
+            content: '',
+            sources: [],
+            timestamp: new Date(),
+            tone,
+          },
+        ]);
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let accumulated = '';
+        let streamSources: Source[] = [];
+
+        const applyChunk = (payload: { chunk?: string; sources?: Source[]; error?: string }) => {
+          if (payload.error) {
+            throw new Error(payload.error);
+          }
+
+          if (payload.chunk) {
+            accumulated += payload.chunk;
+          }
+
+          if (Array.isArray(payload.sources) && payload.sources.length > 0) {
+            streamSources = payload.sources;
+          }
+
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? {
+                    ...message,
+                    content: accumulated || 'جاري إعداد الإجابة...',
+                    sources: streamSources,
+                  }
+                : message
+            )
+          );
+        };
+
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
+
+          for (const eventBlock of events) {
+            const dataLine = eventBlock
+              .split('\n')
+              .find((line) => line.startsWith('data:'));
+            if (!dataLine) continue;
+            applyChunk(JSON.parse(dataLine.replace(/^data:\s*/, '')));
+          }
+
+          if (done) break;
+        }
+
+        if (!accumulated.trim()) {
+          setMessages((prev) =>
+            prev.map((message) =>
+              message.id === assistantId
+                ? { ...message, content: 'لم تصل إجابة من المزود. حاول إعادة إرسال السؤال أو استخدم صياغة أقصر.' }
+                : message
+            )
+          );
+        }
+
+        setIsLocalOnlyMode(false);
+        return;
+      }
 
       const data = await response.json();
 
@@ -97,9 +187,50 @@ export default function AIChat() {
       setMessages((prev) => [...prev, aiMsg]);
     } catch (error) {
       console.error('Chat error:', error);
+      setErrorMessage(error instanceof Error ? error.message : 'حدث خطأ أثناء معالجة الطلب.');
+      setMessages((prev) => {
+        const fallbackMessage: Message = {
+          id: assistantId,
+          role: 'assistant',
+          content: 'تعذر توليد الإجابة الآن. تحقق من اتصال الخادم أو إعدادات مزود الذكاء الاصطناعي، ثم حاول مرة أخرى.',
+          timestamp: new Date(),
+          tone,
+        };
+
+        return prev.some((message) => message.id === assistantId)
+          ? prev.map((message) => (message.id === assistantId ? { ...message, ...fallbackMessage } : message))
+          : [...prev, fallbackMessage];
+      });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const copyMessage = async (message: Message) => {
+    await navigator.clipboard.writeText(message.content);
+    setCopiedMessageId(message.id);
+    setTimeout(() => setCopiedMessageId(null), 1500);
+  };
+
+  const shareConversation = async () => {
+    const text = messages.map((message) => `${message.role === 'user' ? 'السؤال' : 'الإجابة'}: ${message.content}`).join('\n\n');
+    if (navigator.share && text) {
+      await navigator.share({ title: 'محادثة القسطاس الرقمي', text });
+      return;
+    }
+    await navigator.clipboard.writeText(text || 'لا توجد محادثة للمشاركة.');
+    setErrorMessage('تم نسخ المحادثة إلى الحافظة.');
+  };
+
+  const exportConversation = () => {
+    const content = messages.map((message) => `${message.role === 'user' ? 'السؤال' : 'الإجابة'}\n${message.content}`).join('\n\n---\n\n');
+    const blob = new Blob([content || 'لا توجد محادثة بعد.'], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `lexiai-chat-${new Date().toISOString().slice(0, 10)}.txt`;
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -152,16 +283,18 @@ export default function AIChat() {
           <div className="h-8 w-px bg-slate-100 mx-1"></div>
           <div className="flex items-center gap-2">
             <button
+              onClick={shareConversation}
               className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-brand-navy hover:shadow-md transition-all"
               title="مشاركة المحادثة"
             >
               <i className="fa-solid fa-share-nodes"></i>
             </button>
             <button
+              onClick={exportConversation}
               className="h-10 w-10 flex items-center justify-center rounded-xl bg-white border border-slate-200 text-slate-400 hover:text-brand-navy hover:shadow-md transition-all"
-              title="تنزيل كـ PDF"
+              title="تنزيل المحادثة"
             >
-              <i className="fa-solid fa-file-pdf"></i>
+              <i className="fa-solid fa-download"></i>
             </button>
           </div>
         </div>
@@ -175,6 +308,26 @@ export default function AIChat() {
             className="flex-1 overflow-y-auto p-6 space-y-8 custom-scrollbar"
           >
             <AnimatePresence>
+              {errorMessage && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="mx-auto max-w-2xl"
+                >
+                  <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+                    <button
+                      type="button"
+                      onClick={() => setErrorMessage(null)}
+                      className="mt-0.5 text-amber-400 transition hover:text-amber-700"
+                    >
+                      <i className="fa-solid fa-times"></i>
+                    </button>
+                    <p className="flex-1 text-right text-xs font-black leading-relaxed text-amber-800">{errorMessage}</p>
+                  </div>
+                </motion.div>
+              )}
+
               {isLocalOnlyMode && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
@@ -246,6 +399,16 @@ export default function AIChat() {
                     )}
                   </div>
                   <p className="text-[9px] font-black text-slate-400 uppercase px-2">{msg.timestamp.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}</p>
+                  {msg.role === 'assistant' && msg.content && (
+                    <button
+                      type="button"
+                      onClick={() => copyMessage(msg)}
+                      className="mx-2 rounded-lg bg-slate-50 px-2.5 py-1 text-[10px] font-black text-slate-400 transition hover:bg-brand-navy hover:text-white"
+                    >
+                      <i className="fa-solid fa-copy ml-1"></i>
+                      {copiedMessageId === msg.id ? 'تم النسخ' : 'نسخ'}
+                    </button>
+                  )}
                 </div>
               </motion.div>
             ))}
@@ -301,7 +464,7 @@ export default function AIChat() {
               initial={{ width: 0, opacity: 0 }}
               animate={{ width: 360, opacity: 1 }}
               exit={{ width: 0, opacity: 0 }}
-              className="border-r border-slate-100 bg-white flex flex-col overflow-hidden"
+              className="hidden border-r border-slate-100 bg-white lg:flex flex-col overflow-hidden"
             >
               <div className="p-6 border-b border-slate-50 flex items-center justify-between">
                 <button
