@@ -74,6 +74,11 @@ class ApiClient {
         return response.data;
     }
 
+    async getAdminIntelligence(): Promise<ApiResponse<any>> {
+        const response = await this.client.get('/api/admin/intelligence');
+        return response.data;
+    }
+
     async getKycApplications(search?: string, status?: string): Promise<ApiResponse<any[]>> {
         const response = await this.client.get('/api/kyc/applications', {
             params: { search, status },
@@ -93,6 +98,21 @@ class ApiClient {
 
     async getDashboard(): Promise<ApiResponse<any>> {
         const response = await this.client.get('/api/app/dashboard');
+        return response.data;
+    }
+
+    async trackEvent(event: { name: string; page: string; resourceId?: string | null; metadata?: any }): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/app/events', event);
+        return response.data;
+    }
+
+    async trackEvents(events: Array<{ name: string; page: string; resourceId?: string | null; metadata?: any }>): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/app/events', { events });
+        return response.data;
+    }
+
+    async getIntelligence(): Promise<ApiResponse<any>> {
+        const response = await this.client.get('/api/app/intelligence');
         return response.data;
     }
 

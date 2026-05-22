@@ -268,6 +268,17 @@ type AdminMetrics = {
   complianceFlags: number;
 };
 
+type AdminIntelligence = {
+  totals: {
+    events: number;
+    users: number;
+    pages: number;
+  };
+  eventsByName: Array<{ label: string; count: number }>;
+  eventsByPage: Array<{ label: string; count: number }>;
+  emptySearches: Array<{ id: string; metadata: Record<string, unknown>; createdAt: string }>;
+};
+
 type AdminTab = 'overview' | 'users' | 'cases' | 'resources' | 'roles' | 'financials' | 'contracts' | 'kyc' | 'support' | 'settings' | 'compliance' | 'system';
 
 type AdminToast = {
@@ -375,6 +386,7 @@ export default function AdminDashboard() {
   const [newModerationType, setNewModerationType] = useState<'bannedWord' | 'sensitiveTopic'>('bannedWord');
   const [moderationSearch, setModerationSearch] = useState('');
   const [metrics, setMetrics] = useState<AdminMetrics | null>(null);
+  const [intelligence, setIntelligence] = useState<AdminIntelligence | null>(null);
   const navigate = useNavigate();
   const [isLoadingDashboard, setIsLoadingDashboard] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -654,8 +666,9 @@ export default function AdminDashboard() {
       setIsLoadingDashboard(true);
       setLoadError(null);
       try {
-        const [metricRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, servicesRes, contractRes, categoryRes, uploadRes, pageRes, roleRes, permissionRes, caseRes] = await Promise.all([
+        const [metricRes, intelligenceRes, kycRes, userRes, flagRes, ticketRes, alertRes, auditRes, txRes, policyRes, systemRes, aiRes, paymentRes, workflowRes, notificationRes, moderationRes, docsRes, servicesRes, contractRes, categoryRes, uploadRes, pageRes, roleRes, permissionRes, caseRes] = await Promise.all([
           adminFetch('/api/admin/metrics'),
+          adminFetch('/api/admin/intelligence'),
           adminFetch('/api/admin/kyc'),
           adminFetch('/api/admin/users'),
           adminFetch('/api/admin/feature-flags'),
@@ -682,6 +695,7 @@ export default function AdminDashboard() {
         ]);
 
         if (metricRes.ok) setMetrics(await metricRes.json());
+        if (intelligenceRes.ok) setIntelligence((await intelligenceRes.json()).data);
         if (kycRes.ok) setKycApplications(await kycRes.json());
         if (userRes.ok) setUsers(await userRes.json());
         if (flagRes.ok) setFlags(await flagRes.json());
@@ -1729,6 +1743,66 @@ export default function AdminDashboard() {
                   مزامنة
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="grid gap-4 rounded-[2rem] border border-brand-gold/20 bg-brand-gold/10 p-4 shadow-sm lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="rounded-2xl bg-white/80 p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-brand-dark">UX Intelligence</p>
+          <h3 className="mt-2 text-xl font-black text-brand-dark">تعلم استخدام المنصة</h3>
+          <p className="mt-2 text-xs font-bold leading-6 text-slate-600">
+            هذه البطاقة تلخص تفاعلات المستخدمين حتى نعرف أين يبحثون، أين يتوقفون، وما الذي يحتاج تحسينًا في التجربة.
+          </p>
+          <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+            {[
+              { label: 'أحداث', value: intelligence?.totals.events ?? 0 },
+              { label: 'مستخدمون', value: intelligence?.totals.users ?? 0 },
+              { label: 'صفحات', value: intelligence?.totals.pages ?? 0 },
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl border border-slate-100 bg-white p-3">
+                <p className="text-lg font-black text-brand-navy">{item.value}</p>
+                <p className="mt-1 text-[9px] font-black text-slate-400">{item.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl bg-white p-4">
+            <h4 className="text-sm font-black text-brand-dark">أكثر الأحداث</h4>
+            <div className="mt-3 space-y-2">
+              {(intelligence?.eventsByName || []).slice(0, 5).map((item) => (
+                <div key={item.label} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                  <span className="text-xs font-bold text-slate-600">{item.label}</span>
+                  <span className="text-xs font-black text-brand-navy">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white p-4">
+            <h4 className="text-sm font-black text-brand-dark">أكثر الصفحات</h4>
+            <div className="mt-3 space-y-2">
+              {(intelligence?.eventsByPage || []).slice(0, 5).map((item) => (
+                <div key={item.label} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+                  <span className="text-xs font-bold text-slate-600">{item.label}</span>
+                  <span className="text-xs font-black text-brand-navy">{item.count}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="rounded-2xl bg-white p-4">
+            <h4 className="text-sm font-black text-brand-dark">بحث بلا نتائج</h4>
+            <div className="mt-3 space-y-2">
+              {(intelligence?.emptySearches || []).slice(0, 5).map((item) => (
+                <div key={item.id} className="rounded-xl bg-slate-50 px-3 py-2 text-right">
+                  <p className="line-clamp-1 text-xs font-black text-slate-700">{String(item.metadata?.query || 'بدون نص')}</p>
+                  <p className="mt-1 text-[10px] font-bold text-slate-400">{String(item.metadata?.tab || 'unknown')}</p>
+                </div>
+              ))}
+              {(intelligence?.emptySearches || []).length === 0 && (
+                <p className="rounded-xl bg-slate-50 px-3 py-4 text-center text-xs font-bold text-slate-400">لا توجد إشارات حالياً.</p>
+              )}
             </div>
           </div>
         </div>

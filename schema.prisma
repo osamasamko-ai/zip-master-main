@@ -63,6 +63,7 @@ model User {
   contractTemplatesOwned ContractTemplate[]
   contractClausesOwned   ContractClause[]
   contractsOwned         Contract[]         @relation("ContractOwner")
+  userEvents             UserEvent[]
 
   @@index([role, verified, createdAt])
   @@index([blocked, createdAt])
@@ -608,6 +609,22 @@ model AuditLog {
 
   @@index([type, createdAt])
   @@index([resourceType, resourceId])
+}
+
+model UserEvent {
+  id         String   @id @default(uuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id])
+  name       String
+  page       String
+  resourceId String?
+  metadata   String   @default("{}")
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([name, createdAt])
+  @@index([page, createdAt])
+  @@index([resourceId, createdAt])
 }
 
 model WorkflowSetting {

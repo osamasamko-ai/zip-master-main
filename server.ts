@@ -145,6 +145,12 @@ import {
   toggleFeedLike,
   updateFeedPost,
 } from './src/server/feedData';
+import {
+  getAdminIntelligence,
+  getUserIntelligence,
+  recordManyUserEvents,
+  recordUserEvent,
+} from './src/server/intelligenceData';
 
 // Constants for Legal Fees
 const CONTRACT_CREATION_FEE = 25000;
@@ -685,6 +691,30 @@ async function startServer() {
     } catch (error) {
       console.error('Password change error:', error);
       res.status(500).json({ error: 'Failed to update password' });
+    }
+  });
+
+  app.post('/api/app/events', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const events = Array.isArray(req.body?.events) ? req.body.events : null;
+      const result = events
+        ? await recordManyUserEvents(currentUser.userId, events)
+        : await recordUserEvent(currentUser.userId, req.body || {});
+      res.json({ data: result });
+    } catch (error) {
+      console.error('Failed to record user event', error);
+      res.status(500).json({ error: 'Failed to record event' });
+    }
+  });
+
+  app.get('/api/app/intelligence', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      res.json({ data: await getUserIntelligence(currentUser.userId) });
+    } catch (error) {
+      console.error('Failed to load user intelligence', error);
+      res.status(500).json({ error: 'Failed to load recommendations' });
     }
   });
 
@@ -1339,6 +1369,15 @@ async function startServer() {
 
   app.get('/api/admin/metrics', authenticateToken, requireAdminPermission('audit.read'), async (req, res) => {
     res.json(await getAdminMetrics());
+  });
+
+  app.get('/api/admin/intelligence', authenticateToken, requireAdminPermission('audit.read'), async (req, res) => {
+    try {
+      res.json({ data: await getAdminIntelligence() });
+    } catch (error) {
+      console.error('Failed to load admin intelligence', error);
+      res.status(500).json({ error: 'Failed to load intelligence analytics' });
+    }
   });
 
   app.get('/api/admin/alerts', authenticateToken, requireAdminPermission('audit.read'), async (req, res) => {

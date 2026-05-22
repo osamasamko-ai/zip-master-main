@@ -5,6 +5,7 @@ import { useNavigate } from 'react-router-dom';
 import html2pdf from 'html2pdf.js';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
+import { useTrackEvent, useUserIntelligence } from '../hooks/useIntelligence';
 
 export interface LawSource {
   id: string;
@@ -154,6 +155,8 @@ export default function LegalDocs() {
   const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
   const exploreSearchRef = useRef<HTMLInputElement>(null);
+  const { trackEvent } = useTrackEvent('legalDocs');
+  const { data: intelligence, refresh: refreshIntelligence } = useUserIntelligence();
   const [docs, setDocs] = useState<LawSource[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -333,6 +336,15 @@ export default function LegalDocs() {
   const selectDoc = (docId: string) => {
     setSelectedDocId(docId);
     setRecentDocIds((prev) => [docId, ...prev.filter((id) => id !== docId)].slice(0, 8));
+    const doc = docs.find((item) => item.id === docId);
+    if (doc) {
+      trackEvent('legal_doc_opened', {
+        title: doc.title,
+        law: doc.law,
+        category: doc.category,
+        source: doc.source,
+      }, doc.id);
+    }
   };
 
   const runQuickSearch = (query: string) => {
@@ -343,6 +355,7 @@ export default function LegalDocs() {
     setExploreQuery(trimmedQuery);
     setExploreCategoryFilter('all');
     setQuickQuestion(trimmedQuery);
+    trackEvent('legal_quick_search', { query: trimmedQuery });
 
     const firstMatch = filterExploreDocs(docs, trimmedQuery, 'all')[0];
     if (firstMatch) selectDoc(firstMatch.id);
@@ -351,6 +364,12 @@ export default function LegalDocs() {
   const togglePinnedDoc = (docId: string) => {
     const isPinned = pinnedDocIds.includes(docId);
     setPinnedDocIds((prev) => (isPinned ? prev.filter((id) => id !== docId) : [docId, ...prev]));
+    const doc = docs.find((item) => item.id === docId);
+    trackEvent(isPinned ? 'legal_doc_unpinned' : 'legal_doc_pinned', {
+      title: doc?.title,
+      category: doc?.category,
+      law: doc?.law,
+    }, docId);
     showToast(isPinned ? 'تمت الإزالة من المحفوظات' : 'تم الحفظ في المحفوظات', 'info');
   };
 
@@ -369,6 +388,7 @@ export default function LegalDocs() {
       ...prev,
       [selectedDoc.id]: [...(prev[selectedDoc.id] || []), newComment]
     }));
+    trackEvent('legal_note_added', { title: selectedDoc.title, category: selectedDoc.category }, selectedDoc.id);
     setCommentInput('');
   };
 
@@ -464,6 +484,7 @@ export default function LegalDocs() {
 
     try {
       await html2pdf().from(element).set(opt).save();
+      trackEvent('legal_pdf_exported', { title: selectedDoc.title, category: selectedDoc.category }, selectedDoc.id);
       showToast('تم تصدير الوثيقة كـ PDF بنجاح', 'success');
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -516,6 +537,22 @@ export default function LegalDocs() {
           ? selectedCategory
           : 'workspace';
   const selectedDocComments = selectedDoc ? docComments[selectedDoc.id] || [] : [];
+
+  useEffect(() => {
+    const query = activeQuery.trim();
+    if (!query || loading) return;
+    const timeout = window.setTimeout(() => {
+      trackEvent(currentResultCount === 0 ? 'search_empty' : 'search_completed', {
+        query,
+        tab: activeTab,
+        category: activeCategoryLabel,
+        resultCount: currentResultCount,
+      });
+      void refreshIntelligence();
+    }, 900);
+
+    return () => window.clearTimeout(timeout);
+  }, [activeQuery, activeTab, activeCategoryLabel, currentResultCount, loading, refreshIntelligence, trackEvent]);
 
   const renderDocList = (items: LawSource[], emptyMessage: string) => {
     const query = getActiveSearchQuery();
@@ -662,6 +699,37 @@ export default function LegalDocs() {
           </div>
         </div>
       </section>
+
+      {intelligence?.recommendations?.length > 0 && (
+        <section className="rounded-lg border border-brand-gold/20 bg-brand-gold/10 p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-dark">Smart UX</p>
+              <h2 className="mt-1 text-base font-black text-brand-dark">اقتراحات مبنية على استخدامك</h2>
+            </div>
+            <div className="grid flex-1 gap-2 md:grid-cols-3">
+              {intelligence.recommendations.slice(0, 3).map((item: any) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    trackEvent('smart_recommendation_clicked', { title: item.title, target: item.target });
+                    if (item.id === 'repeat-search' && intelligence.topSearches?.[0]?.label) runQuickSearch(intelligence.topSearches[0].label);
+                    if (item.id === 'continue-category' && intelligence.topCategories?.[0]?.label) {
+                      setActiveTab('explore');
+                      setExploreCategoryFilter(intelligence.topCategories[0].label);
+                    }
+                  }}
+                  className="rounded-lg border border-brand-gold/20 bg-white/70 p-3 text-right transition hover:border-brand-navy/30 hover:bg-white"
+                >
+                  <p className="line-clamp-1 text-xs font-black text-brand-dark">{item.title}</p>
+                  <p className="mt-1 line-clamp-2 text-[11px] font-bold leading-5 text-slate-500">{item.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 gap-5 xl:grid-cols-[1.1fr_0.95fr]">

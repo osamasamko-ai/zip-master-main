@@ -4,6 +4,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useTrackEvent, useUserIntelligence } from '../hooks/useIntelligence';
 
 interface Source {
   title: string;
@@ -33,6 +34,8 @@ export default function AIChat() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const { trackEvent } = useTrackEvent('aiChat');
+  const { data: intelligence, refresh: refreshIntelligence } = useUserIntelligence();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -76,6 +79,7 @@ export default function AIChat() {
     setInput('');
     setErrorMessage(null);
     setIsLoading(true);
+    trackEvent('ai_question_sent', { question, tone, historyLength: history.length });
 
     try {
       const response = await fetch('/api/legal/ask', {
@@ -167,6 +171,8 @@ export default function AIChat() {
         }
 
         setIsLocalOnlyMode(false);
+        trackEvent('ai_answer_received', { question, mode: 'stream', sourceCount: streamSources.length });
+        void refreshIntelligence();
         return;
       }
 
@@ -174,6 +180,12 @@ export default function AIChat() {
 
       // تحديث حالة وضع البحث المحلي بناءً على رد الخادم
       setIsLocalOnlyMode(data.mode === 'local');
+      trackEvent('ai_answer_received', {
+        question,
+        mode: data.mode || 'ai',
+        sourceCount: Array.isArray(data.sources) ? data.sources.length : 0,
+      });
+      void refreshIntelligence();
 
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
@@ -187,6 +199,7 @@ export default function AIChat() {
       setMessages((prev) => [...prev, aiMsg]);
     } catch (error) {
       console.error('Chat error:', error);
+      trackEvent('ai_error', { question, message: error instanceof Error ? error.message : 'unknown' });
       setErrorMessage(error instanceof Error ? error.message : 'حدث خطأ أثناء معالجة الطلب.');
       setMessages((prev) => {
         const fallbackMessage: Message = {
@@ -208,6 +221,7 @@ export default function AIChat() {
 
   const copyMessage = async (message: Message) => {
     await navigator.clipboard.writeText(message.content);
+    trackEvent('ai_answer_copied', { length: message.content.length });
     setCopiedMessageId(message.id);
     setTimeout(() => setCopiedMessageId(null), 1500);
   };
@@ -216,9 +230,11 @@ export default function AIChat() {
     const text = messages.map((message) => `${message.role === 'user' ? 'السؤال' : 'الإجابة'}: ${message.content}`).join('\n\n');
     if (navigator.share && text) {
       await navigator.share({ title: 'محادثة القسطاس الرقمي', text });
+      trackEvent('ai_conversation_shared', { method: 'native', messageCount: messages.length });
       return;
     }
     await navigator.clipboard.writeText(text || 'لا توجد محادثة للمشاركة.');
+    trackEvent('ai_conversation_shared', { method: 'clipboard', messageCount: messages.length });
     setErrorMessage('تم نسخ المحادثة إلى الحافظة.');
   };
 
@@ -231,6 +247,7 @@ export default function AIChat() {
     anchor.download = `lexiai-chat-${new Date().toISOString().slice(0, 10)}.txt`;
     anchor.click();
     URL.revokeObjectURL(url);
+    trackEvent('ai_conversation_exported', { messageCount: messages.length });
   };
 
   return (
@@ -355,10 +372,25 @@ export default function AIChat() {
                   <p className="text-sm text-slate-500 mt-2 font-bold leading-relaxed">اسأل عن أي مادة قانونية عراقية، أو اطلب تلخيصاً لقضيتك الحالية.</p>
                 </div>
                 <div className="grid grid-cols-1 gap-2 w-full">
+                  {intelligence?.topSearches?.slice(0, 2).map((item: any) => (
+                    <button
+                      key={item.label}
+                      onClick={() => {
+                        trackEvent('ai_personal_prompt_clicked', { query: item.label });
+                        handleSend(item.label);
+                      }}
+                      className="rounded-2xl border border-brand-gold/20 bg-brand-gold/10 p-4 text-sm font-black text-brand-dark transition hover:border-brand-navy hover:bg-white hover:shadow-md"
+                    >
+                      متابعة: {item.label}
+                    </button>
+                  ))}
                   {SUGGESTED_PROMPTS.map(p => (
                     <button
                       key={p}
-                      onClick={() => handleSend(p)}
+                      onClick={() => {
+                        trackEvent('ai_suggested_prompt_clicked', { query: p });
+                        handleSend(p);
+                      }}
                       className="p-4 rounded-2xl border border-slate-100 bg-white hover:border-brand-gold hover:shadow-md transition text-sm font-bold text-slate-600"
                     >
                       {p}
@@ -389,7 +421,10 @@ export default function AIChat() {
                     {msg.sources && msg.sources.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-slate-50 flex flex-wrap gap-2 justify-end">
                         <button
-                          onClick={() => setActiveSources(msg.sources!)}
+                          onClick={() => {
+                            trackEvent('ai_sources_opened', { sourceCount: msg.sources!.length });
+                            setActiveSources(msg.sources!);
+                          }}
                           className="text-[10px] font-black bg-slate-50 text-brand-navy px-3 py-1.5 rounded-lg border border-slate-100 hover:bg-brand-navy hover:text-white transition shadow-sm"
                         >
                           <i className="fa-solid fa-book-bookmark ml-1"></i>
