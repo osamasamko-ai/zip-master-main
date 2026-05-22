@@ -24,7 +24,7 @@ export interface Comment {
   userName: string;
 }
 
-type LegalTab = 'explore' | 'categories' | 'workspace';
+type LegalTab = 'explore' | 'gazette' | 'categories' | 'workspace';
 
 const tabs: Array<{
   id: LegalTab;
@@ -33,9 +33,25 @@ const tabs: Array<{
   description: string;
 }> = [
     { id: 'explore', label: 'الاستكشاف', icon: 'fa-compass', description: 'بحث كثيف وسريع داخل القاعدة القانونية' },
+    { id: 'gazette', label: 'الوقائع العراقية', icon: 'fa-newspaper', description: 'روابط ومراجع النشر الرسمي' },
     { id: 'categories', label: 'الفئات', icon: 'fa-table-cells-large', description: 'تصفح منظم حسب المجال القانوني' },
     { id: 'workspace', label: 'مساحة العمل', icon: 'fa-bookmark', description: 'المحفوظات والمراجع الأخيرة' }
   ];
+
+const officialGazetteLinks = [
+  {
+    title: 'دائرة الوقائع العراقية',
+    description: 'صفحة وزارة العدل الخاصة بدائرة الوقائع العراقية والإعلانات المرتبطة بها.',
+    url: 'https://www.moj.gov.iq/facts/',
+    icon: 'fa-building-columns'
+  },
+  {
+    title: 'جريدة الوقائع العراقية',
+    description: 'مدخل وزارة العدل للاطلاع على أعداد وإعلانات جريدة الوقائع العراقية.',
+    url: 'https://www.moj.gov.iq/iraqmag/',
+    icon: 'fa-newspaper'
+  }
+];
 
 const quickSearchSuggestions = [
   'نفقة وحضانة',
@@ -115,6 +131,24 @@ export const filterWorkspaceDocs = (docs: LawSource[], workspaceQuery: string, p
   });
 };
 
+export const filterGazetteDocs = (docs: LawSource[], gazetteQuery: string) => {
+  const normalizedQuery = gazetteQuery.trim().toLowerCase();
+
+  return docs
+    .filter((doc) => {
+      if (!normalizedQuery) return true;
+      return (
+        doc.title.toLowerCase().includes(normalizedQuery) ||
+        doc.law.toLowerCase().includes(normalizedQuery) ||
+        doc.summary.toLowerCase().includes(normalizedQuery) ||
+        doc.article.toLowerCase().includes(normalizedQuery) ||
+        doc.category.toLowerCase().includes(normalizedQuery) ||
+        doc.source.toLowerCase().includes(normalizedQuery)
+      );
+    })
+    .sort((left, right) => Number(right.source.includes('moj.gov.iq')) - Number(left.source.includes('moj.gov.iq')));
+};
+
 export default function LegalDocs() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -162,6 +196,7 @@ export default function LegalDocs() {
   const [exploreQuery, setExploreQuery] = useState('');
   const [quickQuestion, setQuickQuestion] = useState('');
   const [exploreCategoryFilter, setExploreCategoryFilter] = useState('all');
+  const [gazetteQuery, setGazetteQuery] = useState('');
   const [workspaceQuery, setWorkspaceQuery] = useState('');
   const [categorySearchQuery, setCategorySearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
@@ -256,6 +291,15 @@ export default function LegalDocs() {
     return filterCategoryDocs(docs, categorySearchQuery, selectedCategory);
   }, [docs, selectedCategory, categorySearchQuery]);
 
+  const gazetteDocs = useMemo(() => {
+    return filterGazetteDocs(docs, gazetteQuery);
+  }, [docs, gazetteQuery]);
+
+  const officialSourceDocs = useMemo(
+    () => docs.filter((doc) => doc.source.includes('moj.gov.iq')),
+    [docs]
+  );
+
   const pinnedDocs = useMemo(
     () => docs.filter((doc) => pinnedDocIds.includes(doc.id)),
     [docs, pinnedDocIds]
@@ -273,6 +317,7 @@ export default function LegalDocs() {
   const selectedDoc =
     docs.find((doc) => doc.id === selectedDocId) ??
     exploreDocs[0] ??
+    gazetteDocs[0] ??
     categoryDocs[0] ??
     workspaceDocs[0] ??
     docs[0] ??
@@ -430,6 +475,7 @@ export default function LegalDocs() {
 
   const getActiveSearchQuery = () => {
     if (activeTab === 'explore') return exploreQuery;
+    if (activeTab === 'gazette') return gazetteQuery;
     if (activeTab === 'categories') return categorySearchQuery;
     return workspaceQuery;
   };
@@ -445,6 +491,10 @@ export default function LegalDocs() {
       setSelectedCategory('all');
       return;
     }
+    if (activeTab === 'gazette') {
+      setGazetteQuery('');
+      return;
+    }
     setWorkspaceQuery('');
   };
 
@@ -452,15 +502,19 @@ export default function LegalDocs() {
   const currentResultCount =
     activeTab === 'explore'
       ? exploreDocs.length
-      : activeTab === 'categories'
-        ? categoryDocs.length
-        : workspaceDocs.length;
+      : activeTab === 'gazette'
+        ? gazetteDocs.length
+        : activeTab === 'categories'
+          ? categoryDocs.length
+          : workspaceDocs.length;
   const activeCategoryLabel =
     activeTab === 'explore'
       ? exploreCategoryFilter
-      : activeTab === 'categories'
-        ? selectedCategory
-        : 'workspace';
+      : activeTab === 'gazette'
+        ? 'الوقائع العراقية'
+        : activeTab === 'categories'
+          ? selectedCategory
+          : 'workspace';
   const selectedDocComments = selectedDoc ? docComments[selectedDoc.id] || [] : [];
 
   const renderDocList = (items: LawSource[], emptyMessage: string) => {
@@ -627,7 +681,7 @@ export default function LegalDocs() {
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">نطاق البحث الحالي</p>
                 <p className="mt-1 text-sm font-black text-brand-dark">
-                  {activeTab === 'explore' ? 'الاستكشاف' : activeTab === 'categories' ? 'الفئات' : 'مساحة العمل'} • {activeCategoryLabel === 'all' ? 'كل التصنيفات' : activeCategoryLabel}
+                  {activeTab === 'explore' ? 'الاستكشاف' : activeTab === 'gazette' ? 'الوقائع العراقية' : activeTab === 'categories' ? 'الفئات' : 'مساحة العمل'} • {activeCategoryLabel === 'all' ? 'كل التصنيفات' : activeCategoryLabel}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -641,7 +695,7 @@ export default function LegalDocs() {
             <div
               role="tablist"
               aria-label="Legal docs sections"
-              className="grid grid-cols-1 gap-2 md:grid-cols-3"
+              className="grid grid-cols-1 gap-2 md:grid-cols-2 xl:grid-cols-4"
             >
               {tabs.map((tab) => (
                 <button
@@ -730,6 +784,78 @@ export default function LegalDocs() {
                     ))}
                   </div>
                   <div className="mt-6">{renderDocList(exploreDocs, 'لم يتم العثور على مواد قانونية مطابقة للبحث الحالي.')}</div>
+                </div>
+              )}
+
+              {activeTab === 'gazette' && (
+                <div className="min-w-0 space-y-5">
+                  <section className="min-w-0 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                      <div className="min-w-0">
+                        <h3 className="text-xl font-black text-brand-dark">الوقائع العراقية</h3>
+                        <p className="mt-1 text-sm font-bold leading-6 text-slate-400">
+                          الوصول السريع لمداخل وزارة العدل الرسمية مع بحث داخل القوانين المتوفرة في القاعدة.
+                        </p>
+                      </div>
+                      <div className="relative w-full min-w-0 lg:max-w-sm">
+                        <input
+                          type="search"
+                          value={gazetteQuery}
+                          onChange={(event) => setGazetteQuery(event.target.value)}
+                          placeholder="ابحث باسم القانون أو رقم المادة..."
+                          className="w-full rounded-lg border border-slate-200 bg-slate-50 py-3 pl-11 pr-5 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white"
+                        />
+                        <i className="fa-solid fa-search absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid gap-3 md:grid-cols-2">
+                      {officialGazetteLinks.map((link) => (
+                        <a
+                          key={link.url}
+                          href={link.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="group rounded-lg border border-slate-200 bg-slate-50 p-4 text-right transition hover:border-brand-navy/30 hover:bg-white hover:shadow-sm"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-navy/10 text-brand-navy transition group-hover:bg-brand-navy group-hover:text-white">
+                              <i className={`fa-solid ${link.icon}`}></i>
+                            </div>
+                            <div className="min-w-0">
+                              <p className="text-sm font-black text-brand-dark">{link.title}</p>
+                              <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{link.description}</p>
+                            </div>
+                          </div>
+                        </a>
+                      ))}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                      <div className="rounded-lg border border-brand-gold/20 bg-brand-gold/10 p-3">
+                        <p className="text-[10px] font-black text-brand-dark">مصادر وزارة العدل</p>
+                        <p className="mt-1 text-2xl font-black text-brand-dark">{officialSourceDocs.length.toLocaleString('ar-IQ')}</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-[10px] font-black text-slate-400">نتائج التبويب</p>
+                        <p className="mt-1 text-2xl font-black text-brand-navy">{gazetteDocs.length.toLocaleString('ar-IQ')}</p>
+                      </div>
+                      <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                        <p className="text-[10px] font-black text-slate-400">إجمالي القاعدة</p>
+                        <p className="mt-1 text-2xl font-black text-brand-dark">{totalArticles.toLocaleString('ar-IQ')}</p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 rounded-lg border border-dashed border-slate-200 bg-slate-50 p-4">
+                      <p className="text-xs font-bold leading-6 text-slate-500">
+                        هذا التبويب يسهّل الوصول إلى الوقائع العراقية ومراجع القاعدة. عند وجود إجراء رسمي أو استشهاد قضائي، يعتمد النص المنشور في الوقائع العراقية لدى وزارة العدل.
+                      </p>
+                    </div>
+                  </section>
+
+                  <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    {renderDocList(gazetteDocs, 'لا توجد مراجع مطابقة في تبويب الوقائع العراقية.')}
+                  </section>
                 </div>
               )}
 
@@ -1033,6 +1159,14 @@ export default function LegalDocs() {
                   >
                     <span className="text-xs font-black">التصنيفات القانونية</span>
                     <i className="fa-solid fa-table-cells text-xs opacity-40 group-hover:opacity-100"></i>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('gazette')}
+                    className="group flex w-full items-center justify-between rounded-lg bg-slate-50 p-3 text-right transition hover:bg-brand-navy hover:text-white"
+                  >
+                    <span className="text-xs font-black">الوقائع العراقية</span>
+                    <i className="fa-solid fa-newspaper text-xs opacity-40 group-hover:opacity-100"></i>
                   </button>
                   <button
                     type="button"
