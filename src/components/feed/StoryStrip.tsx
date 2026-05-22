@@ -166,7 +166,7 @@ export default function StoryStrip({
 
   return (
     <>
-      <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+      <section id="feed-stories" className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm scroll-mt-24">
         <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">
             <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">

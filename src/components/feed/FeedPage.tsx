@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -11,6 +12,7 @@ import SuggestedLawyers from './SuggestedLawyers';
 import StoryStrip from './StoryStrip';
 import TrendingTopics from './TrendingTopics';
 import type { FeedFilter, FeedPost, FeedStory, SuggestedLawyer } from './types';
+import { useTrackEvent, useUserIntelligence } from '../../hooks/useIntelligence';
 
 const FEED_PAGE_SIZE = 8;
 
@@ -35,6 +37,8 @@ function SkeletonPost() {
 
 export default function FeedPage() {
   const { user } = useAuth();
+  const { trackEvent } = useTrackEvent('feed');
+  const { data: intelligence, refresh: refreshIntelligence } = useUserIntelligence();
   const [posts, setPosts] = useState<FeedPost[]>([]);
   const [stories, setStories] = useState<FeedStory[]>([]);
   const [lawyers, setLawyers] = useState<SuggestedLawyer[]>([]);
@@ -63,6 +67,65 @@ export default function FeedPage() {
   );
 
   const relatedPosts = useMemo(() => posts.filter((post) => post.featured || post.pinned).slice(0, 3), [posts]);
+  const interestTerms = useMemo(() => {
+    const categories = (intelligence?.topCategories || []).map((item: any) => item.label);
+    const searches = (intelligence?.topSearches || []).map((item: any) => item.label);
+    return [...categories, ...searches].map((item) => String(item).toLowerCase()).filter(Boolean);
+  }, [intelligence]);
+
+  const scoreText = useCallback((...parts: Array<string | undefined | null>) => {
+    const text = parts.join(' ').toLowerCase();
+    if (!interestTerms.length) return 0;
+    return interestTerms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0);
+  }, [interestTerms]);
+
+  const smartPosts = useMemo(() => {
+    const scored = posts
+      .map((post) => ({
+        post,
+        score:
+          scoreText(post.category, post.content, post.author.specialty) +
+          (post.featured ? 1.5 : 0) +
+          (post.pinned ? 1 : 0) +
+          (post.savedByMe ? 0.5 : 0),
+      }))
+      .filter((item) => item.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 3)
+      .map((item) => item.post);
+
+    return scored.length ? scored : relatedPosts;
+  }, [posts, relatedPosts, scoreText]);
+
+  const smartStories = useMemo(() => {
+    const scored = stories
+      .filter((story) => !story.isArchived)
+      .map((story) => ({
+        story,
+        score:
+          scoreText(story.text, story.author.specialty, story.author.name) +
+          (!story.seenByMe ? 1 : 0),
+      }))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 3)
+      .map((item) => item.story);
+
+    return scored;
+  }, [scoreText, stories]);
+
+  const smartLawyers = useMemo(() => {
+    const scored = lawyers
+      .map((lawyer) => ({
+        lawyer,
+        score: scoreText(lawyer.specialty, lawyer.lawyerProfile?.specialty, lawyer.name) + ((lawyer.followers || 0) / 1000),
+      }))
+      .sort((left, right) => right.score - left.score)
+      .slice(0, 3)
+      .map((item) => item.lawyer);
+
+    return scored;
+  }, [lawyers, scoreText]);
+
   const flash = (message: string) => {
     setToast(message);
     window.setTimeout(() => setToast(''), 2400);
@@ -110,8 +173,9 @@ export default function FeedPage() {
     setPosts([]);
     setNextOffset(0);
     setHasMorePosts(false);
+    trackEvent('feed_filter_changed', { filter: activeFilter });
     loadPosts(activeFilter, 0, false);
-  }, [activeFilter, loadPosts]);
+  }, [activeFilter, loadPosts, trackEvent]);
 
   useEffect(() => {
     const target = loadMoreRef.current;
@@ -144,6 +208,8 @@ export default function FeedPage() {
       const response = await apiClient.createFeedPost(payload);
       setPosts((current) => [response.data, ...current]);
       setNextOffset((offset) => offset + 1);
+      trackEvent('feed_post_created', { category: payload.category, hasMedia: Boolean(payload.media) }, response.data?.id);
+      void refreshIntelligence();
       flash('تم نشر المنشور في تواصل.');
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر نشر المنشور.');
@@ -158,6 +224,8 @@ export default function FeedPage() {
     try {
       const response = await apiClient.createFeedStory(payload);
       setStories((current) => [response.data, ...current]);
+      trackEvent('feed_story_created', { hasMedia: Boolean(payload.media), textLength: payload.text.length }, response.data?.id);
+      void refreshIntelligence();
       flash('تم نشر القصة لمدة 24 ساعة.');
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر نشر القصة.');
@@ -167,6 +235,14 @@ export default function FeedPage() {
   };
 
   const viewStory = async (storyId: string) => {
+    const story = stories.find((item) => item.id === storyId);
+    trackEvent('feed_story_viewed', {
+      authorId: story?.author.id,
+      authorName: story?.author.name,
+      category: story?.author.specialty,
+      title: story?.text,
+    }, storyId);
+    void refreshIntelligence();
     const previousStories = stories;
     setStories((current) =>
       current.map((story) =>
@@ -189,6 +265,9 @@ export default function FeedPage() {
     try {
       const response = await apiClient.likeFeedPost(postId);
       replacePost(response.data);
+      const post = posts.find((item) => item.id === postId);
+      trackEvent('feed_post_liked', { category: post?.category, title: post?.content, authorId: post?.author.id }, postId);
+      void refreshIntelligence();
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر تحديث الإعجاب.');
     }
@@ -198,6 +277,9 @@ export default function FeedPage() {
     try {
       const response = await apiClient.saveFeedPost(postId);
       replacePost(response.data);
+      const post = posts.find((item) => item.id === postId);
+      trackEvent('feed_post_saved', { category: post?.category, title: post?.content, authorId: post?.author.id }, postId);
+      void refreshIntelligence();
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر حفظ المنشور.');
     }
@@ -209,6 +291,8 @@ export default function FeedPage() {
       await navigator.clipboard.writeText(url);
       const response = await apiClient.shareFeedPost(postId);
       replacePost(response.data);
+      const post = posts.find((item) => item.id === postId);
+      trackEvent('feed_post_shared', { category: post?.category, title: post?.content, authorId: post?.author.id }, postId);
       flash('تم نسخ رابط المنشور.');
     } catch {
       flash(url);
@@ -219,6 +303,9 @@ export default function FeedPage() {
     try {
       const response = await apiClient.addFeedComment(postId, content);
       replacePost(response.data);
+      const post = posts.find((item) => item.id === postId);
+      trackEvent('feed_post_commented', { category: post?.category, title: post?.content, authorId: post?.author.id }, postId);
+      void refreshIntelligence();
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر إضافة التعليق.');
     }
@@ -259,6 +346,12 @@ export default function FeedPage() {
   const followLawyer = async (lawyerId: string) => {
     try {
       await apiClient.followLawyer(lawyerId);
+      const lawyer = lawyers.find((item) => item.id === lawyerId);
+      trackEvent('feed_lawyer_followed', {
+        lawyerName: lawyer?.name,
+        category: lawyer?.lawyerProfile?.specialty || lawyer?.specialty,
+      }, lawyerId);
+      void refreshIntelligence();
       flash('تمت متابعة المحامي.');
     } catch (err: any) {
       setError(err.response?.data?.error || 'تعذر متابعة المحامي.');
@@ -266,7 +359,19 @@ export default function FeedPage() {
   };
 
   const openPost = (postId: string) => {
+    const post = posts.find((item) => item.id === postId);
+    trackEvent('feed_post_opened', { category: post?.category, title: post?.content, authorId: post?.author.id }, postId);
     document.getElementById(postId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const openStorySuggestion = (story: FeedStory) => {
+    trackEvent('feed_story_suggested_opened', {
+      authorId: story.author.id,
+      authorName: story.author.name,
+      category: story.author.specialty,
+      title: story.text,
+    }, story.id);
+    document.getElementById('feed-stories')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   return (
@@ -299,6 +404,76 @@ export default function FeedPage() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {(smartPosts.length > 0 || smartStories.length > 0 || smartLawyers.length > 0) && (
+        <section className="mt-4 rounded-lg border border-[#1877f2]/15 bg-white p-4 shadow-sm">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#1877f2]">Smart Feed</p>
+              <h2 className="mt-1 text-base font-black text-slate-900">اقتراحات تواصل المناسبة لك</h2>
+              <p className="mt-1 text-xs font-bold text-slate-500">
+                مبنية على آخر قراءاتك، بحثك، والمنشورات التي تتفاعل معها.
+              </p>
+            </div>
+            {interestTerms.length > 0 && (
+              <div className="flex max-w-xl gap-2 overflow-x-auto pb-1">
+                {interestTerms.slice(0, 5).map((term) => (
+                  <span key={term} className="shrink-0 rounded-full bg-[#e7f3ff] px-3 py-1.5 text-[10px] font-black text-[#1877f2]">
+                    #{term}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-4 grid gap-3 lg:grid-cols-3">
+            <SmartPanel title="منشور مناسب" icon="fa-file-lines">
+              {smartPosts.slice(0, 2).map((post) => (
+                <button
+                  key={post.id}
+                  type="button"
+                  onClick={() => openPost(post.id)}
+                  className="w-full rounded-md bg-slate-50 p-3 text-right transition hover:bg-[#e7f3ff]"
+                >
+                  <p className="line-clamp-2 text-xs font-black leading-6 text-slate-800">{post.content}</p>
+                  <p className="mt-2 text-[10px] font-bold text-[#1877f2]">#{post.category}</p>
+                </button>
+              ))}
+            </SmartPanel>
+            <SmartPanel title="قصة للمتابعة" icon="fa-clock-rotate-left">
+              {smartStories.slice(0, 2).map((story) => (
+                <button
+                  key={story.id}
+                  type="button"
+                  onClick={() => openStorySuggestion(story)}
+                  className="flex w-full items-center gap-3 rounded-md bg-slate-50 p-3 text-right transition hover:bg-[#e7f3ff]"
+                >
+                  <img src={story.author.avatar} alt="" loading="lazy" decoding="async" className="h-10 w-10 rounded-full object-cover" />
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-black text-slate-900">{story.author.name}</p>
+                    <p className="line-clamp-1 text-[10px] font-bold text-slate-500">{story.text || story.author.specialty || 'قصة جديدة'}</p>
+                  </div>
+                </button>
+              ))}
+            </SmartPanel>
+            <SmartPanel title="محامٍ مقترح" icon="fa-user-tie">
+              {smartLawyers.slice(0, 2).map((lawyer) => (
+                <div key={lawyer.id} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
+                  <button onClick={() => followLawyer(lawyer.id)} className="rounded-md bg-[#1877f2] px-3 py-2 text-[11px] font-black text-white">
+                    متابعة
+                  </button>
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="min-w-0 text-right">
+                      <p className="truncate text-xs font-black text-slate-900">{lawyer.name}</p>
+                      <p className="truncate text-[10px] font-bold text-slate-400">{lawyer.lawyerProfile?.specialty || lawyer.specialty || 'محامٍ موثق'}</p>
+                    </div>
+                    <img src={lawyer.avatar || lawyer.lawyerProfile?.avatar || lawyer.img || 'https://i.pravatar.cc/150'} alt="" loading="lazy" decoding="async" className="h-10 w-10 rounded-full object-cover" />
+                  </div>
+                </div>
+              ))}
+            </SmartPanel>
+          </div>
+        </section>
+      )}
 
       <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,680px)_minmax(280px,340px)] xl:items-start xl:justify-center">
         <aside className="hidden space-y-4 xl:block xl:sticky xl:top-24">
@@ -421,6 +596,22 @@ function Stat({ label, value }: { label: string; value: number }) {
     <div className="rounded-lg bg-slate-50 p-3">
       <p className="text-xl font-black text-slate-900">{value}</p>
       <p className="text-[10px] font-black text-slate-400">{label}</p>
+    </div>
+  );
+}
+
+function SmartPanel({ title, icon, children }: { title: string; icon: string; children: ReactNode }) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="text-sm font-black text-slate-900">{title}</h3>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
+          <i className={`fa-solid ${icon} text-xs`}></i>
+        </span>
+      </div>
+      <div className="space-y-2">
+        {children || <p className="rounded-md bg-slate-50 p-3 text-center text-xs font-bold text-slate-400">لا توجد اقتراحات بعد.</p>}
+      </div>
     </div>
   );
 }
