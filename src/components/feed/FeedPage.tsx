@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
@@ -49,6 +48,7 @@ export default function FeedPage() {
   const [isPublishingStory, setIsPublishingStory] = useState(false);
   const [nextOffset, setNextOffset] = useState(0);
   const [hasMorePosts, setHasMorePosts] = useState(false);
+  const [postSortMode, setPostSortMode] = useState<'smart' | 'latest'>('smart');
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -79,23 +79,27 @@ export default function FeedPage() {
     return interestTerms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0);
   }, [interestTerms]);
 
-  const smartPosts = useMemo(() => {
-    const scored = posts
-      .map((post) => ({
-        post,
-        score:
-          scoreText(post.category, post.content, post.author.specialty) +
-          (post.featured ? 1.5 : 0) +
-          (post.pinned ? 1 : 0) +
-          (post.savedByMe ? 0.5 : 0),
-      }))
-      .filter((item) => item.score > 0)
-      .sort((left, right) => right.score - left.score)
-      .slice(0, 3)
-      .map((item) => item.post);
+  const scorePost = useCallback((post: FeedPost) => {
+    return (
+      scoreText(post.category, post.content, post.author.specialty, post.author.name) +
+      (post.featured ? 1.5 : 0) +
+      (post.pinned ? 1 : 0) +
+      (post.savedByMe ? 0.5 : 0) +
+      (post.likedByMe ? 0.25 : 0)
+    );
+  }, [scoreText]);
 
-    return scored.length ? scored : relatedPosts;
-  }, [posts, relatedPosts, scoreText]);
+  const sortedPosts = useMemo(() => {
+    if (postSortMode === 'latest') return posts;
+
+    return [...posts].sort((left, right) => {
+      const scoreDelta = scorePost(right) - scorePost(left);
+      if (scoreDelta !== 0) return scoreDelta;
+      if (right.pinned !== left.pinned) return Number(right.pinned) - Number(left.pinned);
+      if (right.featured !== left.featured) return Number(right.featured) - Number(left.featured);
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    });
+  }, [postSortMode, posts, scorePost]);
 
   const smartStories = useMemo(() => {
     const scored = stories
@@ -364,16 +368,6 @@ export default function FeedPage() {
     document.getElementById(postId)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
-  const openStorySuggestion = (story: FeedStory) => {
-    trackEvent('feed_story_suggested_opened', {
-      authorId: story.author.id,
-      authorName: story.author.name,
-      category: story.author.specialty,
-      title: story.text,
-    }, story.id);
-    document.getElementById('feed-stories')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
-
   return (
     <div className="w-full min-w-0 bg-[#f0f2f5] px-0 pb-10 text-right sm:px-2" dir="rtl">
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
@@ -405,76 +399,6 @@ export default function FeedPage() {
         )}
       </AnimatePresence>
 
-      {(smartPosts.length > 0 || smartStories.length > 0 || smartLawyers.length > 0) && (
-        <section className="mt-4 rounded-lg border border-[#1877f2]/15 bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#1877f2]">Smart Feed</p>
-              <h2 className="mt-1 text-base font-black text-slate-900">اقتراحات تواصل المناسبة لك</h2>
-              <p className="mt-1 text-xs font-bold text-slate-500">
-                مبنية على آخر قراءاتك، بحثك، والمنشورات التي تتفاعل معها.
-              </p>
-            </div>
-            {interestTerms.length > 0 && (
-              <div className="flex max-w-xl gap-2 overflow-x-auto pb-1">
-                {interestTerms.slice(0, 5).map((term) => (
-                  <span key={term} className="shrink-0 rounded-full bg-[#e7f3ff] px-3 py-1.5 text-[10px] font-black text-[#1877f2]">
-                    #{term}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <div className="mt-4 grid gap-3 lg:grid-cols-3">
-            <SmartPanel title="منشور مناسب" icon="fa-file-lines">
-              {smartPosts.slice(0, 2).map((post) => (
-                <button
-                  key={post.id}
-                  type="button"
-                  onClick={() => openPost(post.id)}
-                  className="w-full rounded-md bg-slate-50 p-3 text-right transition hover:bg-[#e7f3ff]"
-                >
-                  <p className="line-clamp-2 text-xs font-black leading-6 text-slate-800">{post.content}</p>
-                  <p className="mt-2 text-[10px] font-bold text-[#1877f2]">#{post.category}</p>
-                </button>
-              ))}
-            </SmartPanel>
-            <SmartPanel title="قصة للمتابعة" icon="fa-clock-rotate-left">
-              {smartStories.slice(0, 2).map((story) => (
-                <button
-                  key={story.id}
-                  type="button"
-                  onClick={() => openStorySuggestion(story)}
-                  className="flex w-full items-center gap-3 rounded-md bg-slate-50 p-3 text-right transition hover:bg-[#e7f3ff]"
-                >
-                  <img src={story.author.avatar} alt="" loading="lazy" decoding="async" className="h-10 w-10 rounded-full object-cover" />
-                  <div className="min-w-0">
-                    <p className="truncate text-xs font-black text-slate-900">{story.author.name}</p>
-                    <p className="line-clamp-1 text-[10px] font-bold text-slate-500">{story.text || story.author.specialty || 'قصة جديدة'}</p>
-                  </div>
-                </button>
-              ))}
-            </SmartPanel>
-            <SmartPanel title="محامٍ مقترح" icon="fa-user-tie">
-              {smartLawyers.slice(0, 2).map((lawyer) => (
-                <div key={lawyer.id} className="flex items-center justify-between gap-3 rounded-md bg-slate-50 p-3">
-                  <button onClick={() => followLawyer(lawyer.id)} className="rounded-md bg-[#1877f2] px-3 py-2 text-[11px] font-black text-white">
-                    متابعة
-                  </button>
-                  <div className="flex min-w-0 items-center gap-3">
-                    <div className="min-w-0 text-right">
-                      <p className="truncate text-xs font-black text-slate-900">{lawyer.name}</p>
-                      <p className="truncate text-[10px] font-bold text-slate-400">{lawyer.lawyerProfile?.specialty || lawyer.specialty || 'محامٍ موثق'}</p>
-                    </div>
-                    <img src={lawyer.avatar || lawyer.lawyerProfile?.avatar || lawyer.img || 'https://i.pravatar.cc/150'} alt="" loading="lazy" decoding="async" className="h-10 w-10 rounded-full object-cover" />
-                  </div>
-                </div>
-              ))}
-            </SmartPanel>
-          </div>
-        </section>
-      )}
-
       <div className="mt-5 grid min-w-0 gap-5 xl:grid-cols-[minmax(220px,280px)_minmax(0,680px)_minmax(280px,340px)] xl:items-start xl:justify-center">
         <aside className="hidden space-y-4 xl:block xl:sticky xl:top-24">
           <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
@@ -503,7 +427,7 @@ export default function FeedPage() {
             <PostComposer user={user} canCreate={canCreatePost} isPublishing={isPublishing} onPublish={publishPost} />
             <StoryStrip
               user={user}
-              stories={stories}
+              stories={smartStories.length ? smartStories : stories}
               canCreate={canCreatePost}
               isPublishing={isPublishingStory}
               onCreate={publishStory}
@@ -511,8 +435,39 @@ export default function FeedPage() {
             />
           </div>
           <FeedFilters activeFilter={activeFilter} onChange={setActiveFilter} />
+          <section className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-black text-slate-900">ترتيب المنشورات</h2>
+                <p className="mt-1 text-[11px] font-bold text-slate-500">
+                  {postSortMode === 'smart'
+                    ? 'يتم تقديم المنشورات الأقرب لاهتماماتك وتفاعلاتك.'
+                    : 'يتم عرض المنشورات حسب وقت النشر.'}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2 rounded-full bg-slate-100 p-1">
+                {[
+                  { id: 'smart' as const, label: 'حسب الاقتراحات', icon: 'fa-wand-magic-sparkles' },
+                  { id: 'latest' as const, label: 'الأحدث', icon: 'fa-clock' },
+                ].map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => {
+                      setPostSortMode(item.id);
+                      trackEvent('feed_post_sort_changed', { mode: item.id, interestTerms });
+                    }}
+                    className={`rounded-full px-3 py-2 text-[11px] font-black transition ${postSortMode === item.id ? 'bg-white text-[#1877f2] shadow-sm' : 'text-slate-500 hover:text-slate-800'}`}
+                  >
+                    <i className={`fa-solid ${item.icon} ml-1.5`}></i>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </section>
           <div className="xl:hidden">
-            <SuggestedLawyers lawyers={lawyers} onFollow={followLawyer} />
+            <SuggestedLawyers lawyers={smartLawyers.length ? smartLawyers : lawyers} onFollow={followLawyer} />
           </div>
 
           {relatedPosts.length > 0 && (
@@ -544,7 +499,7 @@ export default function FeedPage() {
             </div>
           ) : (
             <div className="space-y-4">
-              {posts.map((post) => (
+              {sortedPosts.map((post) => (
                 <PostCard
                   key={post.id}
                   post={post}
@@ -584,7 +539,7 @@ export default function FeedPage() {
         </main>
 
         <aside className="hidden xl:block xl:sticky xl:top-24">
-          <FeedSidebar posts={posts} suggestedLawyers={lawyers} onFollow={followLawyer} onOpenPost={openPost} />
+          <FeedSidebar posts={posts} suggestedLawyers={smartLawyers.length ? smartLawyers : lawyers} onFollow={followLawyer} onOpenPost={openPost} />
         </aside>
       </div>
     </div>
@@ -596,22 +551,6 @@ function Stat({ label, value }: { label: string; value: number }) {
     <div className="rounded-lg bg-slate-50 p-3">
       <p className="text-xl font-black text-slate-900">{value}</p>
       <p className="text-[10px] font-black text-slate-400">{label}</p>
-    </div>
-  );
-}
-
-function SmartPanel({ title, icon, children }: { title: string; icon: string; children: ReactNode }) {
-  return (
-    <div className="rounded-lg border border-slate-100 bg-white p-3 shadow-sm">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-black text-slate-900">{title}</h3>
-        <span className="flex h-8 w-8 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
-          <i className={`fa-solid ${icon} text-xs`}></i>
-        </span>
-      </div>
-      <div className="space-y-2">
-        {children || <p className="rounded-md bg-slate-50 p-3 text-center text-xs font-bold text-slate-400">لا توجد اقتراحات بعد.</p>}
-      </div>
     </div>
   );
 }
