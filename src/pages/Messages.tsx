@@ -759,66 +759,44 @@ export default function Messages() {
   }, [selectedCase?.id]);
 
   return (
-    <div className="app-view fade-in mx-auto max-w-[1440px] space-y-5 pb-6 text-right">
-      <section className="overflow-hidden rounded-[2.25rem] border border-white/70 bg-white/80 shadow-premium backdrop-blur">
-        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_420px]">
-          <div className="p-6 md:p-8">
-            <div className="inline-flex items-center gap-2 rounded-full border border-brand-gold/20 bg-brand-gold/10 px-3 py-1 text-[11px] font-black text-brand-gold">
-              <i className="fa-solid fa-comments"></i>
-              Messages Hub
-            </div>
-            <h1 className="mt-4 max-w-3xl text-3xl font-black leading-tight text-brand-dark md:text-4xl">محادثاتك القانونية في مكان واحد</h1>
-            <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-slate-500">
-              راجع أحدث الردود، افرز المحادثات حسب الأولوية، افتح القضية المرتبطة، أو أرسل تحديثاً سريعاً دون التنقل بين الشاشات.
-            </p>
-            <div className="mt-6 grid gap-3 md:grid-cols-3">
-              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">المحادثات</p>
-                <p className="mt-2 text-2xl font-black text-brand-dark">{conversations.length.toLocaleString('ar-IQ')}</p>
-              </div>
-              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">غير المقروء</p>
-                <p className="mt-2 text-2xl font-black text-brand-dark">{inboxStats.unread.toLocaleString('ar-IQ')}</p>
-              </div>
-              <div className="rounded-[1.4rem] border border-slate-100 bg-white p-4 shadow-sm">
-                <p className="text-[11px] font-black text-slate-400">تحتاج متابعة</p>
-                <p className="mt-2 text-2xl font-black text-brand-dark">{inboxStats.waiting.toLocaleString('ar-IQ')}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-[linear-gradient(135deg,#0B132B,#1A237E)] p-6 text-white md:p-8">
-            <p className="text-xs font-black uppercase tracking-[0.28em] text-brand-lightgold">Inbox Pulse</p>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
-                <p className="text-[11px] font-black text-white/60">عاجلة</p>
-                <p className="mt-2 text-3xl font-black">{inboxStats.urgent.toLocaleString('ar-IQ')}</p>
-              </div>
-              <div className="rounded-3xl border border-white/10 bg-white/10 p-4">
-                <p className="text-[11px] font-black text-white/60">نتائج العرض</p>
-                <p className="mt-2 text-3xl font-black">{filteredConversations.length.toLocaleString('ar-IQ')}</p>
-              </div>
-            </div>
-            <div className="mt-5 rounded-[1.5rem] border border-white/10 bg-white/10 p-4">
-              <p className="text-[10px] font-black uppercase tracking-widest text-white/60">المحادثة المحددة</p>
-              <p className="mt-2 truncate text-sm font-black">{selectedConversation?.participantName || 'اختر محادثة'}</p>
-              <p className="mt-1 truncate text-xs font-bold text-white/60">{selectedCase?.title || 'سيظهر ملف القضية هنا'}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
+    <div className="app-view fade-in mx-auto max-w-[1500px] pb-4 text-right">
       {conversations.length > 0 ? (
-        <section className={`grid gap-4 ${isChatHeightExpanded ? 'xl:h-[calc(100vh-118px)] xl:min-h-[820px]' : 'xl:h-[calc(100vh-238px)] xl:min-h-[620px]'} ${isChatExpanded ? 'xl:grid-cols-[minmax(0,1fr)]' : selectedConversation && selectedCase ? 'xl:grid-cols-[310px_minmax(0,1fr)_300px]' : 'xl:grid-cols-[310px_minmax(0,1fr)]'}`}>
+        <section className={`grid overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-premium ${isChatHeightExpanded ? 'xl:h-[calc(100vh-96px)] xl:min-h-[820px]' : 'xl:h-[calc(100vh-126px)] xl:min-h-[700px]'} ${isChatExpanded ? 'xl:grid-cols-[minmax(0,1fr)]' : selectedConversation && selectedCase ? 'xl:grid-cols-[340px_minmax(0,1fr)_320px]' : 'xl:grid-cols-[340px_minmax(0,1fr)]'}`}>
           {!isChatExpanded && (
-            <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
-              <div className="relative">
+            <aside className="flex max-h-[720px] flex-col overflow-hidden border-b border-slate-200 bg-white xl:max-h-none xl:border-b-0 xl:border-l">
+              <div className="border-b border-slate-100 p-4">
+                <div className="mb-4 flex items-center justify-between">
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200"
+                      title="رسالة جديدة"
+                    >
+                      <i className="fa-solid fa-pen-to-square text-sm"></i>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConversationFilter('unread')}
+                      className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200"
+                      title="غير المقروءة"
+                    >
+                      <i className="fa-regular fa-bell text-sm"></i>
+                    </button>
+                  </div>
+                  <div>
+                    <h1 className="text-2xl font-black text-slate-950">الدردشات</h1>
+                    <p className="mt-1 text-[11px] font-bold text-slate-400">
+                      {inboxStats.unread.toLocaleString('ar-IQ')} غير مقروءة
+                    </p>
+                  </div>
+                </div>
+                <div className="relative">
                 <input
                   type="search"
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="ابحث عن محامٍ أو قضية"
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pl-11 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white focus:ring-4 focus:ring-brand-navy/5"
+                  className="w-full rounded-full border border-transparent bg-slate-100 px-4 py-3 pl-11 text-sm font-bold text-slate-700 outline-none transition focus:border-blue-200 focus:bg-white focus:ring-4 focus:ring-blue-50"
                 />
                 <i className="fa-solid fa-magnifying-glass pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
               </div>
@@ -840,16 +818,17 @@ export default function Messages() {
                     key={filter.id}
                     type="button"
                     onClick={() => setConversationFilter(filter.id)}
-                    className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black transition ${conversationFilter === filter.id ? 'bg-brand-navy text-white shadow-sm' : 'border border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+                    className={`shrink-0 rounded-full px-3 py-2 text-[10px] font-black transition ${conversationFilter === filter.id ? 'bg-blue-600 text-white shadow-sm shadow-blue-100' : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-900'}`}
                   >
                     {filter.label}
                     <span className="mr-1 rounded-full bg-white/20 px-1.5 py-0.5">{filter.count.toLocaleString('ar-IQ')}</span>
                   </button>
                 ))}
               </div>
+              </div>
 
               {viewerRole === 'lawyer' && (
-                <div className="mt-3 flex items-center justify-between px-1">
+                <div className="mx-4 mt-3 flex items-center justify-between px-1">
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ملخص القضايا</p>
                   <button
                     onClick={() => setShowCaseSummary(!showCaseSummary)}
@@ -861,7 +840,7 @@ export default function Messages() {
                 </div>
               )}
 
-              <div className="mt-4 space-y-1 overflow-y-auto flex-1 custom-scrollbar pr-1">
+              <div className="space-y-1 overflow-y-auto flex-1 custom-scrollbar p-2">
                 {isLoadingConversations ? (
                   <ConversationSkeleton />
                 ) : filteredConversations.length === 0 ? (
@@ -880,16 +859,16 @@ export default function Messages() {
                         setSelectedConversationId(conversation.id);
                         setActiveCaseId(conversation.cases[0]?.id || '');
                       }}
-                      className={`w-full rounded-xl border p-3 text-right transition-all duration-200 ${selectedConversation?.id === conversation.id
-                        ? 'border-brand-navy/20 bg-brand-navy/5 shadow-sm'
-                        : 'border-transparent hover:border-slate-100 hover:bg-slate-50'}`}
+                      className={`w-full rounded-2xl border p-3 text-right transition-all duration-200 ${selectedConversation?.id === conversation.id
+                        ? 'border-blue-100 bg-blue-50 shadow-sm'
+                        : 'border-transparent hover:bg-slate-50'}`}
                     >
                       <div className="flex flex-row-reverse items-start gap-3">
                         <div className="relative shrink-0">
                           <img
                             src={conversation.participantImg}
                             alt={conversation.participantName}
-                            className="h-11 w-11 rounded-xl object-cover shadow-sm cursor-pointer"
+                            className="h-12 w-12 rounded-full object-cover shadow-sm cursor-pointer"
                             onClick={(e) => {
                               e.stopPropagation();
                               navigate(`/profile/${conversation.participantId}`);
@@ -901,16 +880,14 @@ export default function Messages() {
                               title="قضية عاجلة"
                             ><i className="fa-solid fa-triangle-exclamation"></i></span>
                           )}
-                          {conversation.unreadCount > 0 && (
-                            <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-red-500 border-2 border-white ring-2 ring-red-500/10"></span>
-                          )}
+                          <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500"></span>
                         </div>
                         <div className="min-w-0 flex-1 text-right">
                           <div className="flex items-center justify-between gap-2">
                             <span className="text-[9px] font-bold text-slate-400 uppercase">
                               {conversation.lastMessage ? formatTime(conversation.lastMessage.createdAt) : conversation.cases[0] ? formatDate(conversation.cases[0].createdAt) : ''}
                             </span>
-                            <p className={`truncate text-sm font-black ${conversation.unreadCount > 0 ? 'text-brand-dark' : 'text-slate-600'}`}>{conversation.participantName}</p>
+                            <p className={`truncate text-sm font-black ${conversation.unreadCount > 0 ? 'text-slate-950' : 'text-slate-700'}`}>{conversation.participantName}</p>
                           </div>
                           <div className="mt-0.5 flex flex-row-reverse items-center gap-2">
                             <div className="relative h-4 w-4 shrink-0">
@@ -930,9 +907,14 @@ export default function Messages() {
                             </div>
                             <p className="truncate text-[11px] font-bold text-slate-400">{conversation.cases[0]?.title}</p>
                           </div>
-                          <p className={`mt-1 truncate text-xs font-medium ${conversation.unreadCount > 0 ? 'text-brand-navy font-bold' : 'text-slate-400'}`}>
+                          <p className={`mt-1 truncate text-xs font-medium ${conversation.unreadCount > 0 ? 'text-blue-600 font-bold' : 'text-slate-400'}`}>
                             {conversation.lastMessage?.text || conversation.cases[0]?.title}
                           </p>
+                          {conversation.unreadCount > 0 && (
+                            <span className="mt-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-blue-600 px-1.5 text-[10px] font-black text-white">
+                              {conversation.unreadCount.toLocaleString('ar-IQ')}
+                            </span>
+                          )}
                         </div>
                       </div>
 
@@ -981,7 +963,7 @@ export default function Messages() {
             </aside>
           )}
 
-          <section className="flex min-h-[640px] flex-col overflow-hidden rounded-[1.75rem] border border-slate-200 bg-white shadow-premium xl:min-h-0 relative">
+          <section className="relative flex min-h-[680px] flex-col overflow-hidden bg-white xl:min-h-0">
             <AnimatePresence>
               {showJumpToBottom && (
                 <motion.button
@@ -999,26 +981,28 @@ export default function Messages() {
 
             {selectedConversation && selectedCase ? (
               <>
-                <div className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(248,250,252,0.96),rgba(255,255,255,1))] p-4">
-                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="border-b border-slate-100 bg-white px-4 py-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div
                       className={`flex items-center gap-3 ${viewerRole === 'user' ? 'cursor-pointer group/participant' : ''}`}
                       onClick={() => viewerRole === 'user' && navigate(`/profile/${selectedConversation.participantId}`)}
                     >
-                      <img src={selectedConversation.participantImg} alt={selectedConversation.participantName} className="h-12 w-12 rounded-xl object-cover shadow-sm" />
+                      <div className="relative">
+                        <img src={selectedConversation.participantImg} alt={selectedConversation.participantName} className="h-11 w-11 rounded-full object-cover shadow-sm" />
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500"></span>
+                      </div>
                       <div className="text-right">
                         <div className="flex items-center gap-2">
-                          <h2 className={`text-lg font-black text-brand-dark ${viewerRole === 'user' ? 'group-hover/participant:text-brand-navy transition-colors' : ''}`}>
+                          <h2 className={`text-base font-black text-slate-950 ${viewerRole === 'user' ? 'group-hover/participant:text-blue-600 transition-colors' : ''}`}>
                             {selectedConversation.participantName}
                           </h2>
-                          <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" title="متصل الآن"></span>
                         </div>
                         <p className="mt-0.5 text-xs font-bold text-slate-500 flex items-center justify-end gap-1.5">
                           <span>{selectedConversation.participantRole}</span>
                           <span className="h-0.5 w-0.5 rounded-full bg-slate-300"></span>
                           <span className="text-slate-400 font-medium">آخر ظهور: {selectedConversation.lastSeen || 'الآن'}</span>
                         </p>
-                        <div className="mt-1.5 flex flex-wrap justify-end gap-2">
+                        <div className="mt-1.5 flex flex-wrap justify-end gap-1.5">
                           <span className={`rounded-full px-2 py-0.5 text-[9px] font-black uppercase tracking-tighter ${isConversationClosed ? 'bg-slate-100 text-slate-700' : latestClientMessage?.awaitingResponse ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
                             {conversationHealthLabel}
                           </span>
@@ -1067,36 +1051,28 @@ export default function Messages() {
                     </div>
 
                     <div className="flex flex-wrap justify-end gap-2">
-                      <ActionButton
+                      <button
                         type="button"
                         onClick={() => setIsChatExpanded((current) => !current)}
-                        variant={isChatExpanded ? 'primary' : 'ghost'}
-                        size="sm"
-                        className={isChatExpanded ? '' : 'bg-white border-slate-100 text-slate-600 hover:text-brand-navy'}
+                        className={`flex h-9 w-9 items-center justify-center rounded-full transition ${isChatExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                         title={isChatExpanded ? 'إرجاع عرض المحادثة' : 'توسيع مساحة المحادثة'}
                       >
-                        <i className={`fa-solid ${isChatExpanded ? 'fa-compress' : 'fa-expand'} ml-1.5`}></i>
-                        {isChatExpanded ? 'تصغير' : 'توسيع'}
-                      </ActionButton>
-                      <ActionButton
+                        <i className={`fa-solid ${isChatExpanded ? 'fa-compress' : 'fa-expand'} text-sm`}></i>
+                      </button>
+                      <button
                         type="button"
                         onClick={() => setIsChatHeightExpanded((current) => !current)}
-                        variant={isChatHeightExpanded ? 'primary' : 'ghost'}
-                        size="sm"
-                        className={isChatHeightExpanded ? '' : 'bg-white border-slate-100 text-slate-600 hover:text-brand-navy'}
+                        className={`flex h-9 w-9 items-center justify-center rounded-full transition ${isChatHeightExpanded ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}
                         title={isChatHeightExpanded ? 'إرجاع ارتفاع المحادثة' : 'توسيع ارتفاع المحادثة'}
                       >
-                        <i className={`fa-solid ${isChatHeightExpanded ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'} ml-1.5`}></i>
-                        {isChatHeightExpanded ? 'ارتفاع عادي' : 'توسيع الطول'}
-                      </ActionButton>
-                      <ActionButton onClick={() => navigate('/cases', { state: { activeCaseId: selectedCase.id } })} variant="ghost" size="sm" className="bg-white border-slate-100 text-slate-600 hover:text-brand-navy">
-                        <i className="fa-solid fa-folder-open ml-1.5"></i>
-                        الملف
-                      </ActionButton>
-                      <ActionButton onClick={() => navigate('/cases', { state: { activeCaseId: selectedCase.id, focusArea: 'docs' } })} variant="secondary" size="sm" className="bg-white border border-slate-100">
-                        <i className="fa-solid fa-paperclip ml-1.5 text-brand-gold"></i>
-                        المرفقات
-                      </ActionButton>
+                        <i className={`fa-solid ${isChatHeightExpanded ? 'fa-down-left-and-up-right-to-center' : 'fa-up-right-and-down-left-from-center'} text-sm`}></i>
+                      </button>
+                      <button onClick={() => navigate('/cases', { state: { activeCaseId: selectedCase.id } })} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 hover:text-blue-600" title="ملف القضية">
+                        <i className="fa-solid fa-folder-open text-sm"></i>
+                      </button>
+                      <button onClick={() => navigate('/cases', { state: { activeCaseId: selectedCase.id, focusArea: 'docs' } })} className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-600 transition hover:bg-slate-200 hover:text-blue-600" title="المرفقات">
+                        <i className="fa-solid fa-paperclip text-sm"></i>
+                      </button>
                     </div>
                   </div>
 
@@ -1109,7 +1085,7 @@ export default function Messages() {
                     </div>
                   )}
 
-                  <div className="mt-3 grid gap-3 md:grid-cols-4">
+                  <div className="mt-3 grid gap-2 md:grid-cols-4">
                     <div className="rounded-2xl border border-slate-100 bg-slate-50 px-4 py-3">
                       <p className="text-[10px] font-black text-slate-400">تقدم القضية</p>
                       <div className="mt-2 flex items-center gap-3">
@@ -1142,7 +1118,7 @@ export default function Messages() {
                 <div
                   ref={scrollRef}
                   onScroll={handleScroll}
-                  className="custom-scrollbar flex-1 space-y-5 overflow-y-auto bg-[linear-gradient(180deg,rgba(248,250,252,0.92),rgba(241,245,249,0.72))] p-4 md:p-6"
+                  className="custom-scrollbar flex-1 space-y-4 overflow-y-auto bg-white p-4 md:p-6"
                 >
                   {threadMessages.map((message, index) => {
                     const isMe = message.sender === viewerRole;
@@ -1157,7 +1133,7 @@ export default function Messages() {
                       <React.Fragment key={message.id}>
                         {showDateSeparator && (
                           <div className="flex justify-center my-6">
-                            <span className="rounded-full bg-slate-200/50 backdrop-blur-sm px-4 py-1.5 text-[10px] font-black text-slate-500 uppercase tracking-widest shadow-sm">
+                            <span className="rounded-full bg-slate-100 px-4 py-1.5 text-[10px] font-black text-slate-500 uppercase tracking-widest">
                               {getDayLabel(msgDate)}
                             </span>
                           </div>
@@ -1172,13 +1148,13 @@ export default function Messages() {
                               <img
                                 src={isMe ? viewerAvatar : selectedConversation.participantImg}
                                 alt={isMe ? 'أنت' : selectedConversation.participantName}
-                                className="h-8 w-8 shrink-0 rounded-xl border border-white object-cover shadow-sm"
+                                className="h-8 w-8 shrink-0 rounded-full border border-white object-cover shadow-sm"
                               />
-                              <div className={`relative max-w-[88%] rounded-2xl px-4 py-3 text-right shadow-sm md:max-w-[72%] md:px-5 group ${isMe
-                                ? 'bg-brand-navy text-white rounded-tl-md shadow-brand-navy/10'
+                              <div className={`relative max-w-[88%] rounded-[1.35rem] px-4 py-2.5 text-right md:max-w-[72%] md:px-4 group ${isMe
+                                ? 'bg-blue-600 text-white rounded-bl-md'
                                 : isRequestMessage(message.text)
-                                  ? 'bg-amber-50/50 border border-brand-gold/30 text-slate-700 rounded-tr-md ring-4 ring-brand-gold/5'
-                                  : 'bg-white border border-slate-100 text-slate-700 rounded-tr-md'
+                                  ? 'bg-amber-50 border border-amber-100 text-slate-800 rounded-br-md'
+                                  : 'bg-slate-100 text-slate-800 rounded-br-md'
                                 }`}
                               >
                                 <div className={`mb-2 flex items-center justify-between gap-3 text-[10px] font-black ${isMe ? 'text-white/55' : 'text-slate-400'}`}>
@@ -1296,7 +1272,7 @@ export default function Messages() {
                                     )}
                                   </div>
                                 )}
-                                <div className={`mt-2 flex items-center justify-end gap-1.5 text-[9px] font-black uppercase ${isMe ? 'text-white/50' : 'text-slate-400'}`}>
+                                <div className={`mt-1.5 flex items-center justify-end gap-1.5 text-[9px] font-black uppercase ${isMe ? 'text-white/50' : 'text-slate-400'}`}>
                                   <span>{message.deliveryState === 'sending' ? 'جارٍ المزامنة' : 'تمت المزامنة'}</span>
                                   {isMe && (
                                     <motion.i
@@ -1333,9 +1309,9 @@ export default function Messages() {
                   )}
                 </div>
 
-                <div className="border-t border-slate-100 bg-white p-4">
+                <div className="border-t border-slate-100 bg-white p-3 md:p-4">
                   <div className="max-w-4xl mx-auto w-full">
-                    <div className="rounded-[1.5rem] border border-brand-navy/10 bg-[linear-gradient(135deg,rgba(248,250,252,0.95),rgba(255,255,255,1))] p-3 shadow-sm">
+                    <div className="rounded-[1.35rem] bg-white">
                       <AnimatePresence>
                         {aiResponse && (
                           <motion.div
@@ -1392,13 +1368,13 @@ export default function Messages() {
                           </div>
                         </div>
                       )}
-                      <div className="mb-3 flex items-center justify-between gap-3">
-                        <span className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-slate-400 shadow-sm ring-1 ring-slate-100">
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-black text-slate-400">
                           {draftLength.toLocaleString('ar-IQ')} حرف
                         </span>
                         <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ردود سريعة</p>
                       </div>
-                      <div className="flex flex-wrap justify-end gap-2 mb-4">
+                      <div className="flex flex-wrap justify-end gap-2 mb-3">
                         {quickMessagePrompts.map((prompt) => (
                           <button
                             key={prompt}
@@ -1408,13 +1384,13 @@ export default function Messages() {
                               setDraft(prompt);
                             }}
                             disabled={isConversationClosed}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black text-slate-500 transition hover:border-brand-navy/30 hover:text-brand-navy"
+                            className="rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-black text-slate-600 transition hover:bg-blue-50 hover:text-blue-600"
                           >
                             {prompt}
                           </button>
                         ))}
                       </div>
-                      <div className="rounded-[1.4rem] border border-slate-200 bg-white p-3 shadow-inner focus-within:border-brand-navy/30 focus-within:ring-4 focus-within:ring-brand-navy/5">
+                      <div className="rounded-[1.4rem] bg-slate-100 p-2 focus-within:ring-4 focus-within:ring-blue-50">
                         {replyingToMessage && (
                           <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-brand-navy/10 bg-slate-50 px-4 py-3 text-right">
                             <div className="min-w-0">
@@ -1445,21 +1421,21 @@ export default function Messages() {
                           }}
                           placeholder={composerPlaceholder}
                           disabled={isConversationClosed}
-                          className="max-h-[180px] min-h-[86px] w-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 py-2 text-[14px] font-medium leading-7 text-slate-700 outline-none transition placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-400"
+                          className="max-h-[150px] min-h-[48px] w-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 py-2 text-[14px] font-medium leading-7 text-slate-700 outline-none transition placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-400"
                         />
 
-                        <div className="mt-2 flex flex-col gap-2 border-t border-slate-100 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                           <div className="flex flex-wrap justify-end gap-2">
                             <button
                               type="button"
                               onClick={() => fileInputRef.current?.click()}
                               disabled={isSending || isConversationClosed}
-                              className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-400 transition hover:border-brand-navy/30 hover:bg-white hover:text-brand-navy disabled:opacity-40"
+                              className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-blue-600 transition hover:bg-blue-50 disabled:opacity-40"
                               title="إرفاق وثيقة"
                             >
                               <i className="fa-solid fa-paperclip text-sm"></i>
                             </button>
-                            <span className="flex h-9 items-center rounded-xl bg-slate-50 px-3 text-[10px] font-black text-slate-400">
+                            <span className="flex h-9 items-center rounded-full bg-white px-3 text-[10px] font-black text-slate-400">
                               {draftLength.toLocaleString('ar-IQ')} حرف
                             </span>
                           </div>
@@ -1472,7 +1448,7 @@ export default function Messages() {
                                   setDraft('');
                                   setReplyingToMessage(null);
                                 }}
-                                className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-50 text-slate-400 transition hover:text-red-500"
+                                className="flex h-9 w-9 items-center justify-center rounded-full bg-white text-slate-400 transition hover:text-red-500"
                                 title="مسح المسودة"
                               >
                                 <i className="fa-solid fa-trash-can text-sm"></i>
@@ -1482,7 +1458,7 @@ export default function Messages() {
                               type="button"
                               onClick={handleAskAI}
                               disabled={!draft.trim() || isAiConsulting}
-                              className="flex h-9 items-center justify-center gap-2 rounded-xl border border-brand-gold/20 bg-brand-gold/10 px-3 text-[10px] font-black text-brand-gold transition hover:bg-brand-gold/20 disabled:opacity-30"
+                              className="flex h-9 items-center justify-center gap-2 rounded-full bg-white px-3 text-[10px] font-black text-blue-600 transition hover:bg-blue-50 disabled:opacity-30"
                               title="استشارة الذكاء الاصطناعي حول هذه المسودة"
                             >
                               {isAiConsulting ? (
@@ -1500,7 +1476,7 @@ export default function Messages() {
                                   setReplyingToMessage(null);
                                 }}
                                 disabled={isConversationClosed}
-                                className="flex h-9 items-center justify-center gap-2 rounded-xl border border-blue-100 bg-blue-50 px-3 text-[10px] font-black text-blue-600 transition hover:bg-blue-100 disabled:opacity-30"
+                                className="flex h-9 items-center justify-center gap-2 rounded-full bg-white px-3 text-[10px] font-black text-blue-600 transition hover:bg-blue-50 disabled:opacity-30"
                                 title="طلب وثيقة من العميل"
                               >
                                 <i className="fa-solid fa-file-circle-plus"></i>
@@ -1511,7 +1487,7 @@ export default function Messages() {
                               type="button"
                               onClick={handleSend}
                               disabled={!draft.trim() || isSending || isConversationClosed}
-                              className="flex h-9 min-w-24 items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-[11px] font-black text-white shadow-lg shadow-brand-navy/20 transition hover:bg-brand-dark disabled:opacity-30"
+                              className="flex h-9 min-w-24 items-center justify-center gap-2 rounded-full bg-blue-600 px-4 text-[11px] font-black text-white shadow-lg shadow-blue-100 transition hover:bg-blue-700 disabled:opacity-30"
                             >
                               <i className="fa-solid fa-paper-plane text-sm"></i>
                               إرسال
@@ -1535,12 +1511,46 @@ export default function Messages() {
           </section>
 
           {!isChatExpanded && selectedConversation && selectedCase && (
-            <aside className="flex max-h-[520px] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm xl:max-h-none">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-black text-brand-dark">وثائق القضية</h3>
+            <aside className="flex max-h-[720px] flex-col overflow-hidden border-t border-slate-200 bg-white p-4 xl:max-h-none xl:border-r xl:border-t-0">
+              <div className="border-b border-slate-100 pb-5 text-center">
+                <img
+                  src={selectedConversation.participantImg}
+                  alt={selectedConversation.participantName}
+                  className="mx-auto h-20 w-20 rounded-full object-cover shadow-sm"
+                />
+                <h3 className="mt-3 truncate text-lg font-black text-slate-950">{selectedConversation.participantName}</h3>
+                <p className="mt-1 text-xs font-bold text-slate-400">{selectedConversation.participantRole}</p>
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => viewerRole === 'user' && navigate(`/profile/${selectedConversation.participantId}`)}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200 hover:text-blue-600"
+                    title="الملف الشخصي"
+                  >
+                    <i className="fa-regular fa-user text-sm"></i>
+                  </button>
+                  <button
+                    onClick={() => navigate('/cases', { state: { activeCaseId: selectedCase.id } })}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200 hover:text-blue-600"
+                    title="القضية"
+                  >
+                    <i className="fa-solid fa-folder-open text-sm"></i>
+                  </button>
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isConversationClosed}
+                    className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100 text-slate-700 transition hover:bg-slate-200 hover:text-blue-600 disabled:opacity-40"
+                    title="إرفاق ملف"
+                  >
+                    <i className="fa-solid fa-paperclip text-sm"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between py-4">
+                <h3 className="text-sm font-black text-slate-950">الملفات والوسائط</h3>
                 <button
                   onClick={() => navigate(`/cases`, { state: { activeCaseId: selectedCase.id, focusArea: 'docs' } })}
-                  className="text-slate-400 hover:text-brand-navy transition w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-50"
+                  className="text-slate-400 hover:text-blue-600 transition w-8 h-8 flex items-center justify-center rounded-full hover:bg-slate-100"
                   title="عرض كل الوثائق"
                 >
                   <i className="fa-solid fa-folder-open"></i>
@@ -1548,9 +1558,9 @@ export default function Messages() {
               </div>
 
               <div className="mb-4 grid grid-cols-3 gap-2">
-                <div className="rounded-2xl bg-slate-50 px-3 py-3 text-center">
+                <div className="rounded-2xl bg-slate-100 px-3 py-3 text-center">
                   <p className="text-[9px] font-black text-slate-400">الكل</p>
-                  <p className="mt-1 text-sm font-black text-brand-dark">{selectedCase.documents.length.toLocaleString('ar-IQ')}</p>
+                  <p className="mt-1 text-sm font-black text-slate-950">{selectedCase.documents.length.toLocaleString('ar-IQ')}</p>
                 </div>
                 <div className="rounded-2xl bg-amber-50 px-3 py-3 text-center">
                   <p className="text-[9px] font-black text-amber-700">مطلوب</p>
@@ -1576,7 +1586,7 @@ export default function Messages() {
                       }}
                       role="button"
                       tabIndex={0}
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/60 p-3 text-right transition hover:border-brand-navy/20 hover:bg-white hover:shadow-sm"
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-2xl bg-slate-50 p-3 text-right transition hover:bg-slate-100"
                     >
                       <div className={`text-xl ${doc.type === 'pdf' ? 'text-red-500' : doc.type === 'image' ? 'text-blue-500' : 'text-gray-500'}`}>
                         <i className={`fa-solid ${getFileIconClass(doc.type)}`}></i>
@@ -1585,7 +1595,7 @@ export default function Messages() {
                         <p className="text-sm font-black text-brand-dark truncate">{doc.name}</p>
                         <p className="text-[10px] font-bold text-slate-400">{doc.size} • {formatDate(doc.createdAt)}</p>
                       </div>
-                      <span className="rounded-lg border border-slate-100 bg-white px-2 py-1 text-[9px] font-black text-slate-400">
+                      <span className="rounded-full bg-white px-2 py-1 text-[9px] font-black text-slate-400">
                         معاينة
                       </span>
                       {doc.actionRequired && (
