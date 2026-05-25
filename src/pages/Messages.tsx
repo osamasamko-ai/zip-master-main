@@ -21,6 +21,7 @@ const LAWYER_QUICK_MESSAGE_PROMPTS = [
 const UPLOAD_MESSAGE_MARKERS = ['وثيقة جديدة:', 'مستند جديد:'];
 
 type MessageDeliveryState = 'sending' | 'failed';
+type SmartComposerTool = 'brief' | 'next' | 'documents' | 'polish' | 'risk';
 
 type MessageItem = {
   id: string | number;
@@ -583,6 +584,62 @@ export default function Messages() {
       setIsAiConsulting(false);
     }
   }, [draft, selectedCase]);
+
+  const handleSmartComposerTool = useCallback((tool: SmartComposerTool) => {
+    if (!selectedCase) return;
+
+    const lastMessage = threadMessages[threadMessages.length - 1];
+    const pendingDocs = selectedCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
+    const signedDocs = selectedCase.documents.filter((doc) => doc.isSigned).length;
+    const progressLine = `القضية "${selectedCase.title}" حالياً ${selectedCase.progress}% وحالتها ${selectedCase.statusText}.`;
+
+    if (tool === 'polish') {
+      if (draft.trim()) {
+        handleAskAI();
+      } else {
+        setAiResponse('اكتب مسودة قصيرة أولاً، ثم استخدم أداة الصياغة لتحويلها إلى رد قانوني واضح ومهني.');
+      }
+      return;
+    }
+
+    if (tool === 'brief') {
+      setAiResponse([
+        progressLine,
+        `الوثائق: ${selectedCase.documents.length.toLocaleString('ar-IQ')} إجمالاً، ${signedDocs.toLocaleString('ar-IQ')} موقعة، ${pendingDocs.length.toLocaleString('ar-IQ')} تحتاج متابعة.`,
+        lastMessage ? `آخر رسالة: ${lastMessage.sender === viewerRole ? 'أنت' : selectedConversation?.participantName || 'الطرف الآخر'} - ${lastMessage.text}` : 'لا توجد رسائل مسجلة بعد.',
+      ].join('\n'));
+      return;
+    }
+
+    if (tool === 'next') {
+      const nextText = pendingDocs.length > 0
+        ? viewerRole === 'lawyer'
+          ? `مرحباً ${selectedCase.client}،\nالخطوة التالية هي مراجعة المستندات المطلوبة، وأهمها: ${pendingDocs[0].name}.\nيرجى تزويدي بالتحديث أو الإجراء المطلوب حتى نكمل ملف ${selectedCase.title}.`
+          : `أستاذي، ما هي الخطوة التالية بخصوص ${pendingDocs[0].name} في قضية ${selectedCase.title}؟ وهل توجد مدة محددة يجب الالتزام بها؟`
+        : viewerRole === 'lawyer'
+          ? `مرحباً ${selectedCase.client}،\nراجعت ملف ${selectedCase.title}. الخطوة التالية هي متابعة الإجراء الحالي وسأوافيك بأي تحديث مهم.`
+          : `أستاذي، هل يمكن تزويدي بالخطوة التالية المتوقعة في قضية ${selectedCase.title}؟`;
+      setReplyingToMessage(null);
+      setDraft(nextText);
+      return;
+    }
+
+    if (tool === 'documents') {
+      const documentText = viewerRole === 'lawyer'
+        ? `مرحباً ${selectedCase.client}،\nيرجى تزويدي بالمستندات الناقصة أو الداعمة لقضية ${selectedCase.title}${pendingDocs[0] ? `، خصوصاً: ${pendingDocs[0].name}` : ''}.\nشكراً لتعاونكم.`
+        : `أستاذي، هل توجد مستندات إضافية مطلوبة مني الآن لقضية ${selectedCase.title}؟ أرجو تحديدها بالاسم حتى أرفعها بشكل صحيح.`;
+      setReplyingToMessage(null);
+      setDraft(documentText);
+      return;
+    }
+
+    setAiResponse([
+      'فحص ذكي سريع:',
+      pendingDocs.length > 0 ? `يوجد ${pendingDocs.length.toLocaleString('ar-IQ')} مستند يحتاج متابعة.` : 'لا توجد مستندات معلقة حسب البيانات الحالية.',
+      latestClientMessage?.awaitingResponse ? 'توجد رسالة من العميل بانتظار رد واضح.' : 'لا تظهر رسالة معلقة تحتاج رداً فورياً.',
+      isUrgent ? 'حالة القضية تحمل إشارة عاجلة، الأفضل إبقاء الرد مختصراً ومحدد الخطوة.' : 'لا تظهر إشارة عاجلة حالياً.',
+    ].join('\n'));
+  }, [draft, handleAskAI, isUrgent, latestClientMessage?.awaitingResponse, selectedCase, selectedConversation?.participantName, threadMessages, viewerRole]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -1369,6 +1426,60 @@ export default function Messages() {
                         </div>
                       )}
                       <div className="rounded-[1.4rem] bg-slate-100 p-2 focus-within:ring-4 focus-within:ring-blue-50">
+                        <div className="mb-2 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+                          <div className="flex flex-col gap-3 p-2.5 lg:flex-row lg:items-center lg:justify-between">
+                            <div className="flex min-w-0 items-center justify-end gap-2">
+                              <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500 sm:inline-flex">
+                                {selectedCaseDocumentsNeedingAction.toLocaleString('ar-IQ')} إجراء
+                              </span>
+                              <span className="hidden rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-black text-slate-500 sm:inline-flex">
+                                {selectedCaseSignedDocuments.toLocaleString('ar-IQ')} موقعة
+                              </span>
+                              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-navy text-white shadow-sm">
+                                <i className="fa-solid fa-wand-magic-sparkles text-xs"></i>
+                              </div>
+                              <div className="min-w-0 text-right">
+                                <p className="text-xs font-black text-brand-dark">AI Desk</p>
+                                <p className="truncate text-[10px] font-bold text-slate-400">{conversationHealthLabel}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar lg:justify-end">
+                              <button
+                                type="button"
+                                onClick={() => handleSmartComposerTool('polish')}
+                                disabled={isConversationClosed || isAiConsulting}
+                                className="flex h-9 shrink-0 items-center gap-2 rounded-xl bg-brand-navy px-3 text-[10px] font-black text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                {isAiConsulting ? (
+                                  <span className="h-3 w-3 rounded-full border-2 border-white/70 border-t-transparent animate-spin"></span>
+                                ) : (
+                                  <i className="fa-solid fa-pen-nib"></i>
+                                )}
+                                صياغة احترافية
+                              </button>
+                              {[
+                                { id: 'brief' as const, label: 'ملخص', icon: 'fa-align-right' },
+                                { id: 'next' as const, label: 'خطوة', icon: 'fa-route' },
+                                { id: 'documents' as const, label: 'مستندات', icon: 'fa-file-circle-plus' },
+                                { id: 'risk' as const, label: 'فحص', icon: 'fa-shield-halved' },
+                              ].map((tool) => (
+                                <button
+                                  key={tool.id}
+                                  type="button"
+                                  title={tool.label}
+                                  onClick={() => handleSmartComposerTool(tool.id)}
+                                  disabled={isConversationClosed}
+                                  className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50 px-3 text-[10px] font-black text-slate-600 transition hover:border-brand-navy/10 hover:bg-brand-navy/5 hover:text-brand-navy disabled:cursor-not-allowed disabled:opacity-40"
+                                >
+                                  <i className={`fa-solid ${tool.icon}`}></i>
+                                  {tool.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+
                         <div className="mb-2 flex items-center gap-2 rounded-2xl border border-white/70 bg-white/80 p-2 shadow-sm">
                           <div className="flex shrink-0 items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-black text-blue-600">
                             <i className="fa-solid fa-bolt text-[9px]"></i>
@@ -1456,35 +1567,6 @@ export default function Messages() {
                                 title="مسح المسودة"
                               >
                                 <i className="fa-solid fa-trash-can text-sm"></i>
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={handleAskAI}
-                              disabled={!draft.trim() || isAiConsulting}
-                              className="flex h-9 items-center justify-center gap-2 rounded-full bg-white px-3 text-[10px] font-black text-blue-600 transition hover:bg-blue-50 disabled:opacity-30"
-                              title="استشارة الذكاء الاصطناعي حول هذه المسودة"
-                            >
-                              {isAiConsulting ? (
-                                <div className="h-3 w-3 rounded-full border-2 border-brand-gold border-t-transparent animate-spin"></div>
-                              ) : (
-                                <i className="fa-solid fa-wand-magic-sparkles"></i>
-                              )}
-                              مساعد ذكي
-                            </button>
-                            {viewerRole === 'lawyer' && selectedCase && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setDraft(`مرحباً ${selectedCase.client}،\nيرجى تزويدي بالمستند التالي: [اكتب اسم المستند هنا، مثال: نسخة من عقد الإيجار]\nلإكمال الإجراءات القانونية لقضية: ${selectedCase.title}.\nشكراً لتعاونكم.`);
-                                  setReplyingToMessage(null);
-                                }}
-                                disabled={isConversationClosed}
-                                className="flex h-9 items-center justify-center gap-2 rounded-full bg-white px-3 text-[10px] font-black text-blue-600 transition hover:bg-blue-50 disabled:opacity-30"
-                                title="طلب وثيقة من العميل"
-                              >
-                                <i className="fa-solid fa-file-circle-plus"></i>
-                                طلب وثيقة
                               </button>
                             )}
                             <button
