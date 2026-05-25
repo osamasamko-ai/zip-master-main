@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useAuth } from '../context/AuthContext';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
 import apiClient from '../api/client';
@@ -9,9 +8,10 @@ import apiClient from '../api/client';
 type DocumentType = 'pdf' | 'image' | 'other';
 type CaseStatus = 'pending' | 'review' | 'active' | 'closed';
 
-type WorkspaceTab = 'summary' | 'chat' | 'ai' | 'financials' | 'resolution';
+type WorkspaceTab = 'summary' | 'chat' | 'financials' | 'resolution';
 type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded' | 'contracts';
 type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed' | 'drafts';
+type CaseAiMode = 'brief' | 'risk' | 'plan' | 'message';
 
 type CaseMessageSender = 'user' | 'lawyer';
 type MessageDeliveryState = 'sending' | 'failed';
@@ -122,21 +122,6 @@ const CASE_TYPES = [
   { id: 'commercial', label: 'تجارية' }
 ];
 
-const CASE_LIFECYCLE_STEPS: Array<{
-  id: string;
-  label: string;
-  note: string;
-  icon: string;
-  tab: WorkspaceTab;
-}> = [
-    { id: 'intake', label: 'فتح الملف', note: 'بيانات القضية والمحامي', icon: 'fa-folder-plus', tab: 'summary' },
-    { id: 'lawyer-review', label: 'مراجعة المحامي', note: 'تحديد الخطة والخطوة التالية', icon: 'fa-user-tie', tab: 'chat' },
-    { id: 'documents', label: 'الوثائق', note: 'رفع، مراجعة، وتوقيع', icon: 'fa-file-signature', tab: 'summary' },
-    { id: 'work', label: 'تنفيذ الإجراء', note: 'مراسلات وتحديثات العمل', icon: 'fa-scale-balanced', tab: 'chat' },
-    { id: 'payment', label: 'الأتعاب', note: 'الفواتير والسداد', icon: 'fa-wallet', tab: 'financials' },
-    { id: 'closeout', label: 'الإغلاق', note: 'ملخص نهائي وأرشفة', icon: 'fa-circle-check', tab: 'resolution' },
-  ];
-
 const SIDEBAR_FILTERS: Array<{ id: SidebarFilter; label: string; icon: string }> = [
   { id: 'needs_action', label: 'إجراء', icon: 'fa-bell' },
   { id: 'drafts', label: 'مسودات', icon: 'fa-pen-ruler' },
@@ -153,6 +138,13 @@ const DOC_FILTERS: Array<{ id: DocFilter; label: string; icon: string; activeCla
   { id: 'signed', label: 'موقعة', icon: 'fa-circle-check', activeClass: 'bg-emerald-500 text-white shadow-md', idleClass: 'bg-emerald-50 text-emerald-700 hover:bg-white hover:shadow-sm' },
   { id: 'expired', label: 'منتهية', icon: 'fa-clock', activeClass: 'bg-red-500 text-white shadow-md', idleClass: 'bg-red-50 text-red-700 hover:bg-white hover:shadow-sm' },
   { id: 'uploaded', label: 'مرفوعة', icon: 'fa-cloud-arrow-up', activeClass: 'bg-blue-500 text-white shadow-md', idleClass: 'bg-blue-50 text-blue-700 hover:bg-white hover:shadow-sm' },
+];
+
+const CASE_AI_MODES: Array<{ id: CaseAiMode; label: string; icon: string }> = [
+  { id: 'brief', label: 'ملخص ذكي', icon: 'fa-sparkles' },
+  { id: 'risk', label: 'المخاطر', icon: 'fa-triangle-exclamation' },
+  { id: 'plan', label: 'الخطة', icon: 'fa-route' },
+  { id: 'message', label: 'رسالة', icon: 'fa-pen-nib' },
 ];
 
 const getCaseStatusTone = (status: CaseStatus) => {
@@ -275,7 +267,7 @@ const getCaseRoadmapSteps = (activeCase: LegalCase) => {
 
 // --- Sub-Components ---
 
-const CaseSidebar = ({
+const CaseSidebar = React.memo(({
   cases,
   activeCaseId,
   setActiveCaseId,
@@ -290,27 +282,33 @@ const CaseSidebar = ({
   searchQuery: string,
   statusFilter: SidebarFilter
 }) => {
-  const filtered = cases.filter((c) => {
-    const matchesArchive = showArchived ? c.isArchived : !c.isArchived;
+  const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    const matchesSearch = !query || c.title.toLowerCase().includes(query) || c.lawyer.name.toLowerCase().includes(query) || c.client.toLowerCase().includes(query);
-    const latestClientMessage = [...c.messages].reverse().find((message) => message.sender === 'user');
-    const hasAction =
-      c.status === 'pending' ||
-      (c.unreadCount ?? 0) > 0 ||
-      c.documents.some((doc) => doc.actionRequired || doc.expiresAt) ||
-      !!latestClientMessage?.awaitingResponse;
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'needs_action' && hasAction) ||
-      (statusFilter === 'in_progress' && c.status === 'active') ||
-      (statusFilter === 'waiting' && c.status === 'review') ||
-      (statusFilter === 'completed' && c.status === 'closed') ||
-      (statusFilter === 'drafts' && c.documents.some(d => d.actionRequired === 'مسودة' || !d.isSigned));
-    return matchesArchive && matchesSearch && matchesStatus;
-  });
 
-  const actionCount = filtered.reduce((total, item) => total + item.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length + (item.unreadCount ?? 0), 0);
+    return cases.filter((c) => {
+      const matchesArchive = showArchived ? c.isArchived : !c.isArchived;
+      const matchesSearch = !query || c.title.toLowerCase().includes(query) || c.lawyer.name.toLowerCase().includes(query) || c.client.toLowerCase().includes(query);
+      const latestClientMessage = [...c.messages].reverse().find((message) => message.sender === 'user');
+      const hasAction =
+        c.status === 'pending' ||
+        (c.unreadCount ?? 0) > 0 ||
+        c.documents.some((doc) => doc.actionRequired || doc.expiresAt) ||
+        !!latestClientMessage?.awaitingResponse;
+      const matchesStatus =
+        statusFilter === 'all' ||
+        (statusFilter === 'needs_action' && hasAction) ||
+        (statusFilter === 'in_progress' && c.status === 'active') ||
+        (statusFilter === 'waiting' && c.status === 'review') ||
+        (statusFilter === 'completed' && c.status === 'closed') ||
+        (statusFilter === 'drafts' && c.documents.some(d => d.actionRequired === 'مسودة' || !d.isSigned));
+      return matchesArchive && matchesSearch && matchesStatus;
+    });
+  }, [cases, searchQuery, showArchived, statusFilter]);
+
+  const actionCount = useMemo(
+    () => filtered.reduce((total, item) => total + item.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length + (item.unreadCount ?? 0), 0),
+    [filtered],
+  );
 
   return (
     <div className="flex-1 overflow-y-auto p-3 custom-scrollbar">
@@ -408,67 +406,214 @@ const CaseSidebar = ({
       </div>
     </div>
   );
+});
+
+CaseSidebar.displayName = 'CaseSidebar';
+
+const buildCaseAiInsight = (activeCase: LegalCase, mode: CaseAiMode) => {
+  const pendingDocs = activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
+  const expiredDocs = activeCase.documents.filter((doc) => doc.expiresAt && !doc.isSigned);
+  const signedDocs = activeCase.documents.filter((doc) => doc.isSigned).length;
+  const latestMessage = [...activeCase.messages].reverse()[0];
+  const latestUserMessage = [...activeCase.messages].reverse().find((message) => message.sender === 'user');
+  const latestLawyerMessage = [...activeCase.messages].reverse().find((message) => message.sender === 'lawyer');
+  const remainingBalance = Math.max(0, activeCase.financials.totalAgreed - activeCase.financials.paid);
+  const paidPercent = activeCase.financials.totalAgreed > 0
+    ? Math.round((activeCase.financials.paid / activeCase.financials.totalAgreed) * 100)
+    : 0;
+  const fileHealth = [
+    pendingDocs.length === 0,
+    activeCase.progress >= 50,
+    remainingBalance === 0 || activeCase.financials.totalAgreed === 0,
+    !latestUserMessage?.awaitingResponse,
+  ].filter(Boolean).length;
+  const confidence = Math.min(96, 58 + fileHealth * 9 + Math.min(activeCase.documents.length, 6) * 2);
+
+  const draftMessage = pendingDocs.length > 0
+    ? `أستاذ ${activeCase.lawyer.name}، راجعت ملف "${activeCase.title}" ووجدت ${pendingDocs.length.toLocaleString('ar-IQ')} وثائق تحتاج متابعة. ما هي الأولوية الأولى؟ وهل توجد مدة نهائية يجب الالتزام بها؟`
+    : latestUserMessage?.awaitingResponse
+      ? `أستاذ ${activeCase.lawyer.name}، أود متابعة رسالتي الأخيرة في ملف "${activeCase.title}". هل توجد مستجدات أو إجراء مطلوب مني؟`
+      : `أستاذ ${activeCase.lawyer.name}، هل يمكنك تزويدي بتحديث مختصر عن ملف "${activeCase.title}" والخطوة القادمة المتوقعة؟`;
+
+  if (mode === 'risk') {
+    const risks = [
+      pendingDocs.length > 0 ? `${pendingDocs.length.toLocaleString('ar-IQ')} وثائق تحتاج إجراء قبل أن يتأخر المسار.` : 'لا توجد وثائق معلقة حالياً.',
+      expiredDocs.length > 0 ? `${expiredDocs.length.toLocaleString('ar-IQ')} وثائق مرتبطة بمدة أو صلاحية.` : 'لا تظهر وثائق منتهية أو حرجة حسب البيانات الحالية.',
+      latestUserMessage?.awaitingResponse ? 'توجد رسالة منك بانتظار متابعة المحامي.' : 'لا توجد رسالة مرسلة منك بانتظار رد واضح.',
+      remainingBalance > 0 ? `يوجد رصيد متبقٍ قدره ${remainingBalance.toLocaleString()} د.ع قد يؤثر على الإجراء التالي.` : 'الوضع المالي لا يظهر مانعاً حالياً.',
+    ];
+
+    return {
+      eyebrow: 'تحليل المخاطر',
+      title: pendingDocs.length || expiredDocs.length || latestUserMessage?.awaitingResponse ? 'يوجد ما يستحق الانتباه' : 'المخاطر الحالية منخفضة',
+      summary: 'يركز هذا الفحص على الوثائق، المدد، الرسائل غير المتابعة، والوضع المالي داخل الملف.',
+      bullets: risks,
+      recommendation: pendingDocs.length > 0 ? 'ابدأ بالوثائق ذات الإجراء المطلوب، ثم أرسل سؤالاً محدداً للمحامي عن الأولوية.' : 'استمر في متابعة الملخص وسجل الأحداث عند ظهور تحديثات جديدة.',
+      confidence,
+      draftMessage,
+    };
+  }
+
+  if (mode === 'plan') {
+    return {
+      eyebrow: 'خطة العمل',
+      title: activeCase.progress >= 80 ? 'خطة إغلاق ومراجعة نهائية' : 'خطة متابعة قصيرة',
+      summary: `التقدم الحالي ${activeCase.progress}%، والملف يحتوي على ${activeCase.documents.length.toLocaleString('ar-IQ')} وثائق و${activeCase.messages.length.toLocaleString('ar-IQ')} رسائل.`,
+      bullets: [
+        pendingDocs.length > 0 ? 'راجع الوثائق المطلوبة ووقّع أو علّق على كل وثيقة معلقة.' : 'ثبت أن الوثائق الحالية لا تحتاج إجراء مباشر.',
+        latestLawyerMessage ? `راجع آخر توجيه من المحامي: ${latestLawyerMessage.text.slice(0, 90)}${latestLawyerMessage.text.length > 90 ? '...' : ''}` : 'اطلب من المحامي تحديد آخر موقف إجرائي.',
+        remainingBalance > 0 ? `راجع المتبقي المالي (${remainingBalance.toLocaleString()} د.ع) قبل الانتقال لمرحلة حساسة.` : 'احتفظ بسجل الدفع ضمن ملخص القضية.',
+        activeCase.progress >= 80 ? 'افتح مركز الإغلاق واطلب اعتماد النتيجة النهائية.' : 'تابع التقدم بعد تنفيذ الإجراء التالي.',
+      ],
+      recommendation: activeCase.progress >= 80 ? 'انتقل إلى تبويب الإغلاق للتأكد من اكتمال المتطلبات.' : 'نفّذ أول بند ثم حدّث المحامي برسالة قصيرة.',
+      confidence,
+      draftMessage,
+    };
+  }
+
+  if (mode === 'message') {
+    return {
+      eyebrow: 'صياغة ذكية',
+      title: 'مسودة رسالة جاهزة للمحامي',
+      summary: 'المسودة مبنية على الوثائق المعلقة وآخر حالة ظاهرة في الملف. يمكنك استخدامها كما هي أو تعديلها في صندوق المحادثة.',
+      bullets: [
+        draftMessage,
+        pendingDocs.length > 0 ? `الوثائق المقصودة: ${pendingDocs.slice(0, 3).map((doc) => doc.name).join('، ')}${pendingDocs.length > 3 ? '...' : ''}` : 'لا توجد وثائق معلقة مذكورة في المسودة.',
+      ],
+      recommendation: 'استخدم المسودة في المحادثة ثم عدّل الصياغة حسب ما تريد إرساله فعلياً.',
+      confidence,
+      draftMessage,
+    };
+  }
+
+  return {
+    eyebrow: 'ملخص ذكي',
+    title: activeCaseActionCountLabel(activeCase, pendingDocs.length),
+    summary: `القضية في حالة "${activeCase.statusText}" بنسبة إنجاز ${activeCase.progress}%. تم توقيع ${signedDocs.toLocaleString('ar-IQ')} من أصل ${activeCase.documents.length.toLocaleString('ar-IQ')} وثائق، والسداد الحالي ${paidPercent}%.`,
+    bullets: [
+      pendingDocs.length > 0 ? `أولوية الملف: ${pendingDocs[0].name}` : 'لا توجد وثيقة تحتاج توقيعاً أو إجراءً فورياً.',
+      latestMessage ? `آخر تواصل: ${latestMessage.sender === 'user' ? 'أنت' : 'المحامي'} - ${latestMessage.text.slice(0, 95)}${latestMessage.text.length > 95 ? '...' : ''}` : 'لا توجد رسائل مسجلة بعد.',
+      remainingBalance > 0 ? `المتبقي المالي: ${remainingBalance.toLocaleString()} د.ع.` : 'لا يوجد مبلغ متبقٍ ظاهر في السجل.',
+    ],
+    recommendation: pendingDocs.length > 0 ? 'افتح الوثائق المطلوبة أولاً، ثم أرسل تحديثاً للمحامي.' : 'راجع سجل الأحداث أو اطلب تحديثاً موجزاً من المحامي.',
+    confidence,
+    draftMessage,
+  };
 };
 
-const CaseLifecycleRail = ({
+const activeCaseActionCountLabel = (activeCase: LegalCase, pendingDocuments: number) => {
+  if (activeCase.status === 'closed') return 'الملف مغلق وجاهز للأرشفة';
+  if (pendingDocuments > 0) return 'هناك إجراءات تستحق المتابعة';
+  if ((activeCase.unreadCount ?? 0) > 0) return 'توجد رسائل جديدة تحتاج قراءة';
+  if (activeCase.progress >= 80) return 'الملف قريب من الإغلاق';
+  return 'الملف مستقر ويحتاج متابعة دورية';
+};
+
+const SmartCaseAssistant = ({
   activeCase,
   setActiveTab,
   setDocFilter,
+  setNewMessage,
 }: {
   activeCase: LegalCase;
   setActiveTab: (tab: WorkspaceTab) => void;
   setDocFilter: (filter: DocFilter) => void;
+  setNewMessage: (message: string) => void;
 }) => {
-  const currentIndex = getLifecycleIndex(activeCase);
+  const [mode, setMode] = useState<CaseAiMode>('brief');
+  const insight = useMemo(() => buildCaseAiInsight(activeCase, mode), [activeCase, mode]);
+  const pendingDocuments = activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length;
 
   return (
-    <section className="rounded-[1.5rem] border border-slate-200 bg-white p-4 text-right shadow-sm">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">مسار القضية</p>
-          <h3 className="mt-1 text-base font-black text-brand-dark">من فتح الملف إلى الإغلاق</h3>
+    <section className="overflow-hidden rounded-[1.5rem] border border-brand-navy/10 bg-white text-right shadow-sm">
+      <div className="grid gap-0 xl:grid-cols-[280px_minmax(0,1fr)]">
+        <div className="border-b border-slate-100 bg-[linear-gradient(180deg,rgba(26,35,126,0.06),rgba(248,250,252,0.95))] p-5 xl:border-l xl:border-b-0">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">ذكاء الملف</p>
+              <h3 className="mt-1 text-lg font-black text-brand-dark">مساعد القضية</h3>
+            </div>
+            <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-brand-navy text-white shadow-lg shadow-brand-navy/20">
+              <i className="fa-solid fa-wand-magic-sparkles"></i>
+            </span>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 xl:grid-cols-1">
+            {CASE_AI_MODES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setMode(item.id)}
+                className={`flex items-center justify-between rounded-2xl border px-3 py-2 text-xs font-black transition ${mode === item.id
+                  ? 'border-brand-navy bg-brand-navy text-white shadow-md shadow-brand-navy/15'
+                  : 'border-white bg-white text-slate-500 hover:border-brand-navy/20 hover:text-brand-navy'
+                  }`}
+              >
+                <span>{item.label}</span>
+                <i className={`fa-solid ${item.icon}`}></i>
+              </button>
+            ))}
+          </div>
         </div>
-        <span className="w-fit rounded-full bg-brand-navy/5 px-3 py-1.5 text-[10px] font-black text-brand-navy">
-          المرحلة الحالية: {CASE_LIFECYCLE_STEPS[currentIndex]?.label}
-        </span>
-      </div>
 
-      <div className="mt-4 grid gap-2 md:grid-cols-3 2xl:grid-cols-6">
-        {CASE_LIFECYCLE_STEPS.map((step, index) => {
-          const isDone = index < currentIndex || activeCase.status === 'closed';
-          const isCurrent = index === currentIndex && activeCase.status !== 'closed';
-          return (
-            <button
-              key={step.id}
-              type="button"
-              onClick={() => {
-                if (step.id === 'documents') setDocFilter('pending');
-                setActiveTab(step.tab);
-              }}
-              className={`relative min-h-[104px] rounded-2xl border p-3 text-right transition hover:-translate-y-0.5 hover:shadow-sm ${isCurrent
-                  ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/15'
-                  : isDone
-                    ? 'border-emerald-100 bg-emerald-50 text-emerald-800'
-                    : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-navy/20 hover:bg-white'
-                }`}
-            >
-              <div className="flex items-start justify-between gap-3">
-                <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${isCurrent ? 'bg-white/15 text-white' : isDone ? 'bg-white text-emerald-600' : 'bg-white text-brand-navy'
-                  }`}>
-                  <i className={`fa-solid ${isDone ? 'fa-check' : step.icon} text-sm`}></i>
-                </span>
-                <span className={`rounded-full px-2 py-1 text-[9px] font-black ${isCurrent ? 'bg-white/15 text-white' : isDone ? 'bg-white text-emerald-700' : 'bg-white text-slate-400'
-                  }`}>
-                  {index + 1}
-                </span>
+        <div className="p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{insight.eyebrow}</p>
+              <h3 className="mt-1 text-xl font-black text-brand-dark">{insight.title}</h3>
+              <p className="mt-2 max-w-3xl text-sm font-bold leading-7 text-slate-500">{insight.summary}</p>
+            </div>
+            <div className="shrink-0 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-center">
+              <p className="text-[10px] font-black text-emerald-700">ثقة التحليل</p>
+              <p className="mt-1 text-2xl font-black text-emerald-700">{insight.confidence}%</p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            {insight.bullets.map((bullet, index) => (
+              <div key={`${mode}-${index}`} className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4">
+                <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-xl bg-white text-brand-navy shadow-sm">
+                  <i className={`fa-solid ${index === 0 ? 'fa-bullseye' : index === 1 ? 'fa-message' : 'fa-circle-info'} text-xs`}></i>
+                </div>
+                <p className="text-xs font-bold leading-6 text-slate-600">{bullet}</p>
               </div>
-              <p className="mt-3 text-sm font-black">{step.label}</p>
-              <p className={`mt-1 text-[11px] font-bold leading-5 ${isCurrent ? 'text-white/75' : isDone ? 'text-emerald-700/75' : 'text-slate-400'}`}>
-                {step.note}
-              </p>
-            </button>
-          );
-        })}
+            ))}
+          </div>
+
+          <div className="mt-5 flex flex-col gap-3 rounded-2xl border border-brand-navy/10 bg-brand-navy/5 p-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <p className="text-xs font-black text-brand-navy">التوصية التالية</p>
+              <p className="mt-1 text-sm font-bold leading-6 text-slate-600">{insight.recommendation}</p>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  if (pendingDocuments > 0) {
+                    setDocFilter('pending');
+                    setActiveTab('summary');
+                  } else {
+                    setActiveTab('chat');
+                  }
+                }}
+                className="rounded-2xl bg-brand-navy px-4 py-3 text-xs font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark"
+              >
+                <i className="fa-solid fa-arrow-left ml-2"></i>
+                تنفيذ التوصية
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setNewMessage(insight.draftMessage);
+                  setActiveTab('chat');
+                }}
+                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-brand-navy transition hover:border-brand-navy"
+              >
+                <i className="fa-solid fa-pen-to-square ml-2"></i>
+                استخدم كرسالة
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
   );
@@ -672,216 +817,6 @@ const SummaryTab = ({
   );
 };
 
-const ChatTab = ({
-  activeCase,
-  newMessage,
-  setNewMessage,
-  sendMessage,
-  isLawyerTyping,
-  isRecording,
-  setIsRecording
-}: {
-  activeCase: LegalCase,
-  newMessage: string,
-  setNewMessage: (msg: string) => void,
-  sendMessage: (text?: string, optimisticId?: string) => void,
-  isLawyerTyping: boolean,
-  isRecording: boolean,
-  setIsRecording: (r: boolean) => void
-}) => (
-  <>
-    <div className="flex-1 overflow-y-auto p-6 space-y-5 bg-slate-50/50 custom-scrollbar">
-      <div className="text-center w-full my-4">
-        <span className="bg-slate-100 text-slate-400 text-[9px] font-black px-3 py-1 rounded-full tracking-widest uppercase">اليوم</span>
-      </div>
-      {activeCase.messages.map((msg) => (
-        <div key={msg.id} className={`flex gap-3 max-w-[95%] group ${msg.sender === 'user' ? 'mr-auto flex-row-reverse' : ''}`}>
-          <div className="w-9 h-9 shrink-0 rounded-2xl overflow-hidden border border-slate-200 shadow-sm mt-1">
-            <img src={msg.sender === 'user' ? 'https://i.pravatar.cc/150?img=11' : activeCase.lawyer.img} className="w-full h-full object-cover" alt="avatar" />
-          </div>
-          <div className={`p-4 rounded-2xl text-[14px] md:text-[15px] leading-7 shadow-sm relative ${msg.sender === 'user'
-            ? 'bg-brand-navy text-white rounded-tl-none before:absolute before:-left-1.5 before:top-4 before:w-3 before:h-3 before:bg-brand-navy before:rotate-45'
-            : 'bg-white border border-slate-100 text-slate-700 rounded-tr-none before:absolute before:-right-1.5 before:top-4 before:w-3 before:h-3 before:bg-white before:rotate-45 before:border-t before:border-r before:border-slate-100'
-            }`}>
-            <p className="font-medium">{msg.text}</p>
-            {msg.sender === 'user' && (
-              <div className="mt-2 flex flex-wrap items-center justify-end gap-2">
-                <p className={`text-[10px] font-black ${msg.awaitingResponse ? 'text-amber-200' : 'text-emerald-200'}`}>
-                  {msg.awaitingResponse ? 'بانتظار متابعة المحامي' : 'تمت متابعة رسالتك'}
-                </p>
-                {msg.deliveryState === 'sending' && (
-                  <span className="rounded-full bg-white/15 px-2.5 py-1 text-[10px] font-black text-blue-100">
-                    جارٍ الإرسال...
-                  </span>
-                )}
-                {msg.deliveryState === 'failed' && (
-                  <button
-                    type="button"
-                    onClick={() => sendMessage(msg.text, String(msg.id))}
-                    className="rounded-full bg-red-500/15 px-2.5 py-1 text-[10px] font-black text-red-100 transition hover:bg-red-500/25"
-                  >
-                    فشل الإرسال - إعادة المحاولة
-                  </button>
-                )}
-              </div>
-            )}
-            <div className={`flex items-center justify-end gap-1.5 mt-2 text-[9px] font-black ${msg.sender === 'user' ? 'text-blue-200/70' : 'text-slate-400'}`}>
-              <span className="uppercase">{getMessageTimeLabel(msg)}</span>
-              {msg.sender === 'user' && <i className={`fa-solid fa-check-double ${getMessageTimeLabel(msg) === 'الآن' ? 'opacity-50' : 'text-blue-300'}`}></i>}
-            </div>
-          </div>
-        </div>
-      ))}
-      {isLawyerTyping && (
-        <div className="flex gap-3 max-w-[94%] fade-in">
-          <div className="w-9 h-9 shrink-0 rounded-2xl overflow-hidden border border-slate-200 shadow-sm mt-1"><img src={activeCase.lawyer.img} className="w-full h-full object-cover" alt="avatar" /></div>
-          <div className="px-4 py-3 bg-white border border-slate-100 rounded-2xl rounded-tr-md shadow-sm flex items-center gap-1">
-            <div className="w-1.5 h-1.5 bg-brand-gold rounded-full typing-dot"></div>
-            <div className="w-1.5 h-1.5 bg-brand-gold rounded-full typing-dot"></div>
-            <div className="w-1.5 h-1.5 bg-brand-gold rounded-full typing-dot"></div>
-          </div>
-        </div>
-      )}
-    </div>
-    <div className="p-4 bg-white border-t border-slate-100 flex flex-col gap-4">
-      <div className="flex gap-2 overflow-x-auto no-scrollbar scroll-smooth w-full px-1">
-        {QUICK_REPLIES.map((reply, idx) => (
-          <button key={idx} onClick={() => sendMessage(reply)} className="shrink-0 bg-slate-50 text-slate-600 border border-slate-200 px-4 py-2 rounded-2xl text-[11px] font-black hover:bg-brand-navy hover:text-white transition-all shadow-sm">{reply}</button>
-        ))}
-      </div>
-      <div className="flex items-end gap-3 bg-slate-50 border border-slate-200 rounded-3xl p-2 focus-within:bg-white focus-within:border-brand-navy transition-all relative">
-        {!isRecording ? (
-          <>
-            <button className="p-3.5 text-slate-400 hover:text-brand-navy transition-colors rounded-2xl shrink-0"><i className="fa-solid fa-paperclip text-lg"></i></button>
-            <textarea placeholder="اكتب رسالتك للمحامي..." className="w-full bg-transparent border-none focus:outline-none resize-none py-3.5 text-[15px] font-medium text-slate-700 max-h-32 min-h-[52px]" rows={1} value={newMessage} onChange={(e) => setNewMessage(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}></textarea>
-            {!newMessage.trim() ? (
-              <button onClick={() => setIsRecording(true)} className="w-12 h-12 bg-slate-100 text-slate-400 rounded-2xl hover:bg-brand-navy/10 hover:text-brand-navy transition shrink-0 flex items-center justify-center shadow-sm"><i className="fa-solid fa-microphone"></i></button>
-            ) : (
-              <button onClick={() => sendMessage()} className="w-12 h-12 bg-brand-navy text-white rounded-2xl hover:bg-brand-dark transition-all shrink-0 flex items-center justify-center shadow-lg shadow-brand-navy/30"><i className="fa-solid fa-paper-plane"></i></button>
-            )}
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-between px-4 py-2 bg-red-50 rounded-2xl">
-            <div className="flex items-center gap-3">
-              <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse"></div>
-              <span className="text-sm font-black text-red-600 font-mono">00:12</span>
-            </div>
-            <div className="flex gap-4">
-              <button onClick={() => setIsRecording(false)} className="text-slate-400 font-black text-xs">إلغاء</button>
-              <button onClick={() => setIsRecording(false)} className="w-10 h-10 bg-red-500 text-white rounded-xl shadow-lg flex items-center justify-center"><i className="fa-solid fa-stop"></i></button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  </>
-);
-
-const DocumentsTab = ({
-  activeCase,
-  docFilter,
-  setDocFilter,
-  filteredDocuments,
-  fileInputRef,
-  handleFileUpload,
-  setIsNewFolderModalOpen,
-  docSearchQuery,
-  setDocSearchQuery
-}: {
-  activeCase: LegalCase,
-  docFilter: DocFilter,
-  setDocFilter: (f: DocFilter) => void,
-  filteredDocuments: LegalDocument[],
-  fileInputRef: React.RefObject<HTMLInputElement>,
-  handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void,
-  setIsNewFolderModalOpen: (open: boolean) => void,
-  docSearchQuery: string,
-  setDocSearchQuery: (q: string) => void
-}) => (
-  <div className="flex-1 flex flex-col bg-slate-50/30 overflow-hidden">
-    <div className="p-5 border-b border-slate-100 font-black text-sm text-brand-dark flex flex-row-reverse justify-between items-center bg-white">
-      <span className="flex items-center gap-2"><i className="fa-solid fa-folder-tree text-brand-navy"></i> وثائق الملف</span>
-      <button onClick={() => setIsNewFolderModalOpen(true)} className="text-slate-400 hover:text-brand-navy transition w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-50"><i className="fa-solid fa-folder-plus"></i></button>
-    </div>
-    <div className="px-5 py-3 border-b border-slate-100 bg-white">
-      <div className="relative">
-        <input
-          type="text"
-          value={docSearchQuery}
-          onChange={(e) => setDocSearchQuery(e.target.value)}
-          placeholder="ابحث عن وثيقة بالاسم..."
-          className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2 pr-10 pl-4 text-xs focus:outline-none focus:border-brand-navy transition text-right"
-        />
-        <i className="fa-solid fa-search absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
-      </div>
-    </div>
-    <div className="px-5 py-4 border-b border-slate-100 bg-white flex flex-row-reverse gap-2 overflow-x-auto no-scrollbar">
-      {['all', 'pending', 'signed', 'expired', 'contracts'].map((f) => (
-        <button key={f} onClick={() => setDocFilter(f as DocFilter)} className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${docFilter === f ? 'bg-brand-navy text-white shadow-md' : 'bg-slate-50 text-slate-500 border border-slate-100 hover:bg-white'}`}>{f === 'all' ? 'الكل' : f === 'pending' ? 'للتوقيع' : f === 'signed' ? 'موقعة' : 'منتهية'}</button>
-      ))}
-    </div>
-    <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 custom-scrollbar">
-      {filteredDocuments.map((doc) => (
-        <div key={doc.id} className="border p-5 rounded-[1.75rem] hover:border-brand-navy transition-all bg-white shadow-sm hover:shadow-md relative group">
-          <div className="flex items-start gap-4">
-            <div className={`text-3xl ${doc.type === 'pdf' ? 'text-red-500' : 'text-blue-500'}`}><i className={`fa-solid ${doc.type === 'pdf' ? 'fa-file-pdf' : 'fa-file-image'}`}></i></div>
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-black text-brand-dark truncate">{doc.name}</p>
-              <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase">{doc.size} • {doc.date}</p>
-              {doc.isSigned && <span className="inline-block mt-2 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 text-[9px] font-black border border-emerald-100"><i className="fa-solid fa-check-circle ml-1"></i>موقع</span>}
-              <div className="flex flex-wrap gap-1 mt-2">
-                {doc.tags?.map(tag => (
-                  <span key={tag} className="text-[8px] font-bold bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded">
-                    #{tag}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </div>
-          <div className="absolute top-4 left-4 opacity-0 group-hover:opacity-100 transition-opacity flex gap-1">
-            <button className="h-8 w-8 rounded-lg bg-slate-50 text-slate-400 hover:text-brand-navy shadow-sm"><i className="fa-solid fa-download text-xs"></i></button>
-          </div>
-        </div>
-      ))}
-    </div>
-    <div className="p-6 border-t border-slate-100 bg-white">
-      <input type="file" multiple className="hidden" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" />
-      <button onClick={() => fileInputRef.current?.click()} className="w-full border-2 border-dashed border-slate-200 rounded-[2rem] p-6 text-center hover:border-brand-navy hover:bg-slate-50 transition-all group">
-        <i className="fa-solid fa-cloud-arrow-up text-3xl text-slate-300 group-hover:text-brand-navy mb-2"></i>
-        <p className="text-sm font-black text-brand-dark">رفع وثائق جديدة</p>
-      </button>
-    </div>
-  </div>
-);
-
-const AiTab = ({ activeCase }: { activeCase: LegalCase }) => (
-  <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 flex flex-col custom-scrollbar">
-    {activeCase.aiConsultations && activeCase.aiConsultations.length > 0 ? (
-      <div className="space-y-5">
-        {activeCase.aiConsultations.map((ai) => (
-          <div key={ai.id} className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm hover:border-brand-gold cursor-pointer transition-all group hover:shadow-md">
-            <div className="flex justify-between items-start mb-2">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-brand-navy/10 text-brand-navy flex items-center justify-center">
-                  <i className="fa-solid fa-robot"></i>
-                </div>
-                <h4 className="font-bold text-brand-dark text-sm">{ai.title}</h4>
-              </div>
-              <span className="text-[10px] text-gray-400">{ai.date}</span>
-            </div>
-            <p className="text-xs text-gray-500 mt-2 line-clamp-2 pr-10">{ai.excerpt}</p>
-          </div>
-        ))}
-      </div>
-    ) : (
-      <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-400 my-8">
-        <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mb-4 border border-slate-100 shadow-sm"><i className="fa-solid fa-robot text-3xl text-gray-300"></i></div>
-        <h3 className="text-lg font-black text-brand-dark mb-1">لا توجد استشارات مربوطة</h3>
-      </div>
-    )}
-  </div>
-);
-
 const FinancialsTab = ({ activeCase }: { activeCase: LegalCase }) => (
   <div className="flex-1 overflow-y-auto p-5 bg-slate-50/30 space-y-6 custom-scrollbar">
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -959,12 +894,10 @@ const ResolutionTab = ({
   activeCase,
   setActiveTab,
   sendMessage,
-  setIsSummaryModalOpen,
 }: {
   activeCase: LegalCase;
   setActiveTab: (tab: WorkspaceTab) => void;
   sendMessage: (text?: string, optimisticId?: string) => void;
-  setIsSummaryModalOpen: (open: boolean) => void;
 }) => {
   const pendingDocuments = activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
   const remainingBalance = Math.max(0, activeCase.financials.totalAgreed - activeCase.financials.paid);
@@ -1065,13 +998,6 @@ const ResolutionTab = ({
               >
                 مراسلة المحامي للإغلاق
               </button>
-              <button
-                type="button"
-                onClick={() => setIsSummaryModalOpen(true)}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-brand-navy transition hover:border-brand-navy"
-              >
-                عرض ملخص القضية
-              </button>
             </div>
           </section>
 
@@ -1099,8 +1025,6 @@ const ResolutionTab = ({
 };
 
 export default function MyCases() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
 
   const [activeCaseId, setActiveCaseId] = useState<string>('');
@@ -1197,7 +1121,7 @@ export default function MyCases() {
       if (document.visibilityState === 'visible') {
         refresh();
       }
-    }, 5000);
+    }, 15000);
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -1241,13 +1165,6 @@ export default function MyCases() {
   }, []);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isSplitView, setIsSplitView] = useState(false);
-  const [splitWidth, setSplitWidth] = useState(400);
-  const [isResizing, setIsResizing] = useState(false);
-  const splitContainerRef = useRef<HTMLDivElement>(null);
-  const [isSummaryModalOpen, setIsSummaryModalOpen] = useState(false);
-  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
-  const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [activePreviewDoc, setActivePreviewDoc] = useState<LegalDocument | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -1255,11 +1172,6 @@ export default function MyCases() {
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarStatusFilter, setSidebarStatusFilter] = useState<SidebarFilter>('needs_action');
   const [isRecording, setIsRecording] = useState(false);
-  const [isCaseSwitcherOpen, setIsCaseSwitcherOpen] = useState(false);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'user' | 'lawyer'>('user');
-  const [invitePermissions, setInvitePermissions] = useState<'view' | 'edit'>('view');
-  const [isShareAccessModalOpen, setIsShareAccessModalOpen] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
   const [newCaseTitle, setNewCaseTitle] = useState('');
@@ -1313,51 +1225,6 @@ export default function MyCases() {
     window.history.replaceState({}, document.title);
   }, [location.state]);
 
-  const handleLogout = () => {
-    logout();
-    navigate('/auth');
-  };
-
-  const handleInviteCollaborator = async () => {
-    if (!inviteEmail.trim()) {
-      alert('يرجى إدخال بريد إلكتروني صحيح.');
-      return;
-    }
-    if (!activeCase) return;
-
-    try {
-      const response = await apiClient.addCaseCollaborator(activeCaseId, {
-        email: inviteEmail,
-        role: inviteRole,
-        permissions: invitePermissions,
-      });
-      if (response.data) {
-        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-        alert(`تم منح صلاحية الوصول لـ ${inviteEmail} كـ ${inviteRole === 'lawyer' ? 'محامي' : 'مستخدم'}`);
-        setInviteEmail('');
-        setInviteRole('user');
-        setInvitePermissions('view');
-        setIsShareAccessModalOpen(false);
-      }
-    } catch (error: any) {
-      console.error('Failed to invite collaborator', error);
-      alert(error.response?.data?.error || 'فشل إضافة المتعاون. يرجى المحاولة مرة أخرى.');
-    }
-  };
-
-  const handleRevokeAccess = async (collabId: string) => {
-    if (!activeCase) return;
-    try {
-      const response = await apiClient.removeCaseCollaborator(activeCaseId, collabId);
-      if (response.data) {
-        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-      }
-    } catch (error: any) {
-      console.error('Failed to revoke access', error);
-      alert(error.response?.data?.error || 'فشل حذف صلاحية الوصول.');
-    }
-  };
-
   const handleCreateCase = async () => {
     if (!newCaseTitle.trim() || !newCaseLawyerId) return;
     setCreateCaseError('');
@@ -1390,48 +1257,6 @@ export default function MyCases() {
       setCreateCaseError(error.response?.data?.error || 'تعذر إنشاء الملف. تأكد من اختيار محامٍ صالح ثم حاول مرة أخرى.');
     } finally {
       setIsCreatingCase(false);
-    }
-  };
-
-  const handleDownloadQr = async () => {
-    if (!activeCase) return;
-    // Requesting a 1000x1000 resolution for high-quality printing
-    const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=1000x1000&data=${encodeURIComponent(`${window.location.origin}/cases/${activeCase.id}`)}`;
-
-    try {
-      const response = await fetch(qrUrl);
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `QR-${activeCase.title.replace(/\s+/g, '_')}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (e) {
-      alert('عذراً، فشل تحميل الرمز. يرجى المحاولة مرة أخرى.');
-    }
-  };
-
-  const copyText = async (value: string, successMessage = 'تم النسخ') => {
-    try {
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(value);
-      } else {
-        const input = document.createElement('textarea');
-        input.value = value;
-        input.setAttribute('readonly', 'true');
-        input.style.position = 'fixed';
-        input.style.opacity = '0';
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand('copy');
-        input.remove();
-      }
-      alert(successMessage);
-    } catch {
-      alert('تعذر النسخ. يرجى المحاولة مرة أخرى.');
     }
   };
 
@@ -1474,8 +1299,6 @@ export default function MyCases() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         setActivePreviewDoc(null);
-        setIsQrModalOpen(false);
-        setIsSummaryModalOpen(false);
         setIsNewCaseModalOpen(false);
       }
     };
@@ -1520,26 +1343,6 @@ export default function MyCases() {
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!isResizing || !splitContainerRef.current) return;
-      const containerRect = splitContainerRef.current.getBoundingClientRect();
-      const newWidth = e.clientX - containerRect.left;
-      if (newWidth > 300 && newWidth < 600) setSplitWidth(newWidth);
-    };
-    const handleMouseUp = () => setIsResizing(false);
-    if (isResizing) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = 'col-resize';
-    }
-    return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-      document.body.style.cursor = '';
-    };
-  }, [isResizing]);
 
   const uploadTimersRef = useRef<number[]>([]);
   const [caseToDelete, setCaseToDelete] = useState<string | null>(null);
@@ -1591,12 +1394,6 @@ export default function MyCases() {
   // Signature states
   const [docToSign, setDocToSign] = useState<string | null>(null);
   const [isRequestingSignature, setIsRequestingSignature] = useState<boolean>(false);
-
-  // Sharing states
-  const [docToShare, setDocToShare] = useState<string | null>(null);
-  const [shareEmail, setShareEmail] = useState<string>('');
-  const [sharePermission, setSharePermission] = useState<'view' | 'comment' | 'edit'>('view');
-  const [shareLinkGenerated, setShareLinkGenerated] = useState<string | null>(null);
 
   // Notification Toast State
   const [notification, setNotification] = useState<{ show: boolean, message: string, docId?: string, expires?: string } | null>(null);
@@ -1993,6 +1790,29 @@ export default function MyCases() {
     return { signed, needsAction, percent };
   }, [activeCase]);
 
+  const attentionQueue = useMemo(() => {
+    return cases
+      .map((item) => {
+        const pendingDocs = item.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length;
+        const unread = item.unreadCount ?? 0;
+        const score = pendingDocs * 3 + unread * 2 + (item.status === 'pending' ? 1 : 0);
+
+        return {
+          id: item.id,
+          title: item.title,
+          statusText: item.statusText,
+          pendingDocs,
+          unread,
+          score,
+        };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 3);
+  }, [cases]);
+
+  const latestTimelineEvent = activeCase?.timeline?.[0] || null;
+
   return (
     <div className="app-view fade-in w-full max-w-full space-y-5 overflow-x-hidden">
       {/* Toast Notification for Reminders */}
@@ -2036,18 +1856,19 @@ export default function MyCases() {
       )}
 
       {/* Header section */}
-      <div className="relative overflow-hidden rounded-[2rem] border border-brand-navy/10 bg-white p-5 text-right shadow-sm">
-        <div className="absolute inset-x-0 top-0 h-1 bg-[linear-gradient(90deg,#D4AF37,#1B365D,#D4AF37)]"></div>
-        <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex items-start gap-4">
+      <div className="relative overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-right shadow-sm">
+        <div className="grid gap-0 xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="p-5 md:p-6">
+            <div className="flex items-start gap-4">
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-400 shadow-sm transition-all hover:border-brand-navy hover:text-brand-navy lg:flex"
+              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-400 shadow-sm transition-all hover:border-brand-navy hover:text-brand-navy lg:flex"
+              title={isSidebarCollapsed ? 'إظهار قائمة القضايا' : 'إخفاء قائمة القضايا'}
             >
               <i className={`fa-solid ${isSidebarCollapsed ? 'fa-indent' : 'fa-outdent'}`}></i>
             </button>
             <div className="min-w-0">
-              <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">قضاياي</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">قضاياي</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="rounded-xl border border-slate-100 bg-white px-3 py-1.5 text-xs font-black text-slate-500 shadow-sm">
                   {showArchived ? 'عرض الأرشيف' : 'القضايا النشطة'}
@@ -2058,33 +1879,133 @@ export default function MyCases() {
                   </span>
                 )}
               </div>
-              <h2 className="mt-2 text-2xl font-black text-brand-dark sm:text-3xl">متابعة القضايا</h2>
-              <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">ابدأ ملفاً، تواصل مع المحامي، أدر الوثائق والمدفوعات، ثم أغلق القضية بملخص واضح.</p>
+              <h2 className="mt-2 text-2xl font-black text-brand-dark sm:text-3xl">مركز إدارة القضايا</h2>
+              <p className="mt-2 max-w-2xl text-sm font-bold leading-7 text-slate-500">كل ملف، رسالة، وثيقة، ودفعة في مساحة عمل واحدة مرتبة حسب ما يحتاج انتباهك أولاً.</p>
+            </div>
+            </div>
+            <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              {workspaceStats.map((stat) => (
+                <div key={stat.label} className={`min-h-[86px] rounded-2xl border p-3 ${stat.tone}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-black">{stat.label}</span>
+                    <i className={`fa-solid ${stat.icon}`}></i>
+                  </div>
+                  <p className="mt-3 text-2xl font-black leading-none">{stat.value}</p>
+                </div>
+              ))}
             </div>
           </div>
-          <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-            <ActionButton onClick={() => setShowArchived(!showArchived)} variant={showArchived ? 'primary' : 'secondary'}>
-              {showArchived ? 'عرض القضايا النشطة' : 'عرض الأرشيف'}
-            </ActionButton>
-            <ActionButton
-              onClick={() => setIsNewCaseModalOpen(true)}
-              variant="primary"
+          <aside className="border-t border-slate-100 bg-slate-50/70 p-5 xl:border-r xl:border-t-0">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">العمل الآن</p>
+                <h3 className="mt-1 text-base font-black text-brand-dark">أولوية اليوم</h3>
+              </div>
+              <ActionButton
+                onClick={() => setIsNewCaseModalOpen(true)}
+                variant="primary"
+                size="sm"
+              >
+                <i className="fa-solid fa-circle-plus"></i>
+                ملف جديد
+              </ActionButton>
+            </div>
+
+            <div className="mt-4 space-y-2">
+              {attentionQueue.length > 0 ? attentionQueue.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    setActiveCaseId(item.id);
+                    setActiveTab(item.pendingDocs > 0 ? 'summary' : 'chat');
+                    if (item.pendingDocs > 0) setDocFilter('pending');
+                  }}
+                  className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white bg-white px-4 py-3 text-right shadow-sm transition hover:border-brand-navy/20"
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-xs font-black text-brand-dark">{item.title}</span>
+                    <span className="mt-1 block text-[10px] font-bold text-slate-400">{item.statusText}</span>
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-black">
+                    {item.pendingDocs > 0 && <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{item.pendingDocs} وثائق</span>}
+                    {item.unread > 0 && <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">{item.unread} رسائل</span>}
+                  </span>
+                </button>
+              )) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-center">
+                  <p className="text-sm font-black text-brand-dark">لا توجد إجراءات عاجلة</p>
+                  <p className="mt-1 text-[11px] font-bold leading-5 text-slate-400">الملفات الحالية مستقرة ويمكنك المتابعة من الملخص.</p>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowArchived(!showArchived)}
+              className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-600 transition hover:border-brand-navy hover:text-brand-navy"
             >
-              <i className="fa-solid fa-circle-plus"></i> فتح ملف جديد
-            </ActionButton>
-          </div>
+              <i className={`fa-solid ${showArchived ? 'fa-folder-open' : 'fa-box-archive'}`}></i>
+              {showArchived ? 'عرض القضايا النشطة' : 'عرض الأرشيف'}
+            </button>
+          </aside>
         </div>
       </div>
 
       {activeCase && (
         <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 text-right shadow-sm">
-          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div className="min-w-0">
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">القضية الحالية</p>
               <h3 className="mt-1 truncate text-lg font-black text-brand-dark">{activeCase.title}</h3>
-              <p className="mt-1 text-xs font-bold text-slate-500">{activeCase.statusText} • {activeCase.progress}% مكتمل • {activeCase.documents.length.toLocaleString('ar-IQ')} وثائق</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+                <span className={`rounded-full px-3 py-1 text-[10px] font-black ring-1 ${getCaseStatusTone(activeCase.status)}`}>{activeCase.statusText}</span>
+                <span>{activeCase.progress}% مكتمل</span>
+                {latestTimelineEvent && (
+                  <>
+                    <span className="h-1 w-1 rounded-full bg-slate-300"></span>
+                    <span className="truncate">آخر تحديث: {latestTimelineEvent.title}</span>
+                  </>
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:min-w-[430px]">
+              {activeCaseInsights.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    if (item.label === 'الإجراءات') {
+                      setActiveTab('summary');
+                      setDocFilter('pending');
+                    } else if (item.label === 'السداد') {
+                      setActiveTab('financials');
+                    } else {
+                      setActiveTab('summary');
+                    }
+                  }}
+                  className={`rounded-2xl px-3 py-2 text-right ring-1 transition hover:-translate-y-0.5 hover:shadow-sm ${item.tone}`}
+                >
+                  <span className="flex items-center justify-between gap-2 text-[10px] font-black">
+                    {item.label}
+                    <i className={`fa-solid ${item.icon}`}></i>
+                  </span>
+                  <span className="mt-1 block text-lg font-black leading-none">{item.value}</span>
+                </button>
+              ))}
             </div>
             <div className="flex flex-wrap gap-2">
+              <ActionButton
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  const response = await apiClient.toggleWorkspaceCaseArchive(activeCaseId);
+                  setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+                }}
+                title={activeCase.isArchived ? 'إعادة من الأرشيف' : 'نقل للأرشيف'}
+              >
+                <i className={`fa-solid ${activeCase.isArchived ? 'fa-box-open' : 'fa-box-archive'}`}></i>
+              </ActionButton>
               {nextAction && (
                 <ActionButton
                   variant="primary"
@@ -2106,20 +2027,24 @@ export default function MyCases() {
                 <i className="fa-solid fa-circle-check"></i>
                 الإغلاق
               </ActionButton>
+              <ActionButton variant="danger" size="sm" onClick={() => setCaseToDelete(activeCase.id)} title="حذف الملف">
+                <i className="fa-solid fa-trash-can"></i>
+              </ActionButton>
             </div>
           </div>
         </div>
       )}
 
       {activeCase && (
-        <CaseLifecycleRail
+        <SmartCaseAssistant
           activeCase={activeCase}
           setActiveTab={setActiveTab}
           setDocFilter={setDocFilter}
+          setNewMessage={setNewMessage}
         />
       )}
 
-      <div className={`grid min-h-[760px] w-full min-w-0 grid-cols-1 gap-5 2xl:h-[calc(100vh-285px)] ${isSidebarCollapsed ? '' : 'xl:grid-cols-[320px_minmax(0,1fr)]'}`}>
+      <div className={`grid min-h-[680px] w-full min-w-0 grid-cols-1 gap-5 2xl:h-[calc(100vh-250px)] ${isSidebarCollapsed ? '' : 'xl:grid-cols-[300px_minmax(0,1fr)]'}`}>
         {!isSidebarCollapsed && (
           <motion.div
             initial={{ opacity: 0, x: 24 }}
@@ -2185,146 +2110,8 @@ export default function MyCases() {
             </div>
           ) : (
             <>
-              {/* Header */}
-              <div className="border-b border-slate-100 bg-[linear-gradient(135deg,rgba(248,250,252,0.92),rgba(255,255,255,0.98))] p-5 md:p-6">
-                <div className="flex flex-col gap-5 xl:flex-row xl:items-center xl:justify-between">
-                  <div className="min-w-0">
-                    <div className="relative mb-2 flex flex-wrap items-center gap-2">
-                      <div className="group relative">
-                        <button
-                          onClick={() => setIsCaseSwitcherOpen(!isCaseSwitcherOpen)}
-                          className="group flex min-w-0 items-center gap-2 text-xl font-black text-brand-dark transition-colors hover:text-brand-navy sm:text-2xl"
-                        >
-                          <span className="truncate">{activeCase.title}</span>
-                          <i className={`fa-solid fa-chevron-down text-xs text-slate-300 group-hover:text-brand-navy transition-transform ${isCaseSwitcherOpen ? 'rotate-180' : ''}`}></i>
-                        </button>
-
-                        <AnimatePresence>
-                          {isCaseSwitcherOpen && (
-                            <>
-                              <div className="fixed inset-0 z-20" onClick={() => setIsCaseSwitcherOpen(false)}></div>
-                              <motion.div
-                                initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }}
-                                className="absolute top-full right-0 mt-2 w-72 bg-white border border-slate-200 rounded-3xl shadow-2xl z-30 overflow-hidden"
-                              >
-                                <div className="p-3 border-b border-slate-50 bg-slate-50/50 text-[10px] font-black text-slate-400 uppercase tracking-widest">تبديل القضية بسرعة</div>
-                                <div className="max-h-64 overflow-y-auto custom-scrollbar">
-                                  {cases.filter(c => c.id !== activeCaseId).map(c => (
-                                    <button
-                                      key={c.id}
-                                      onClick={() => { setActiveCaseId(c.id); setIsCaseSwitcherOpen(false); }}
-                                      className="w-full p-4 text-right hover:bg-slate-50 border-b border-slate-50 last:border-0 transition-colors"
-                                    >
-                                      <p className="text-sm font-black text-brand-dark truncate">{c.title}</p>
-                                      <p className="text-[10px] text-slate-400 font-bold mt-1">{c.client} • {c.statusText}</p>
-                                    </button>
-                                  ))}
-                                </div>
-                              </motion.div>
-                            </>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                      <button
-                        onClick={() => setIsSummaryModalOpen(true)}
-                        className="text-slate-400 hover:text-brand-navy transition w-9 h-9 flex items-center justify-center rounded-xl hover:bg-brand-navy/5"
-                        title="ملخص الملف"
-                      >
-                        <i className="fa-solid fa-file-invoice"></i>
-                      </button>
-                      <button
-                        onClick={() => setIsQrModalOpen(true)}
-                        className="text-slate-400 hover:text-brand-navy transition w-9 h-9 flex items-center justify-center rounded-xl hover:bg-brand-navy/5"
-                        title="رمز QR للوصول السريع"
-                      >
-                        <i className="fa-solid fa-qrcode"></i>
-                      </button>
-                      <button
-                        onClick={async () => {
-                          const response = await apiClient.toggleWorkspaceCaseArchive(activeCaseId);
-                          setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-                        }}
-                        className={`transition w-9 h-9 flex items-center justify-center rounded-xl ${activeCase.isArchived ? 'text-brand-navy bg-brand-navy/5' : 'text-slate-400 hover:text-brand-navy hover:bg-brand-navy/5'}`}
-                        title={activeCase.isArchived ? "إعادة من الأرشيف" : "نقل للأرشيف"}
-                      >
-                        <i className={`fa-solid ${activeCase.isArchived ? 'fa-box-open' : 'fa-box-archive'}`}></i>
-                      </button>
-                      <button onClick={() => setCaseToDelete(activeCase.id)} className="text-slate-400 hover:text-red-500 transition w-9 h-9 flex items-center justify-center rounded-xl hover:bg-red-50" title="حذف الملف"><i className="fa-solid fa-trash-can"></i></button>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2 text-sm font-bold text-slate-400">
-                      <span>رقم الملف: <span className="font-mono text-slate-600">#LXG-928{activeCase.id.split('-')[1]}</span></span>
-                      <span className="h-1 w-1 rounded-full bg-slate-300"></span>
-                      <span className={`rounded-full px-3 py-1 text-[10px] font-black ring-1 ${getCaseStatusTone(activeCase.status)}`}>{activeCase.statusText}</span>
-                      {activeCaseActionCount > 0 && (
-                        <span className="rounded-full bg-amber-50 px-3 py-1 text-[10px] font-black text-amber-700 ring-1 ring-amber-100">
-                          {activeCaseActionCount.toLocaleString('ar-IQ')} إجراء
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap xl:justify-end">
-                    {/* Collaborators Avatars List */}
-                    {activeCase.collaborators && activeCase.collaborators.length > 0 && (
-                      <div className="flex -space-x-3 space-x-reverse items-center ml-2">
-                        {activeCase.collaborators.map((c) => (
-                          <div key={c.id} className="relative group">
-                            <img
-                              src={c.img}
-                              className="w-9 h-9 rounded-full border-2 border-white shadow-sm cursor-pointer transition-transform hover:scale-110 hover:z-20"
-                              alt={c.name}
-                            />
-                            <div className="absolute bottom-full right-1/2 translate-x-1/2 mb-2 px-2 py-1 bg-brand-dark text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-30 shadow-xl">
-                              {c.name} ({c.role === 'lawyer' ? 'محامي' : 'مستخدم'})
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <div className="flex min-w-[150px] items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
-                      <div className="relative flex h-12 w-12 items-center justify-center rounded-2xl bg-brand-navy/5 text-brand-navy">
-                        <svg className="absolute inset-0 h-12 w-12 -rotate-90" viewBox="0 0 48 48" aria-hidden="true">
-                          <circle cx="24" cy="24" r="20" stroke="currentColor" strokeWidth="4" fill="none" className="text-slate-100" />
-                          <circle
-                            cx="24"
-                            cy="24"
-                            r="20"
-                            stroke="currentColor"
-                            strokeWidth="4"
-                            fill="none"
-                            strokeDasharray={`${activeCase.progress * 1.26} 126`}
-                            strokeLinecap="round"
-                            className="text-brand-gold"
-                          />
-                        </svg>
-                        <span className="relative text-[10px] font-black">{activeCase.progress}%</span>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-black text-slate-400">تقدم الملف</p>
-                        <p className="mt-1 text-xs font-black text-brand-dark">{activeCase.progress >= 80 ? 'قريب من الإغلاق' : activeCase.progress >= 45 ? 'قيد المتابعة' : 'في البداية'}</p>
-                      </div>
-                    </div>
-                    <button onClick={() => setIsShareAccessModalOpen(true)} className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2 text-[11px] font-black text-slate-600 shadow-sm transition hover:border-brand-navy hover:text-brand-navy">
-                      <i className="fa-solid fa-user-plus"></i> مشاركة الوصول
-                    </button>
-                    <div
-                      className="group/lawyer flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm transition hover:border-brand-navy/20"
-                      onClick={() => navigate(`/profile/${activeCase.lawyer.id}`)}
-                    >
-                      <img src={activeCase.lawyer.img} className="w-11 h-11 rounded-xl border-2 border-white shadow-md" alt={activeCase.lawyer.name} />
-                      <div className="min-w-0">
-                        <p className="text-sm font-black text-brand-dark group-hover/lawyer:text-brand-navy transition-colors">{activeCase.lawyer.name}</p>
-                        <p className="text-[10px] text-brand-navy font-black opacity-60">{activeCase.lawyer.role}</p>
-                      </div>
-                      <button className="mr-2 h-9 w-9 rounded-xl bg-slate-50 text-brand-navy flex items-center justify-center hover:bg-brand-navy hover:text-white transition-all shadow-sm">
-                        <i className="fa-solid fa-phone-volume text-sm"></i>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
               {/* Custom Fields Section */}
-              <div className="relative z-10 border-b border-slate-100 bg-white p-4 shadow-sm md:p-5">
+              <div className="relative z-10 border-b border-slate-100 bg-white p-3 md:p-4">
                 <div className="flex justify-between items-center mb-3">
                   <h4 className="text-sm font-black text-brand-dark flex items-center gap-2">
                     <div className="h-2 w-2 rounded-full bg-brand-gold"></div>
@@ -2337,18 +2124,18 @@ export default function MyCases() {
                     <i className="fa-solid fa-circle-plus ml-1"></i> إضافة بيانات
                   </button>
                 </div>
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                   {activeCase.customFields.length === 0 ? (
                     <button
                       type="button"
                       onClick={() => setIsNewFieldModalOpen(true)}
-                      className="col-span-2 min-h-[74px] rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-3 text-right transition hover:border-brand-navy hover:bg-white lg:col-span-4"
+                      className="col-span-2 min-h-[58px] rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-3 text-right transition hover:border-brand-navy hover:bg-white lg:col-span-4"
                     >
                       <span className="text-sm font-black text-brand-dark">أضف بيانات الملف المهمة</span>
-                      <span className="mt-1 block text-xs font-bold text-slate-400">مثل المحكمة، رقم الدعوى، أو موعد الجلسة القادمة.</span>
+                      <span className="mt-1 block text-[11px] font-bold text-slate-400">مثل المحكمة، رقم الدعوى، أو موعد الجلسة القادمة.</span>
                     </button>
                   ) : activeCase.customFields.map((field: any) => (
-                    <div key={field.id} className="flex min-h-[74px] flex-col rounded-xl border border-slate-100 bg-slate-50/50 p-3 shadow-inner transition hover:border-brand-gold/30">
+                    <div key={field.id} className="flex min-h-[58px] flex-col rounded-xl border border-slate-100 bg-slate-50/50 p-3 transition hover:border-brand-gold/30">
                       <span className="text-[9px] font-black uppercase tracking-[0.1em] text-slate-400 mb-1">{field.label}</span>
                       <span className="text-sm font-black text-brand-dark truncate" title={field.value}>{field.value}</span>
                     </div>
@@ -2403,7 +2190,6 @@ export default function MyCases() {
                     {[
                       { id: 'summary', label: 'الملخص', icon: 'fa-solid fa-rectangle-list', badge: `${activeCase.progress}%` },
                       { id: 'chat', label: 'التوجيهات', icon: 'fa-regular fa-comments', badge: activeCase.unreadCount ? activeCase.unreadCount.toLocaleString('ar-IQ') : undefined },
-                      { id: 'ai', label: 'الذكاء الاصطناعي', icon: 'fa-solid fa-robot', badge: activeCase.aiConsultations?.length ? activeCase.aiConsultations.length.toLocaleString('ar-IQ') : undefined },
                       { id: 'financials', label: 'المالية', icon: 'fa-solid fa-file-invoice-dollar', badge: `${Math.round((activeCase.financials.paid / Math.max(activeCase.financials.totalAgreed, 1)) * 100)}%` },
                       { id: 'resolution', label: 'الإغلاق', icon: 'fa-solid fa-circle-check', badge: activeCase.status === 'closed' ? 'تم' : undefined },
                     ].map((tab) => (
@@ -2604,38 +2390,6 @@ export default function MyCases() {
                         </div>
                       )}
                     </>
-                  ) : activeTab === 'ai' ? (
-                    <div className="flex-1 overflow-y-auto p-4 md:p-5 bg-slate-50/50 flex flex-col custom-scrollbar">
-                      {activeCase.aiConsultations && activeCase.aiConsultations.length > 0 ? (
-                        <div className="space-y-5">
-                          {activeCase.aiConsultations.map((ai: any) => (
-                            <div key={ai.id} className="bg-white border border-slate-100 rounded-3xl p-6 shadow-sm hover:border-brand-gold cursor-pointer transition-all group hover:shadow-md">
-                              <div className="flex justify-between items-start mb-2">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-8 h-8 rounded-full bg-brand-navy/10 text-brand-navy flex items-center justify-center">
-                                    <i className="fa-solid fa-robot"></i>
-                                  </div>
-                                  <h4 className="font-bold text-brand-dark text-sm">{ai.title}</h4>
-                                </div>
-                                <span className="text-[10px] text-gray-400">{ai.date}</span>
-                              </div>
-                              <p className="text-xs text-gray-500 mt-2 line-clamp-2 pr-10">{ai.excerpt}</p>
-                              <div className="pr-10 mt-3 pt-3 border-t border-gray-50 opacity-0 group-hover:opacity-100 transition">
-                                <span className="text-[11px] font-bold text-brand-gold">عرض الاستشارة الكاملة <i className="fa-solid fa-chevron-left text-[9px] mr-1"></i></span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-400 my-8">
-                          <div className="w-20 h-20 bg-white rounded-3xl flex items-center justify-center mb-4 border border-slate-100 shadow-sm">
-                            <i className="fa-solid fa-robot text-3xl text-gray-300"></i>
-                          </div>
-                          <h3 className="text-lg font-black text-brand-dark mb-1">لا توجد استشارات مرتبطة</h3>
-                          <p className="text-sm font-medium max-w-xs leading-relaxed">يمكنك ربط محادثاتك مع المستشار الذكي بهذا الملف للرجوع إليها لاحقاً.</p>
-                        </div>
-                      )}
-                    </div>
                   ) : activeTab === 'summary' ? (
                     <SummaryTab
                       activeCase={activeCase}
@@ -2649,21 +2403,8 @@ export default function MyCases() {
                       activeCase={activeCase}
                       setActiveTab={setActiveTab}
                       sendMessage={sendMessage}
-                      setIsSummaryModalOpen={setIsSummaryModalOpen}
                     />
                   )}
-                  <div className="mt-auto border-t border-slate-100 bg-white p-4">
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('ai')}
-                      className="w-full py-4 border-2 border-dashed border-brand-navy/30 text-brand-navy rounded-[1.5rem] font-black text-sm hover:bg-brand-navy hover:text-white hover:border-brand-navy transition-all flex justify-center items-center gap-3"
-                    >
-                      <i className="fa-solid fa-link"></i> ربط استشارة ذكية جديدة
-                    </button>
-                    <Link to="/aichat" className="w-full mt-3 py-4 bg-brand-gold text-brand-dark rounded-[1.5rem] font-black text-sm hover:bg-yellow-500 transition-all flex justify-center items-center gap-3 shadow-lg shadow-brand-gold/20">
-                      <i className="fa-solid fa-wand-magic-sparkles"></i> بدء محادثة ذكية جديدة
-                    </Link>
-                  </div>
                 </div>
                 {/* Documents Area */}
                 <div className="flex w-full min-w-0 shrink-0 flex-col border-r border-slate-100 bg-white 2xl:w-72">
@@ -2787,26 +2528,6 @@ export default function MyCases() {
 
 
                   <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
-                    {/* Recent AI Consultation Summary */}
-                    {!activeFolderId && docFilter === 'all' && activeCase.aiConsultations && activeCase.aiConsultations.length > 0 && (
-                      <div className="border border-brand-navy/20 bg-blue-50/50 p-4 rounded-2xl flex flex-col gap-2 relative transition hover:bg-blue-50 cursor-pointer" onClick={() => setActiveTab('ai')}>
-                        <div className="absolute top-0 right-0 w-1.5 h-full bg-brand-navy rounded-r-2xl"></div>
-                        <div className="flex items-start gap-3 pl-2 pr-1">
-                          <div className="h-10 w-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-xl text-brand-navy shrink-0 mt-0.5">
-                            <i className="fa-solid fa-wand-magic-sparkles"></i>
-                          </div>
-                          <div className="flex-1 overflow-hidden">
-                            <div className="flex justify-between items-center mb-1">
-                              <p className="text-[9px] font-black text-brand-gold uppercase tracking-widest">أحدث استشارة</p>
-                              <span className="text-[9px] font-black text-slate-400">{activeCase.aiConsultations[0].date}</span>
-                            </div>
-                            <p className="text-[13px] font-black text-brand-dark truncate">{activeCase.aiConsultations[0].title}</p>
-                            <p className="text-[10px] font-medium text-slate-500 line-clamp-1 mt-1">{activeCase.aiConsultations[0].excerpt}</p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
                     {/* Folders List (only show if not inside a folder and no specific filter is active) */}
                     {!activeFolderId && docFilter === 'all' && activeCase.folders.map((folder: any) => (
                       <div
@@ -2930,13 +2651,6 @@ export default function MyCases() {
                           </div>
                           {!doc.isUploading && (
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setDocToShare(doc.id); }}
-                                className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-navy hover:bg-slate-100 transition shadow-sm"
-                                title="مشاركة الوثيقة"
-                              >
-                                <i className="fa-solid fa-share-nodes"></i>
-                              </button>
                               <button
                                 onClick={(e) => { e.stopPropagation(); setMovingDocId(doc.id); }}
                                 className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-navy hover:bg-slate-100 transition shadow-sm"
@@ -3068,138 +2782,6 @@ export default function MyCases() {
                 <div className="hidden text-right sm:block">
                   <span className="text-[10px] font-black bg-brand-gold/10 text-brand-gold px-3 py-1 rounded-full uppercase">وثيقة معتمدة</span>
                 </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* QR Access Modal */}
-      <AnimatePresence>
-        {isQrModalOpen && activeCase && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-[2.5rem] w-full max-w-sm shadow-2xl overflow-hidden p-8 text-center"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-black text-brand-dark">رمز الوصول السريع</h3>
-                <button onClick={() => setIsQrModalOpen(false)} className="text-slate-400 hover:text-red-500 transition">
-                  <i className="fa-solid fa-times text-xl"></i>
-                </button>
-              </div>
-
-              <p className="text-xs font-bold text-slate-500 mb-6 leading-relaxed">
-                امسح الرمز أدناه للوصول المباشر إلى ملف هذه القضية من أي جهاز محمول.
-              </p>
-
-              <div className="bg-slate-50 rounded-[2rem] p-6 mb-6 inline-block border-2 border-slate-100 shadow-inner relative group">
-                <img
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(`${window.location.origin}/cases/${activeCase.id}`)}`}
-                  alt="Case QR Code"
-                  className="w-44 h-44 rounded-xl mix-blend-multiply"
-                />
-                <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-white/10 backdrop-blur-[1px] rounded-[2rem]">
-                  <i className="fa-solid fa-expand text-brand-navy text-2xl"></i>
-                </div>
-              </div>
-
-              <div className="text-right space-y-1 mb-8 bg-slate-50/50 p-4 rounded-2xl border border-slate-100">
-                <p className="text-sm font-black text-brand-dark truncate">{activeCase.title}</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">رقم الملف: #LXG-928{activeCase.id.split('-').pop()}</p>
-              </div>
-
-              <div className="flex flex-col gap-3">
-                <button onClick={() => window.print()} className="w-full py-3.5 bg-brand-navy text-white rounded-2xl font-black text-[11px] shadow-lg shadow-brand-navy/20 hover:bg-brand-dark transition flex items-center justify-center">
-                  <i className="fa-solid fa-print ml-2"></i> طباعة الرمز للملف الورقي
-                </button>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => copyText(`${window.location.origin}/cases/${activeCase.id}`, 'تم نسخ رابط الملف')}
-                    className="flex-1 py-3.5 bg-slate-100 text-brand-navy rounded-2xl font-black text-[11px] hover:bg-slate-200 transition"
-                  >
-                    <i className="fa-regular fa-copy ml-2"></i> نسخ الرابط
-                  </button>
-                  <button onClick={handleDownloadQr} className="flex-1 py-3.5 bg-slate-100 text-brand-navy rounded-2xl font-black text-[11px] hover:bg-slate-200 transition">
-                    <i className="fa-solid fa-download ml-2"></i> تحميل PNG
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Case Summary Modal */}
-      <AnimatePresence>
-        {isSummaryModalOpen && activeCase && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[150] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4 print:p-0 print:bg-white"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-              className="bg-white rounded-[2.5rem] w-full max-w-2xl shadow-2xl overflow-hidden print:shadow-none print:rounded-none"
-            >
-              {/* Modal Header */}
-              <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50 print:hidden">
-                <h3 className="text-xl font-black text-brand-dark">ملخص القضية</h3>
-                <button onClick={() => setIsSummaryModalOpen(false)} className="text-slate-400 hover:text-red-500 transition">
-                  <i className="fa-solid fa-times text-xl"></i>
-                </button>
-              </div>
-
-              {/* Content to Print */}
-              <div className="p-8 space-y-8 text-right" id="case-summary-print">
-                <div className="flex justify-between items-start border-b-2 border-brand-navy/10 pb-6">
-                  <div>
-                    <h1 className="text-3xl font-black text-brand-dark">{activeCase.title}</h1>
-                    <p className="text-slate-500 font-bold mt-2">رقم الملف: #LXG-928{activeCase.id.split('-')[1]}</p>
-                  </div>
-                  <div className="text-left">
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">تاريخ التقرير</p>
-                    <p className="font-bold text-brand-dark">{new Date().toLocaleDateString('ar-IQ')}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-8">
-                  <div>
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">المحامي المسؤول</h4>
-                    <p className="text-lg font-black text-brand-dark">{activeCase.lawyer.name}</p>
-                    <p className="text-sm font-bold text-brand-navy mt-1">{activeCase.lawyer.role}</p>
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">حالة الملف والتقدم</h4>
-                    <p className="text-lg font-black text-brand-dark">{activeCase.statusText}</p>
-                    <div className="w-full bg-slate-100 h-2 rounded-full mt-2 overflow-hidden">
-                      <div className="bg-brand-gold h-full rounded-full" style={{ width: `${activeCase.progress}%` }}></div>
-                    </div>
-                    <p className="text-[10px] font-black text-slate-400 mt-1">{activeCase.progress}% مكتمل</p>
-                  </div>
-                </div>
-
-                <div>
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4 border-b border-slate-100 pb-2">تفاصيل البيانات</h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    {activeCase.customFields.map(field => (
-                      <div key={field.id} className="p-4 rounded-2xl bg-slate-50 border border-slate-100">
-                        <p className="text-[10px] font-black text-slate-400 uppercase mb-1">{field.label}</p>
-                        <p className="text-sm font-black text-brand-dark">{field.value}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Modal Actions */}
-              <div className="p-6 border-t border-slate-100 bg-slate-50/50 flex gap-3 print:hidden">
-                <button onClick={() => window.print()} className="flex-1 py-4 bg-brand-navy text-white rounded-2xl font-black text-sm hover:bg-brand-dark transition shadow-lg shadow-brand-navy/20 flex items-center justify-center gap-2">
-                  <i className="fa-solid fa-print"></i> طباعة الملخص
-                </button>
-                <button onClick={() => setIsSummaryModalOpen(false)} className="flex-1 py-4 border border-slate-200 text-slate-600 rounded-2xl font-black text-sm hover:bg-white transition">إغلاق</button>
               </div>
             </motion.div>
           </motion.div>
@@ -3435,122 +3017,6 @@ export default function MyCases() {
         )
       }
 
-      {/* Share Document Modal */}
-      {
-        docToShare && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
-            <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl text-right fade-in relative">
-              <h3 className="text-xl font-bold text-brand-dark mb-2">مشاركة الوثيقة بأمان</h3>
-              <p className="text-sm text-gray-500 mb-6">شارك هذه الوثيقة مع أطراف أخرى (مثل المحامي المعاون أو الخصم) مع تحكم كامل بالصلاحيات.</p>
-
-              <div className="bg-blue-50 text-brand-navy font-bold text-sm p-3 rounded-xl mb-6 border border-blue-100 flex items-center gap-2">
-                <i className="fa-solid fa-file-pdf"></i>
-                <span className="truncate">{activeCase?.documents.find(d => d.id === docToShare)?.name}</span>
-              </div>
-
-              {!shareLinkGenerated ? (
-                <>
-                  <div className="mb-4">
-                    <label className="block text-xs font-bold text-gray-500 mb-1">البريد الإلكتروني للطرف الآخر</label>
-                    <input
-                      type="email"
-                      placeholder="example@domain.com"
-                      value={shareEmail}
-                      onChange={(e) => setShareEmail(e.target.value)}
-                      className="w-full bg-gray-50 border border-gray-200 rounded-xl py-3 px-4 text-sm focus:outline-none focus:border-brand-gold text-left text-brand-dark"
-                      dir="ltr"
-                    />
-                  </div>
-
-                  <div className="mb-6">
-                    <label className="block text-xs font-bold text-gray-500 mb-1">صلاحية الوصول</label>
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl overflow-hidden flex text-sm">
-                      <button
-                        onClick={() => setSharePermission('view')}
-                        className={`flex-1 py-2 font-bold transition flex flex-col justify-center items-center gap-1 ${sharePermission === 'view' ? 'bg-brand-navy text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-                      >
-                        <i className="fa-solid fa-eye text-lg"></i>
-                        <span>قراءة فقط</span>
-                      </button>
-                      <button
-                        onClick={() => setSharePermission('comment')}
-                        className={`flex-1 py-2 font-bold transition flex flex-col justify-center items-center gap-1 border-r border-gray-200 ${sharePermission === 'comment' ? 'bg-brand-navy text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-                      >
-                        <i className="fa-solid fa-comment-dots text-lg"></i>
-                        <span>تعليق</span>
-                      </button>
-                      <button
-                        onClick={() => setSharePermission('edit')}
-                        className={`flex-1 py-2 font-bold transition flex flex-col justify-center items-center gap-1 border-r border-gray-200 ${sharePermission === 'edit' ? 'bg-brand-navy text-white' : 'text-gray-500 hover:bg-gray-100'}`}
-                      >
-                        <i className="fa-solid fa-pen text-lg"></i>
-                        <span>تعديل</span>
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="flex bg-orange-50 border border-orange-100 p-3 rounded-xl mb-6 items-start gap-2">
-                    <i className="fa-solid fa-shield-halved text-orange-500 mt-1"></i>
-                    <p className="text-[10px] text-orange-800">
-                      رابط المشاركة سيكون محمياً وسيتم تسجيل جميع حركات الوصول للوثيقة في سجلات النظام تلقائياً.
-                    </p>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => {
-                        setDocToShare(null);
-                        setShareEmail('');
-                        setSharePermission('view');
-                      }}
-                      className="flex-1 py-3 border border-gray-200 text-gray-600 rounded-xl font-bold hover:bg-gray-50 transition"
-                    >
-                      إلغاء
-                    </button>
-                    <button
-                      onClick={() => setShareLinkGenerated(`https://portal.lx.gov/sh/${Math.random().toString(36).substring(2, 10)}`)}
-                      className="flex-[1.5] py-3 bg-brand-navy text-white rounded-xl font-bold hover:bg-[#0f1754] transition shadow-md flex items-center justify-center gap-2"
-                    >
-                      <i className="fa-solid fa-link"></i> إنشاء رابط آمن
-                    </button>
-                  </div>
-                </>
-              ) : (
-                <div className="text-center py-4">
-                  <div className="w-16 h-16 bg-green-100 text-green-500 rounded-full flex items-center justify-center mx-auto mb-4 text-3xl">
-                    <i className="fa-solid fa-check"></i>
-                  </div>
-                  <h4 className="font-bold text-brand-dark mb-1">تم إرسال الدعوة وإنشاء الرابط!</h4>
-                  <p className="text-xs text-gray-500 mb-6">تمت إضافة إذن الوصول لـ {shareEmail || 'المستخدم'}</p>
-
-                  <div className="bg-gray-50 border border-gray-200 p-3 rounded-xl mb-6 flex items-center gap-2">
-                    <input type="text" readOnly value={shareLinkGenerated} className="bg-transparent flex-1 outline-none text-xs text-gray-500 font-mono text-left" dir="ltr" />
-                    <button
-                      type="button"
-                      onClick={() => copyText(shareLinkGenerated, 'تم نسخ رابط المشاركة')}
-                      className="text-brand-navy hover:text-brand-gold transition px-2 font-bold text-xs"
-                    >
-                      <i className="fa-regular fa-copy"></i> نسخ
-                    </button>
-                  </div>
-
-                  <button
-                    onClick={() => {
-                      setDocToShare(null);
-                      setShareLinkGenerated(null);
-                      setShareEmail('');
-                    }}
-                    className="w-full py-3 bg-brand-navy text-white rounded-xl font-bold hover:bg-[#0f1754] transition"
-                  >
-                    إغلاق
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )
-      }
-
       {/* New Case Modal */}
       <AnimatePresence>
         {isNewCaseModalOpen && (
@@ -3740,107 +3206,6 @@ export default function MyCases() {
                 >
                   {isCreatingCase ? 'جاري الإنشاء...' : 'فتح الملف'}
                 </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Logout Confirmation Modal */}
-      <AnimatePresence>
-        {isLogoutConfirmOpen && (
-          <motion.div
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-              className="w-full max-w-md bg-white rounded-[2.5rem] p-8 text-right shadow-2xl overflow-hidden"
-            >
-              <div className="flex flex-col items-center text-center">
-                <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-red-100 bg-red-50 text-red-500">
-                  <i className="fa-solid fa-arrow-right-from-bracket text-3xl"></i>
-                </div>
-                <h3 className="mb-2 text-xl font-black text-brand-dark">تسجيل الخروج</h3>
-                <p className="mb-8 text-sm font-bold text-slate-500 leading-relaxed">
-                  هل أنت متأكد من رغبتك في تسجيل الخروج؟ ستحتاج إلى إدخال بيانات الاعتماد الخاصة بك مرة أخرى للوصول إلى ملفاتك.
-                </p>
-
-                <div className="flex w-full gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsLogoutConfirmOpen(false)}
-                    className="flex-1 rounded-2xl border border-slate-200 py-3.5 font-black text-slate-600 transition hover:bg-slate-50"
-                  >
-                    إلغاء
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleLogout}
-                    className="flex-1 rounded-2xl bg-red-500 py-3.5 font-black text-white shadow-lg shadow-red-500/20 transition hover:bg-red-600"
-                  >
-                    خروج
-                  </button>
-                </div>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Share Access Modal */}
-      <AnimatePresence>
-        {isShareAccessModalOpen && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[160] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
-            <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white rounded-[2.5rem] p-8 max-w-md w-full shadow-2xl text-right">
-              <h3 className="text-xl font-black text-brand-dark mb-2">منح صلاحية الوصول</h3>
-              <p className="text-sm font-bold text-slate-500 mb-6">قم بمنح صلاحية الوصول لشريك أو محامي آخر للاطلاع أو التحرير في هذا الملف.</p>
-              <div className="mb-6">
-                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">البريد الإلكتروني</label>
-                <input type="email" placeholder="example@domain.com" value={inviteEmail} onChange={e => setInviteEmail(e.target.value)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-right outline-none focus:border-brand-navy" />
-              </div>
-              <div className="grid grid-cols-2 gap-4 mb-8">
-                <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">نوع الحساب</label>
-                  <select value={inviteRole} onChange={e => setInviteRole(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-right outline-none focus:border-brand-navy cursor-pointer">
-                    <option value="user">مستخدم / شريك</option>
-                    <option value="lawyer">محامي آخر</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2">الصلاحية</label>
-                  <select value={invitePermissions} onChange={e => setInvitePermissions(e.target.value as any)} className="w-full bg-slate-50 border border-slate-200 rounded-xl py-3 px-4 text-sm font-bold text-right outline-none focus:border-brand-navy cursor-pointer">
-                    <option value="view">قراءة فقط</option>
-                    <option value="edit">تحرير وإضافة</option>
-                  </select>
-                </div>
-              </div>
-
-              {activeCase?.collaborators && activeCase.collaborators.length > 0 && (
-                <div className="mt-8 border-t border-slate-100 pt-6">
-                  <h4 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">المتعاونون الحاليون</h4>
-                  <div className="space-y-3">
-                    {activeCase.collaborators.map((collab) => (
-                      <div key={collab.id} className="flex flex-row-reverse items-center justify-between p-3 rounded-2xl bg-slate-50 border border-slate-100 group">
-                        <div className="flex flex-row-reverse items-center gap-3">
-                          <img src={collab.img} className="w-10 h-10 rounded-xl border border-white shadow-sm" alt="" />
-                          <div className="text-right">
-                            <p className="text-sm font-black text-brand-dark">{collab.name}</p>
-                            <p className="text-[10px] font-bold text-slate-400">{collab.role === 'lawyer' ? 'محامي' : 'مستخدم'} • {collab.permissions === 'edit' ? 'تحرير' : 'عرض'}</p>
-                          </div>
-                        </div>
-                        <button onClick={() => handleRevokeAccess(collab.id)} className="w-8 h-8 rounded-lg bg-white border border-slate-200 text-slate-300 hover:text-red-500 hover:border-red-100 transition-all flex items-center justify-center shadow-sm">
-                          <i className="fa-solid fa-user-minus text-xs"></i>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <button onClick={() => setIsShareAccessModalOpen(false)} className="flex-1 py-3 font-black text-slate-400 hover:text-slate-600 transition">إلغاء</button>
-                <button onClick={handleInviteCollaborator} className="flex-2 rounded-2xl bg-brand-navy text-white py-3 px-6 font-black shadow-lg shadow-brand-navy/20">إرسال دعوة</button>
               </div>
             </motion.div>
           </motion.div>
