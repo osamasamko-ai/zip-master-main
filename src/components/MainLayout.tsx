@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion, useScroll } from 'framer-motion';
@@ -21,6 +21,7 @@ export default function MainLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [notificationsFilter, setNotificationsFilter] = useState<'all' | 'unread'>('unread');
+  const notificationsMenuRef = useRef<HTMLDivElement | null>(null);
 
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
@@ -75,6 +76,19 @@ export default function MainLayout() {
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
+
+  useEffect(() => {
+    if (!isNotificationsOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!notificationsMenuRef.current?.contains(event.target as Node)) {
+        setIsNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [isNotificationsOpen, setIsNotificationsOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -387,7 +401,7 @@ export default function MainLayout() {
               <i className="fa-solid fa-magnifying-glass text-xs"></i>
             </motion.button>
 
-            <div className="relative">
+            <div ref={notificationsMenuRef} className="relative">
               <NotificationBell />
               <AnimatePresence>
                 {isNotificationsOpen && (
