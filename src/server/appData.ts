@@ -129,34 +129,53 @@ function normalizeExperienceYears(value: unknown) {
 
 function buildLawyerCard(user: any, followerCount: number, reviewCount: number, isFollowing = false) {
   const profile = user.lawyerProfile;
+  const role = user.role || 'user';
+  const isProfessional = role === 'pro';
+  const isAdmin = role === 'admin';
+  const roleLabel = isProfessional ? (profile?.specialty || 'محامٍ') : isAdmin ? 'إدارة المنصة' : 'مستخدم';
+  const defaultBio = isProfessional
+    ? 'ملف قانوني مهني قيد التطوير.'
+    : isAdmin
+      ? 'ملف إداري موثق يعرض نشاط الحساب ودوره داخل المنصة.'
+      : 'ملف شخصي يعرض نشاط المستخدم وتفاعله داخل المنصة.';
+  const fallbackHighlights = isProfessional
+    ? [profile?.specialty, user.roleDescription, 'استشارات قانونية'].filter(Boolean)
+    : isAdmin
+      ? ['إدارة المنصة', 'متابعة الجودة', 'دعم المستخدمين']
+      : ['عضو في المنصة', 'متابعة القضايا', 'تواصل قانوني'];
+
   return {
     id: user.id,
     name: user.name,
-    specialty: profile?.specialty || 'عام',
+    role,
+    isProfessional,
+    specialty: roleLabel,
     location: user.location || 'العراق',
-    experience: `${profile?.experienceYears || 0} سنوات خبرة`,
+    experience: isProfessional ? `${profile?.experienceYears || 0} سنوات خبرة` : `عضو منذ ${formatRelativeDate(user.createdAt)}`,
     experienceYears: profile?.experienceYears || 0,
-    availability: profile?.availability || 'متاح حسب الجدول',
-    isOnline: profile?.isOnline || false,
+    availability: isProfessional ? (profile?.availability || 'متاح حسب الجدول') : 'حساب نشط',
+    isOnline: profile?.isOnline || role === 'admin',
     rating: profile?.rating || 0,
     reviews: `${reviewCount} مراجعة`,
     reviewCount,
-    casesHandled: `+${profile?.openCases || 0} قضية`,
-    consultationFee: formatConsultationFee(profile?.consultationFee),
+    casesHandled: isProfessional ? `+${profile?.openCases || 0} قضية` : `${user._count?.feedPosts || 0} منشور`,
+    consultationFee: isProfessional ? formatConsultationFee(profile?.consultationFee) : 'غير متاح',
     verified: user.verified,
-    accent: profile?.accent || 'from-slate-950 via-brand-dark to-brand-navy',
+    accent: profile?.accent || (isAdmin ? 'from-slate-950 via-brand-dark to-brand-navy' : 'from-brand-navy via-blue-900 to-slate-950'),
     avatar: user.img || profile?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name)}&background=0d2a59&color=ffffff&rounded=true&font-size=0.4`,
     coverImage: profile?.coverImage || '',
-    tagline: profile?.tagline || user.roleDescription || 'استشارات قانونية مهنية',
+    tagline: profile?.tagline || user.roleDescription || (isProfessional ? 'استشارات قانونية مهنية' : isAdmin ? 'إدارة وتشغيل المنصة' : 'عضو في منصة القسطاس'),
     followers: followerCount,
-    responseTime: profile?.responseTime || 'يرد خلال ساعة',
-    bio: profile?.bio || 'ملف قانوني مهني قيد التطوير.',
-    highlights: parseJsonArray(profile?.highlights),
-    license: profile?.licenseNumber || 'غير مضاف',
-    attachments: ['هوية نقابية', 'رخصة ممارسة', 'اعتماد'],
-    status: profile?.licenseStatus === 'verified' ? 'approved' : profile?.licenseStatus === 'rejected' ? 'rejected' : 'pending',
+    responseTime: isProfessional ? (profile?.responseTime || 'يرد خلال ساعة') : 'نشاط داخل المنصة',
+    bio: profile?.bio || defaultBio,
+    highlights: parseJsonArray(profile?.highlights).length ? parseJsonArray(profile?.highlights) : fallbackHighlights,
+    license: isProfessional ? (profile?.licenseNumber || 'غير مضاف') : user.id.slice(0, 8).toUpperCase(),
+    attachments: isProfessional ? ['هوية نقابية', 'رخصة ممارسة', 'اعتماد'] : ['هوية الحساب', 'نشاط المنصة', 'إعدادات الأمان'],
+    status: isProfessional
+      ? profile?.licenseStatus === 'verified' ? 'approved' : profile?.licenseStatus === 'rejected' ? 'rejected' : 'pending'
+      : user.verified ? 'approved' : 'pending',
     submittedAt: profile?.submittedAt || formatRelativeDate(user.createdAt),
-    profileScore: profile?.profileScore || 0,
+    profileScore: profile?.profileScore || (user.verified ? 85 : 45),
     isFollowing,
   };
 }
@@ -535,6 +554,7 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
         select: {
           followers: true,
           reviewsReceived: true,
+          feedPosts: true,
         },
       },
       reviewsReceived: {
@@ -611,7 +631,7 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
     },
   });
 
-  if (!user || !user.lawyerProfile) return null;
+  if (!user) return null;
 
   const isFollowing = currentUserId
     ? (await prisma.userFollow.count({ where: { followerId: currentUserId, lawyerId } })) > 0

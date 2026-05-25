@@ -94,6 +94,49 @@ function PublicStat({ label, value, note }: { label: string; value: string; note
   );
 }
 
+function buildOwnProfileFromSettings(profile: any, fallbackUser: any) {
+  const role = profile?.role || fallbackUser?.role || 'user';
+  const isProfessional = role === 'pro';
+  const isAdmin = role === 'admin';
+  const name = profile?.name || fallbackUser?.name || 'مستخدم';
+  const highlights = Array.isArray(profile?.highlights)
+    ? profile.highlights
+    : String(profile?.highlights || '').split(/\n|،|,/).map((item) => item.trim()).filter(Boolean);
+
+  return {
+    id: fallbackUser?.id || profile?.id || '',
+    name,
+    role,
+    isProfessional,
+    specialty: isProfessional ? (profile?.specialty || 'محامٍ') : isAdmin ? 'إدارة المنصة' : 'مستخدم',
+    location: profile?.location || 'العراق',
+    experience: isProfessional ? `${profile?.experienceYears || 0} سنوات خبرة` : 'حساب نشط',
+    experienceYears: profile?.experienceYears || 0,
+    availability: isProfessional ? 'متاح حسب الجدول' : 'حساب نشط',
+    isOnline: isAdmin,
+    rating: 0,
+    reviews: '0 مراجعة',
+    reviewCount: 0,
+    casesHandled: '0 منشور',
+    consultationFee: isProfessional ? profile?.consultationFee || 'غير محدد' : 'غير متاح',
+    verified: !!profile?.verified || !!fallbackUser?.verified,
+    accent: isAdmin ? 'from-slate-950 via-brand-dark to-brand-navy' : 'from-brand-navy via-blue-900 to-slate-950',
+    avatar: profile?.avatar || profile?.img || fallbackUser?.img || fallbackUser?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0d2a59&color=ffffff&rounded=true&font-size=0.4`,
+    coverImage: profile?.coverImage || '',
+    tagline: profile?.tagline || profile?.roleDescription || fallbackUser?.roleDescription || (isAdmin ? 'إدارة وتشغيل المنصة' : isProfessional ? 'استشارات قانونية مهنية' : 'عضو في منصة القسطاس'),
+    followers: 0,
+    responseTime: isProfessional ? 'يرد خلال ساعة' : 'نشاط داخل المنصة',
+    bio: profile?.bio || (isAdmin ? 'ملف إداري موثق يعرض نشاط الحساب ودوره داخل المنصة.' : isProfessional ? 'ملف قانوني مهني قيد التطوير.' : 'ملف شخصي يعرض نشاط المستخدم وتفاعله داخل المنصة.'),
+    highlights: highlights.length ? highlights : isAdmin ? ['إدارة المنصة', 'متابعة الجودة', 'دعم المستخدمين'] : isProfessional ? ['استشارات قانونية', 'تواصل مهني'] : ['عضو في المنصة', 'متابعة القضايا', 'تواصل قانوني'],
+    license: (fallbackUser?.id || profile?.id || 'PROFILE').slice(0, 8).toUpperCase(),
+    attachments: isProfessional ? ['هوية نقابية', 'رخصة ممارسة', 'اعتماد'] : ['هوية الحساب', 'نشاط المنصة', 'إعدادات الأمان'],
+    status: profile?.verified || fallbackUser?.verified ? 'approved' : 'pending',
+    submittedAt: 'حسابك',
+    profileScore: profile?.verified || fallbackUser?.verified ? 85 : 45,
+    isFollowing: false,
+  };
+}
+
 export default function Profile() {
   const { user, updateUser } = useAuth();
   const navigate = useNavigate();
@@ -169,10 +212,7 @@ export default function Profile() {
       }
 
       try {
-        const [profileResponse, lawyersResponse] = await Promise.all([
-          apiClient.getLawyerProfile(params.id),
-          apiClient.getLawyers(),
-        ]);
+        const profileResponse = await apiClient.getLawyerProfile(params.id);
         setLoadError('');
         const profileData = (profileResponse as any).data?.data || (profileResponse as any).data || profileResponse;
         if (!profileData?.lawyer) {
@@ -183,10 +223,31 @@ export default function Profile() {
         setLawyerPosts(profileData.posts || []);
         setLawyerStories(profileData.stories || []);
         setActivityItems(profileData.activity || []);
-        setRelatedLawyers((lawyersResponse.data || []).filter((item: any) => item.id !== params.id && item.specialty === profileData.lawyer.specialty).slice(0, 2));
+        if (profileData.lawyer.role === 'pro' || profileData.lawyer.isProfessional) {
+          const lawyersResponse = await apiClient.getLawyers();
+          setRelatedLawyers((lawyersResponse.data || []).filter((item: any) => item.id !== params.id && item.specialty === profileData.lawyer.specialty).slice(0, 2));
+        } else {
+          setRelatedLawyers([]);
+        }
       } catch (error) {
         console.error('Failed to load lawyer profile', error);
-        setLoadError('تعذر فتح ملف المحامي حالياً. حاول مرة أخرى.');
+        if (user?.id && params.id === user.id) {
+          try {
+            const settingsResponse = await apiClient.getSettings();
+            const profile = settingsResponse.data?.profile;
+            setLawyer(buildOwnProfileFromSettings(profile, user));
+            setReviews([]);
+            setLawyerPosts([]);
+            setLawyerStories([]);
+            setActivityItems(settingsResponse.data?.activityItems || []);
+            setRelatedLawyers([]);
+            setLoadError('');
+            return;
+          } catch (settingsError) {
+            console.error('Failed to load own profile fallback', settingsError);
+          }
+        }
+        setLoadError('تعذر فتح الملف الشخصي حالياً. حاول مرة أخرى.');
       }
     };
     load();
@@ -270,9 +331,13 @@ export default function Profile() {
 
   const isFollowing = isFollowed(lawyer.id);
   const isOwnProfile = user?.id === lawyer.id;
+  const isProfessionalProfile = lawyer.role === 'pro' || lawyer.isProfessional;
+  const isAdminProfile = lawyer.role === 'admin';
   const hasStories = lawyerStories.length > 0;
   const hasNewStory = lawyerStories.some((story) => !story.seenByMe);
-  const socialProofText = `${lawyer.followers.toLocaleString()} متابع • ${lawyer.reviewCount} مراجعة موثقة • ${lawyer.casesHandled}`;
+  const socialProofText = isProfessionalProfile
+    ? `${lawyer.followers.toLocaleString()} متابع • ${lawyer.reviewCount} مراجعة موثقة • ${lawyer.casesHandled}`
+    : `${lawyer.followers.toLocaleString()} متابع • ${lawyer.casesHandled} • ${lawyer.submittedAt}`;
   const profileHighlights = lawyer.highlights?.length
     ? lawyer.highlights
     : [lawyer.specialty, lawyer.experience, lawyer.responseTime].filter(Boolean);
@@ -385,7 +450,7 @@ export default function Profile() {
                   {lawyer.verified && (
                     <StatusBadge tone="info">
                       <i className="fa-solid fa-circle-check"></i>
-                      محامٍ موثق
+                      {isProfessionalProfile ? 'محامٍ موثق' : isAdminProfile ? 'إدارة موثقة' : 'حساب موثق'}
                     </StatusBadge>
                   )}
                   <StatusBadge tone="neutral">{lawyer.specialty}</StatusBadge>
@@ -412,15 +477,29 @@ export default function Profile() {
             </div>
 
             <div className="flex flex-wrap justify-center gap-2 pb-1 lg:justify-end">
-              <ActionButton
-                onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)}
-                variant="primary"
-                size="sm"
-              >
-                <i className="fa-solid fa-comment"></i>
-                تواصل
-              </ActionButton>
-              <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} className="px-4 py-2 text-xs" />
+              {isOwnProfile ? (
+                <ActionButton onClick={() => navigate('/settings')} variant="primary" size="sm">
+                  <i className="fa-solid fa-user-gear"></i>
+                  تعديل الملف
+                </ActionButton>
+              ) : isProfessionalProfile ? (
+                <>
+                  <ActionButton
+                    onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)}
+                    variant="primary"
+                    size="sm"
+                  >
+                    <i className="fa-solid fa-comment"></i>
+                    تواصل
+                  </ActionButton>
+                  <FollowButton isFollowing={isFollowing} isLoading={isPending(lawyer.id)} onToggle={() => toggleFollow(lawyer.id)} className="px-4 py-2 text-xs" />
+                </>
+              ) : (
+                <ActionButton onClick={() => navigate('/feed')} variant="secondary" size="sm">
+                  <i className="fa-solid fa-newspaper"></i>
+                  عرض النشاط
+                </ActionButton>
+              )}
               <button
                 onClick={() => setNotificationsEnabled((current) => !current)}
                 className={`flex h-10 w-10 items-center justify-center rounded-md border transition ${notificationsEnabled ? 'border-[#1877f2]/20 bg-[#e7f3ff] text-[#1877f2]' : 'border-slate-200 bg-slate-100 text-slate-400'}`}
@@ -451,10 +530,10 @@ export default function Profile() {
           )}
 
           <div className="grid gap-3 py-5 sm:grid-cols-4">
-            <PublicStat label="التقييم" value={lawyer.rating.toFixed(1)} note={`${lawyer.reviewCount} مراجعة`} />
+            <PublicStat label={isProfessionalProfile ? 'التقييم' : 'اكتمال الملف'} value={isProfessionalProfile ? lawyer.rating.toFixed(1) : `${lawyer.profileScore ?? 0}%`} note={isProfessionalProfile ? `${lawyer.reviewCount} مراجعة` : 'جاهزية الحساب'} />
             <PublicStat label="المتابعون" value={lawyer.followers.toLocaleString()} note="متابع" />
-            <PublicStat label="الخبرة" value={`${lawyer.experienceYears}`} note="سنوات ممارسة" />
-            <PublicStat label="القضايا" value={lawyer.casesHandled} note="منجزة" />
+            <PublicStat label={isProfessionalProfile ? 'الخبرة' : 'الحالة'} value={isProfessionalProfile ? `${lawyer.experienceYears}` : (lawyer.verified ? 'موثق' : 'نشط')} note={isProfessionalProfile ? 'سنوات ممارسة' : lawyer.specialty} />
+            <PublicStat label={isProfessionalProfile ? 'القضايا' : 'النشاط'} value={lawyer.casesHandled} note={isProfessionalProfile ? 'منجزة' : 'عام'} />
           </div>
         </div>
       </section>
@@ -482,13 +561,19 @@ export default function Profile() {
             ))}
           </div>
           <div className="flex flex-wrap justify-end gap-2">
-            <ActionButton
-              onClick={() => navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: lawyer.id } })}
-              variant="secondary"
-              size="sm"
-            >
-              افتح قضية
-            </ActionButton>
+            {isProfessionalProfile ? (
+              <ActionButton
+                onClick={() => navigate('/cases', { state: { openNewCase: true, preselectedLawyerId: lawyer.id } })}
+                variant="secondary"
+                size="sm"
+              >
+                افتح قضية
+              </ActionButton>
+            ) : isOwnProfile ? (
+              <ActionButton onClick={() => navigate('/settings')} variant="secondary" size="sm">
+                الإعدادات
+              </ActionButton>
+            ) : null}
           </div>
         </div>
       </div>
@@ -498,11 +583,19 @@ export default function Profile() {
           <div className="min-w-0 space-y-6">
             <NoticePanel
               title="الخطوة التالية"
-              description={`أفضل خطوة الآن هي ${lawyer.isOnline ? 'بدء رسالة مباشرة' : 'فتح قضية جديدة مع هذا المحامي'} إذا كان تخصص ${lawyer.specialty} يطابق حاجتك الحالية.`}
+              description={isProfessionalProfile
+                ? `أفضل خطوة الآن هي ${lawyer.isOnline ? 'بدء رسالة مباشرة' : 'فتح قضية جديدة مع هذا المحامي'} إذا كان تخصص ${lawyer.specialty} يطابق حاجتك الحالية.`
+                : isOwnProfile ? 'حدّث بياناتك وصورتك ونشاطك ليظهر ملفك بشكل أوضح داخل المنصة.' : 'هذا ملف عام يعرض هوية الحساب ونشاطه داخل المنصة.'}
               action={
-                <ActionButton onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)} variant="primary" size="sm">
-                  ابدأ الآن
-                </ActionButton>
+                isProfessionalProfile ? (
+                  <ActionButton onClick={() => navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`)} variant="primary" size="sm">
+                    ابدأ الآن
+                  </ActionButton>
+                ) : isOwnProfile ? (
+                  <ActionButton onClick={() => navigate('/settings')} variant="primary" size="sm">
+                    تعديل الملف
+                  </ActionButton>
+                ) : undefined
               }
             />
             <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
@@ -511,7 +604,7 @@ export default function Profile() {
             </div>
 
             <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-black text-brand-dark">التخصصات والتميز</h3>
+              <h3 className="text-xl font-black text-brand-dark">{isProfessionalProfile ? 'التخصصات والتميز' : 'الاهتمامات والنشاط'}</h3>
               <div className="mt-4 flex flex-wrap justify-end gap-3">
                 {profileHighlights.map((item) => (
                   <span key={item} className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-sm font-black text-slate-700">
@@ -522,10 +615,10 @@ export default function Profile() {
             </div>
 
             <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-sm">
-              <h3 className="text-xl font-black text-brand-dark">اعتماد الملف المهني</h3>
+              <h3 className="text-xl font-black text-brand-dark">{isProfessionalProfile ? 'اعتماد الملف المهني' : 'اعتماد الحساب'}</h3>
               <div className="mt-4 grid gap-4 md:grid-cols-2">
                 <div className="rounded-[1.5rem] bg-slate-50 px-4 py-4">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">رقم النقابة</p>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">{isProfessionalProfile ? 'رقم النقابة' : 'معرّف الحساب'}</p>
                   <p className="mt-2 text-sm font-black text-brand-dark">{lawyer.license}</p>
                 </div>
                 <div className="rounded-[1.5rem] bg-slate-50 px-4 py-4">
@@ -535,7 +628,7 @@ export default function Profile() {
                   </p>
                 </div>
                 <div className="rounded-[1.5rem] bg-slate-50 px-4 py-4">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">المرفقات المهنية</p>
+                  <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">{isProfessionalProfile ? 'المرفقات المهنية' : 'عناصر الملف'}</p>
                   <p className="mt-2 text-sm font-black text-brand-dark">{lawyer.attachments.length} مرفقات</p>
                 </div>
                 <div className="rounded-[1.5rem] bg-slate-50 px-4 py-4">
@@ -552,7 +645,7 @@ export default function Profile() {
               </div>
             </div>
 
-            <SchedulingCalendar />
+            {isProfessionalProfile && <SchedulingCalendar />}
           </div>
 
           <aside className="min-w-0 space-y-6">
@@ -567,13 +660,21 @@ export default function Profile() {
                   <span>{lawyer.reviewCount} مراجعة</span>
                   <span className="text-brand-dark">المراجعات</span>
                 </div>
-                <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
-                  <span>{lawyer.consultationFee}</span>
-                  <span className="text-brand-dark">سعر الاستشارة</span>
-                </div>
+                {isProfessionalProfile ? (
+                  <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                    <span>{lawyer.consultationFee}</span>
+                    <span className="text-brand-dark">سعر الاستشارة</span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between rounded-2xl bg-slate-50 px-4 py-3">
+                    <span>{lawyer.specialty}</span>
+                    <span className="text-brand-dark">نوع الحساب</span>
+                  </div>
+                )}
               </div>
             </div>
 
+            {isProfessionalProfile && relatedLawyers.length > 0 && (
             <div className="rounded-[2rem] border border-slate-200 bg-white p-5 shadow-sm">
               <h3 className="text-base font-black text-brand-dark">محامون مشابهون</h3>
               <div className="mt-4 space-y-3">
@@ -592,6 +693,7 @@ export default function Profile() {
                 ))}
               </div>
             </div>
+            )}
           </aside>
         </section>
       )}

@@ -70,11 +70,7 @@ function OwnProfileRedirect() {
     return <Navigate to="/auth" replace />;
   }
 
-  if (user.role === 'pro') {
-    return <Navigate to={`/profile/${user.id}`} replace />;
-  }
-
-  return <Navigate to="/settings" replace />;
+  return <Navigate to={`/profile/${user.id}`} replace />;
 }
 
 export default function App() {

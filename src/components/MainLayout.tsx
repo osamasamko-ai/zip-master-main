@@ -127,7 +127,7 @@ export default function MainLayout() {
     document.title = pageTitle ? `${baseTitle} | ${pageTitle}` : baseTitle;
   }, [location.pathname, pathMap]);
 
-  const ownProfilePath = user?.role === 'pro' && user.id ? `/profile/${user.id}` : '/settings';
+  const ownProfilePath = user?.id ? `/profile/${user.id}` : '/settings';
   const ownProfileLabel = user?.role === 'pro' ? 'ملفي العام' : 'الملف الشخصي';
 
   const commandResults = useMemo(() => {
