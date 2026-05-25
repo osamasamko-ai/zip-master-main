@@ -147,6 +147,25 @@ const CASE_AI_MODES: Array<{ id: CaseAiMode; label: string; icon: string }> = [
   { id: 'message', label: 'رسالة', icon: 'fa-pen-nib' },
 ];
 
+const buildReadOnlyCaseUrl = (origin: string, caseId: string, section: 'summary' | 'documents') => {
+  const params = new URLSearchParams({
+    caseId,
+    mode: 'readonly',
+    section,
+  });
+
+  return `${origin}/cases?${params.toString()}`;
+};
+
+const buildQrImageUrl = (data: string, size = 190) => {
+  const params = new URLSearchParams({
+    size: `${size}x${size}`,
+    data,
+  });
+
+  return `https://api.qrserver.com/v1/create-qr-code/?${params.toString()}`;
+};
+
 const getCaseStatusTone = (status: CaseStatus) => {
   if (status === 'closed') return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
   if (status === 'review') return 'bg-amber-50 text-amber-700 ring-amber-100';
@@ -514,11 +533,13 @@ const SmartCaseAssistant = ({
   setActiveTab,
   setDocFilter,
   setNewMessage,
+  isReadOnlyView = false,
 }: {
   activeCase: LegalCase;
   setActiveTab: (tab: WorkspaceTab) => void;
   setDocFilter: (filter: DocFilter) => void;
   setNewMessage: (message: string) => void;
+  isReadOnlyView?: boolean;
 }) => {
   const [mode, setMode] = useState<CaseAiMode>('brief');
   const insight = useMemo(() => buildCaseAiInsight(activeCase, mode), [activeCase, mode]);
@@ -584,34 +605,36 @@ const SmartCaseAssistant = ({
               <p className="text-xs font-black text-brand-navy">التوصية التالية</p>
               <p className="mt-1 text-sm font-bold leading-6 text-slate-600">{insight.recommendation}</p>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => {
-                  if (pendingDocuments > 0) {
-                    setDocFilter('pending');
-                    setActiveTab('summary');
-                  } else {
+            {!isReadOnlyView && (
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (pendingDocuments > 0) {
+                      setDocFilter('pending');
+                      setActiveTab('summary');
+                    } else {
+                      setActiveTab('chat');
+                    }
+                  }}
+                  className="rounded-2xl bg-brand-navy px-4 py-3 text-xs font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark"
+                >
+                  <i className="fa-solid fa-arrow-left ml-2"></i>
+                  تنفيذ التوصية
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewMessage(insight.draftMessage);
                     setActiveTab('chat');
-                  }
-                }}
-                className="rounded-2xl bg-brand-navy px-4 py-3 text-xs font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark"
-              >
-                <i className="fa-solid fa-arrow-left ml-2"></i>
-                تنفيذ التوصية
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setNewMessage(insight.draftMessage);
-                  setActiveTab('chat');
-                }}
-                className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-brand-navy transition hover:border-brand-navy"
-              >
-                <i className="fa-solid fa-pen-to-square ml-2"></i>
-                استخدم كرسالة
-              </button>
-            </div>
+                  }}
+                  className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-brand-navy transition hover:border-brand-navy"
+                >
+                  <i className="fa-solid fa-pen-to-square ml-2"></i>
+                  استخدم كرسالة
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -622,11 +645,13 @@ const SmartCaseAssistant = ({
 const SummaryTab = ({
   activeCase,
   setIsNewFieldModalOpen,
-  setActiveTab
+  setActiveTab,
+  isReadOnlyView = false,
 }: {
   activeCase: LegalCase,
   setIsNewFieldModalOpen: (open: boolean) => void,
-  setActiveTab: (tab: WorkspaceTab) => void
+  setActiveTab: (tab: WorkspaceTab) => void,
+  isReadOnlyView?: boolean,
 }) => {
   const roadmapSteps = getCaseRoadmapSteps(activeCase);
   const currentStep = roadmapSteps.find((step) => step.state === 'current') ?? roadmapSteps[roadmapSteps.length - 1];
@@ -646,7 +671,9 @@ const SummaryTab = ({
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm md:col-span-2">
           <div className="flex justify-between items-center mb-4">
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">معلومات سريعة</p>
-            <button onClick={() => setIsNewFieldModalOpen(true)} className="text-[10px] font-black text-brand-navy hover:underline">تعديل البيانات</button>
+            {!isReadOnlyView && (
+              <button onClick={() => setIsNewFieldModalOpen(true)} className="text-[10px] font-black text-brand-navy hover:underline">تعديل البيانات</button>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-4">
             {activeCase.customFields.length === 0 ? (
@@ -809,10 +836,12 @@ const SummaryTab = ({
         </section>
       </div>
 
+      {!isReadOnlyView && (
       <div className="flex flex-col gap-4 sm:flex-row">
         <ActionButton onClick={() => setActiveTab('chat')} variant="primary" className="flex-1">تواصل مع المحامي</ActionButton>
         <ActionButton onClick={() => window.print()} variant="secondary" className="flex-1">طباعة التقرير الحالي</ActionButton>
       </div>
+      )}
     </div>
   );
 };
@@ -1032,6 +1061,10 @@ export default function MyCases() {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>('summary');
   const [newMessage, setNewMessage] = useState<string>('');
   const [isLawyerTyping, setIsLawyerTyping] = useState<boolean>(false);
+  const queryParams = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const readOnlyCaseId = queryParams.get('caseId');
+  const isReadOnlyView = queryParams.get('mode') === 'readonly';
+  const readOnlySection = queryParams.get('section');
 
   const activeCase = useMemo(() => cases.find((c) => c.id === activeCaseId) || null, [cases, activeCaseId]);
 
@@ -1109,8 +1142,8 @@ export default function MyCases() {
 
   useEffect(() => {
     const state = location.state as { activeCaseId?: string } | null;
-    refreshCases(state?.activeCaseId);
-  }, [location.state, refreshCases]);
+    refreshCases(readOnlyCaseId || state?.activeCaseId);
+  }, [location.state, readOnlyCaseId, refreshCases]);
 
   useEffect(() => {
     const refresh = () => {
@@ -1165,6 +1198,7 @@ export default function MyCases() {
   }, []);
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [activePreviewDoc, setActivePreviewDoc] = useState<LegalDocument | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
 
@@ -1225,7 +1259,22 @@ export default function MyCases() {
     window.history.replaceState({}, document.title);
   }, [location.state]);
 
+  useEffect(() => {
+    if (!isReadOnlyView) return;
+    setSelectedDocs(new Set());
+    setMovingDocId(null);
+    setDocToSign(null);
+    setReplyModalDoc(null);
+    if (readOnlySection === 'documents') {
+      setActiveTab('summary');
+      setDocFilter('all');
+      return;
+    }
+    setActiveTab('summary');
+  }, [isReadOnlyView, readOnlySection]);
+
   const handleCreateCase = async () => {
+    if (isReadOnlyView) return;
     if (!newCaseTitle.trim() || !newCaseLawyerId) return;
     setCreateCaseError('');
     setIsCreatingCase(true);
@@ -1300,6 +1349,7 @@ export default function MyCases() {
       if (e.key === 'Escape') {
         setActivePreviewDoc(null);
         setIsNewCaseModalOpen(false);
+        setIsQrModalOpen(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -1439,6 +1489,7 @@ export default function MyCases() {
   };
 
   const createFolder = async () => {
+    if (isReadOnlyView) return;
     if (!newFolderName.trim() || !activeCase) {
       alert('يرجى إدخال اسم المجلد.');
       return;
@@ -1457,6 +1508,7 @@ export default function MyCases() {
   };
 
   const addCustomField = async () => {
+    if (isReadOnlyView) return;
     if (!newFieldLabel.trim() || !newFieldValue.trim() || !activeCase) {
       alert('يرجى ملء جميع الحقول.');
       return;
@@ -1476,6 +1528,7 @@ export default function MyCases() {
   };
 
   const toggleDocSelection = (id: string) => { // Function to toggle document selection
+    if (isReadOnlyView) return;
     setSelectedDocs(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
@@ -1485,6 +1538,7 @@ export default function MyCases() {
   };
 
   const moveDocuments = async (folderId: string | null, ids: string[]) => {
+    if (isReadOnlyView) return;
     if (!activeCase || ids.length === 0) return;
     try {
       const response = await apiClient.moveCaseDocuments(activeCaseId, ids, folderId);
@@ -1502,6 +1556,7 @@ export default function MyCases() {
   };
 
   const executeSignDocument = async () => {
+    if (isReadOnlyView) return;
     if (!docToSign || !activeCase) return;
     setIsRequestingSignature(true);
     try {
@@ -1523,6 +1578,7 @@ export default function MyCases() {
     e.preventDefault?.();
     e.stopPropagation?.();
     setIsDragActive(false);
+    if (isReadOnlyView) return;
 
     const files = Array.from(
       'dataTransfer' in e ? e.dataTransfer.files || [] : e.target.files || []
@@ -1595,6 +1651,7 @@ export default function MyCases() {
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isReadOnlyView) return;
     if (e.type === "dragenter" || e.type === "dragover") setIsDragActive(true);
     else if (e.type === "dragleave" || e.type === "drop") setIsDragActive(false);
   };
@@ -1634,11 +1691,13 @@ export default function MyCases() {
   }, []);
 
   const handleDocReply = useCallback((doc: LegalDocument) => {
+    if (isReadOnlyView) return;
     setReplyModalDoc(doc);
     setReplyText('');
-  }, []);
+  }, [isReadOnlyView]);
 
   const handleSendDocReply = useCallback(async () => {
+    if (isReadOnlyView) return;
     if (!replyText.trim() || !replyModalDoc || !activeCase) return;
 
     try {
@@ -1667,9 +1726,10 @@ export default function MyCases() {
       console.error('Failed to send reply', error);
       alert('فشل إرسال الرد. يرجى المحاولة مرة أخرى.');
     }
-  }, [replyText, replyModalDoc, activeCase, replaceCaseInState, refreshCases]);
+  }, [isReadOnlyView, replyText, replyModalDoc, activeCase, replaceCaseInState, refreshCases]);
 
   const sendMessage = useCallback(async (text: string = newMessage, optimisticId?: string) => {
+    if (isReadOnlyView) return;
     if (!text.trim() || !activeCase) return;
 
     const outgoingText = text.trim();
@@ -1711,7 +1771,7 @@ export default function MyCases() {
       setIsLawyerTyping(false);
       // We could mock a reply here if we really wanted to, but typing is enough UX.
     }, 3000);
-  }, [activeCase, appendOptimisticMessage, newMessage, refreshCases, replaceCaseInState, updateMessageDeliveryState]);
+  }, [activeCase, appendOptimisticMessage, isReadOnlyView, newMessage, refreshCases, replaceCaseInState, updateMessageDeliveryState]);
 
   const visibleCases = useMemo(
     () => cases.filter((item) => (showArchived ? item.isArchived : !item.isArchived)),
@@ -1812,11 +1872,19 @@ export default function MyCases() {
   }, [cases]);
 
   const latestTimelineEvent = activeCase?.timeline?.[0] || null;
+  const readOnlyLinks = useMemo(() => {
+    if (!activeCase || typeof window === 'undefined') return null;
+
+    return {
+      summary: buildReadOnlyCaseUrl(window.location.origin, activeCase.id, 'summary'),
+      documents: buildReadOnlyCaseUrl(window.location.origin, activeCase.id, 'documents'),
+    };
+  }, [activeCase]);
 
   return (
     <div className="app-view fade-in w-full max-w-full space-y-5 overflow-x-hidden">
       {/* Toast Notification for Reminders */}
-      {notification && notification.show && (
+      {!isReadOnlyView && notification && notification.show && (
         <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="fixed top-24 right-8 z-[200] max-w-sm w-full bg-white rounded-2xl shadow-2xl shadow-brand-navy/10 border border-brand-navy/20 p-4">
           <div className="flex gap-3 items-start">
             <div className="w-10 h-10 bg-brand-navy/10 text-brand-navy rounded-full flex items-center justify-center shrink-0 mt-1">
@@ -1871,7 +1939,7 @@ export default function MyCases() {
               <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">قضاياي</p>
               <div className="mt-2 flex flex-wrap items-center gap-2">
                 <span className="rounded-xl border border-slate-100 bg-white px-3 py-1.5 text-xs font-black text-slate-500 shadow-sm">
-                  {showArchived ? 'عرض الأرشيف' : 'القضايا النشطة'}
+                  {isReadOnlyView ? 'عرض قراءة فقط' : showArchived ? 'عرض الأرشيف' : 'القضايا النشطة'}
                 </span>
                 {activeCaseActionCount > 0 && (
                   <span className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-1.5 text-xs font-black text-amber-700 shadow-sm">
@@ -1905,6 +1973,7 @@ export default function MyCases() {
                 onClick={() => setIsNewCaseModalOpen(true)}
                 variant="primary"
                 size="sm"
+                disabled={isReadOnlyView}
               >
                 <i className="fa-solid fa-circle-plus"></i>
                 ملف جديد
@@ -1943,6 +2012,7 @@ export default function MyCases() {
             <button
               type="button"
               onClick={() => setShowArchived(!showArchived)}
+              disabled={isReadOnlyView}
               className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-xs font-black text-slate-600 transition hover:border-brand-navy hover:text-brand-navy"
             >
               <i className={`fa-solid ${showArchived ? 'fa-folder-open' : 'fa-box-archive'}`}></i>
@@ -1960,6 +2030,11 @@ export default function MyCases() {
               <h3 className="mt-1 truncate text-lg font-black text-brand-dark">{activeCase.title}</h3>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
                 <span className={`rounded-full px-3 py-1 text-[10px] font-black ring-1 ${getCaseStatusTone(activeCase.status)}`}>{activeCase.statusText}</span>
+                {isReadOnlyView && (
+                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
+                    قراءة فقط
+                  </span>
+                )}
                 <span>{activeCase.progress}% مكتمل</span>
                 {latestTimelineEvent && (
                   <>
@@ -1975,6 +2050,10 @@ export default function MyCases() {
                   key={item.label}
                   type="button"
                   onClick={() => {
+                    if (isReadOnlyView) {
+                      setActiveTab('summary');
+                      return;
+                    }
                     if (item.label === 'الإجراءات') {
                       setActiveTab('summary');
                       setDocFilter('pending');
@@ -1995,18 +2074,25 @@ export default function MyCases() {
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              <ActionButton
-                variant="ghost"
-                size="sm"
-                onClick={async () => {
-                  const response = await apiClient.toggleWorkspaceCaseArchive(activeCaseId);
-                  setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-                }}
-                title={activeCase.isArchived ? 'إعادة من الأرشيف' : 'نقل للأرشيف'}
-              >
-                <i className={`fa-solid ${activeCase.isArchived ? 'fa-box-open' : 'fa-box-archive'}`}></i>
-              </ActionButton>
-              {nextAction && (
+              {!isReadOnlyView && (
+                <ActionButton variant="ghost" size="sm" onClick={() => setIsQrModalOpen(true)} title="QR للملخص والمستندات">
+                  <i className="fa-solid fa-qrcode"></i>
+                </ActionButton>
+              )}
+              {!isReadOnlyView && (
+                <ActionButton
+                  variant="ghost"
+                  size="sm"
+                  onClick={async () => {
+                    const response = await apiClient.toggleWorkspaceCaseArchive(activeCaseId);
+                    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+                  }}
+                  title={activeCase.isArchived ? 'إعادة من الأرشيف' : 'نقل للأرشيف'}
+                >
+                  <i className={`fa-solid ${activeCase.isArchived ? 'fa-box-open' : 'fa-box-archive'}`}></i>
+                </ActionButton>
+              )}
+              {!isReadOnlyView && nextAction && (
                 <ActionButton
                   variant="primary"
                   size="sm"
@@ -2019,17 +2105,23 @@ export default function MyCases() {
                   {nextAction.label}
                 </ActionButton>
               )}
-              <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('chat')}>
-                <i className="fa-regular fa-comments"></i>
-                الرسائل
-              </ActionButton>
-              <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('resolution')}>
-                <i className="fa-solid fa-circle-check"></i>
-                الإغلاق
-              </ActionButton>
-              <ActionButton variant="danger" size="sm" onClick={() => setCaseToDelete(activeCase.id)} title="حذف الملف">
-                <i className="fa-solid fa-trash-can"></i>
-              </ActionButton>
+              {!isReadOnlyView && (
+                <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('chat')}>
+                  <i className="fa-regular fa-comments"></i>
+                  الرسائل
+                </ActionButton>
+              )}
+              {!isReadOnlyView && (
+                <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('resolution')}>
+                  <i className="fa-solid fa-circle-check"></i>
+                  الإغلاق
+                </ActionButton>
+              )}
+              {!isReadOnlyView && (
+                <ActionButton variant="danger" size="sm" onClick={() => setCaseToDelete(activeCase.id)} title="حذف الملف">
+                  <i className="fa-solid fa-trash-can"></i>
+                </ActionButton>
+              )}
             </div>
           </div>
         </div>
@@ -2041,6 +2133,7 @@ export default function MyCases() {
           setActiveTab={setActiveTab}
           setDocFilter={setDocFilter}
           setNewMessage={setNewMessage}
+          isReadOnlyView={isReadOnlyView}
         />
       )}
 
@@ -2117,22 +2210,24 @@ export default function MyCases() {
                     <div className="h-2 w-2 rounded-full bg-brand-gold"></div>
                     معلومات الملف
                   </h4>
-                  <button
-                    onClick={() => setIsNewFieldModalOpen(true)}
-                    className="text-[10px] bg-slate-50 border border-slate-200 text-brand-navy px-3 py-1.5 rounded-lg font-black transition hover:bg-white hover:border-brand-navy"
-                  >
-                    <i className="fa-solid fa-circle-plus ml-1"></i> إضافة بيانات
-                  </button>
+                  {!isReadOnlyView && (
+                    <button
+                      onClick={() => setIsNewFieldModalOpen(true)}
+                      className="text-[10px] bg-slate-50 border border-slate-200 text-brand-navy px-3 py-1.5 rounded-lg font-black transition hover:bg-white hover:border-brand-navy"
+                    >
+                      <i className="fa-solid fa-circle-plus ml-1"></i> إضافة بيانات
+                    </button>
+                  )}
                 </div>
                 <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
                   {activeCase.customFields.length === 0 ? (
                     <button
                       type="button"
-                      onClick={() => setIsNewFieldModalOpen(true)}
+                      onClick={() => !isReadOnlyView && setIsNewFieldModalOpen(true)}
                       className="col-span-2 min-h-[58px] rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-3 text-right transition hover:border-brand-navy hover:bg-white lg:col-span-4"
                     >
-                      <span className="text-sm font-black text-brand-dark">أضف بيانات الملف المهمة</span>
-                      <span className="mt-1 block text-[11px] font-bold text-slate-400">مثل المحكمة، رقم الدعوى، أو موعد الجلسة القادمة.</span>
+                      <span className="text-sm font-black text-brand-dark">{isReadOnlyView ? 'لا توجد بيانات إضافية للعرض' : 'أضف بيانات الملف المهمة'}</span>
+                      <span className="mt-1 block text-[11px] font-bold text-slate-400">{isReadOnlyView ? 'هذه النسخة مخصصة للقراءة فقط.' : 'مثل المحكمة، رقم الدعوى، أو موعد الجلسة القادمة.'}</span>
                     </button>
                   ) : activeCase.customFields.map((field: any) => (
                     <div key={field.id} className="flex min-h-[58px] flex-col rounded-xl border border-slate-100 bg-slate-50/50 p-3 transition hover:border-brand-gold/30">
@@ -2148,7 +2243,7 @@ export default function MyCases() {
                 <div className="flex min-h-0 min-w-0 flex-[1_1_auto] flex-col overflow-hidden border-l border-slate-100 2xl:min-w-[720px]">
 
                   {/* Reminders / Actions Alert Banner */}
-                  {activeCase.documents.filter((d: any) => d.actionRequired || d.expiresAt).length > 0 && (
+                  {!isReadOnlyView && activeCase.documents.filter((d: any) => d.actionRequired || d.expiresAt).length > 0 && (
                     <div className="bg-amber-50 border-b border-amber-100 p-4">
                       <div className="flex items-start gap-3">
                         <i className="fa-solid fa-bell text-amber-500 mt-0.5"></i>
@@ -2192,7 +2287,7 @@ export default function MyCases() {
                       { id: 'chat', label: 'التوجيهات', icon: 'fa-regular fa-comments', badge: activeCase.unreadCount ? activeCase.unreadCount.toLocaleString('ar-IQ') : undefined },
                       { id: 'financials', label: 'المالية', icon: 'fa-solid fa-file-invoice-dollar', badge: `${Math.round((activeCase.financials.paid / Math.max(activeCase.financials.totalAgreed, 1)) * 100)}%` },
                       { id: 'resolution', label: 'الإغلاق', icon: 'fa-solid fa-circle-check', badge: activeCase.status === 'closed' ? 'تم' : undefined },
-                    ].map((tab) => (
+                    ].filter((tab) => !isReadOnlyView || tab.id === 'summary').map((tab) => (
                       <button
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as WorkspaceTab)}
@@ -2395,6 +2490,7 @@ export default function MyCases() {
                       activeCase={activeCase}
                       setIsNewFieldModalOpen={setIsNewFieldModalOpen}
                       setActiveTab={setActiveTab}
+                      isReadOnlyView={isReadOnlyView}
                     />
                   ) : activeTab === 'financials' ? (
                     <FinancialsTab activeCase={activeCase} />
@@ -2441,20 +2537,22 @@ export default function MyCases() {
                         >
                           {isExporting ? <i className="fa-solid fa-spinner fa-spin"></i> : <i className="fa-solid fa-file-export"></i>}
                         </button>
-                        <button
-                          onClick={() => setIsNewFolderModalOpen(true)}
-                          className="text-slate-400 hover:text-brand-navy transition w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm"
-                          title="مجلد جديد"
-                        >
-                          <i className="fa-solid fa-folder-plus"></i>
-                        </button>
+                        {!isReadOnlyView && (
+                          <button
+                            onClick={() => setIsNewFolderModalOpen(true)}
+                            className="text-slate-400 hover:text-brand-navy transition w-8 h-8 flex items-center justify-center rounded-xl hover:bg-white hover:shadow-sm"
+                            title="مجلد جديد"
+                          >
+                            <i className="fa-solid fa-folder-plus"></i>
+                          </button>
+                        )}
                         <span className="bg-brand-navy text-white text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center shadow-sm">
                           {activeCase.documents.length}
                         </span>
                       </div>
                     </div>
 
-                    {documentHealth.needsAction > 0 && (
+                    {!isReadOnlyView && documentHealth.needsAction > 0 && (
                       <button
                         type="button"
                         onClick={() => setDocFilter('pending')}
@@ -2481,7 +2579,7 @@ export default function MyCases() {
 
                   {/* Batch Action Bar */}
                   <AnimatePresence>
-                    {selectedDocs.size > 0 && (
+                    {!isReadOnlyView && selectedDocs.size > 0 && (
                       <motion.div
                         initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
                         className="bg-brand-navy text-white px-5 py-3 flex items-center justify-between overflow-hidden shadow-lg border-b border-white/10"
@@ -2552,7 +2650,9 @@ export default function MyCases() {
                           <i className="fa-solid fa-file-circle-question text-xl"></i>
                         </div>
                         <p className="text-sm font-black text-brand-dark">لا توجد وثائق مطابقة</p>
-                        <p className="mt-1 text-xs font-bold leading-6 text-slate-400">غيّر البحث أو الفلتر، أو ارفع وثيقة جديدة لهذا الملف.</p>
+                        <p className="mt-1 text-xs font-bold leading-6 text-slate-400">
+                          {isReadOnlyView ? 'غيّر البحث أو الفلتر لعرض الوثائق المتاحة.' : 'غيّر البحث أو الفلتر، أو ارفع وثيقة جديدة لهذا الملف.'}
+                        </p>
                         {(docSearchQuery || docFilter !== 'all') && (
                           <button
                             type="button"
@@ -2576,13 +2676,15 @@ export default function MyCases() {
                         whileHover={{ y: -1 }}
                         className={`border p-4 rounded-2xl hover:border-brand-navy cursor-pointer transition group flex flex-col gap-2 relative bg-white shadow-sm hover:shadow-md ${doc.actionRequired || doc.expiresAt ? 'border-amber-100 bg-amber-50/30' : 'border-slate-100'}`}
                       >
-                        <input
-                          type="checkbox"
-                          checked={selectedDocs.has(doc.id)}
-                          onChange={() => toggleDocSelection(doc.id)}
-                          onClick={(e) => e.stopPropagation()} // Prevent opening preview when clicking checkbox
-                          className="absolute top-4 right-4 h-4 w-4 rounded accent-brand-navy z-10"
-                        />
+                        {!isReadOnlyView && (
+                          <input
+                            type="checkbox"
+                            checked={selectedDocs.has(doc.id)}
+                            onChange={() => toggleDocSelection(doc.id)}
+                            onClick={(e) => e.stopPropagation()} // Prevent opening preview when clicking checkbox
+                            className="absolute top-4 right-4 h-4 w-4 rounded accent-brand-navy z-10"
+                          />
+                        )}
 
                         {/* Hover Preview Tooltip */}
                         {doc.previewUrl && (
@@ -2623,7 +2725,7 @@ export default function MyCases() {
                                     {doc.actionRequired}
                                   </span>
                                 )}
-                                {doc.actionRequired === 'بانتظار توقيعك' && (
+                                {!isReadOnlyView && doc.actionRequired === 'بانتظار توقيعك' && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); setDocToSign(doc.id); }}
                                     className="text-[9px] font-black bg-brand-navy text-white hover:bg-brand-dark px-3 py-1 rounded-lg transition shadow-md"
@@ -2631,7 +2733,7 @@ export default function MyCases() {
                                     توقيع
                                   </button>
                                 )}
-                                {doc.actionRequired && doc.actionRequired !== 'بانتظار توقيعك' && (
+                                {!isReadOnlyView && doc.actionRequired && doc.actionRequired !== 'بانتظار توقيعك' && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); handleDocReply(doc); }}
                                     className="text-[9px] font-black bg-amber-100 text-amber-800 hover:bg-amber-200 px-3 py-1 rounded-lg transition shadow-sm"
@@ -2651,13 +2753,15 @@ export default function MyCases() {
                           </div>
                           {!doc.isUploading && (
                             <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition">
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setMovingDocId(doc.id); }}
-                                className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-navy hover:bg-slate-100 transition shadow-sm"
-                                title="نقل الملف"
-                              >
-                                <i className="fa-solid fa-folder-open"></i>
-                              </button>
+                              {!isReadOnlyView && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); setMovingDocId(doc.id); }}
+                                  className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-navy hover:bg-slate-100 transition shadow-sm"
+                                  title="نقل الملف"
+                                >
+                                  <i className="fa-solid fa-folder-open"></i>
+                                </button>
+                              )}
                               <button
                                 onClick={(e) => { e.stopPropagation(); downloadDocument(doc); }}
                                 className="w-8 h-8 flex items-center justify-center rounded-xl text-slate-400 hover:text-brand-navy hover:bg-slate-100 transition shadow-sm"
@@ -2680,7 +2784,7 @@ export default function MyCases() {
                     ))}
                   </div>
 
-                  {activeCase.status !== 'closed' && (
+                  {!isReadOnlyView && activeCase.status !== 'closed' && (
                     <div className="p-5 border-t border-slate-100 bg-slate-50/50">
                       <input
                         type="file"
@@ -2774,6 +2878,7 @@ export default function MyCases() {
                       handleDocReply(activePreviewDoc);
                       setActivePreviewDoc(null);
                     }}
+                    hidden={isReadOnlyView}
                     className="rounded-xl bg-brand-navy px-4 py-3 text-xs font-black text-white shadow-lg shadow-brand-navy/20 transition"
                   >
                     إرسال للمحامي
@@ -2788,9 +2893,82 @@ export default function MyCases() {
         )}
       </AnimatePresence>
 
+      {/* Read-only QR Modal */}
+      <AnimatePresence>
+        {isQrModalOpen && activeCase && readOnlyLinks && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[220] flex items-center justify-center bg-brand-dark/50 px-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 18 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 18 }}
+              className="w-full max-w-2xl rounded-[2rem] bg-white p-6 text-right shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => setIsQrModalOpen(false)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 transition hover:bg-red-50 hover:text-red-500"
+                >
+                  <i className="fa-solid fa-times"></i>
+                </button>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">QR قراءة فقط</p>
+                  <h3 className="mt-1 text-xl font-black text-brand-dark">مشاركة الملخص والمستندات مع المحامي</h3>
+                  <p className="mt-2 text-sm font-bold leading-7 text-slate-500">
+                    هذه الروابط تفتح ملف {activeCase.title} بوضع قراءة فقط، مناسبة للمراجعة السريعة بدون تعديل أو توقيع.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-2">
+                {[
+                  { label: 'ملخص القضية', icon: 'fa-rectangle-list', url: readOnlyLinks.summary },
+                  { label: 'المستندات', icon: 'fa-folder-open', url: readOnlyLinks.documents },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white text-brand-navy shadow-sm">
+                        <i className={`fa-solid ${item.icon}`}></i>
+                      </span>
+                      <div className="text-right">
+                        <p className="text-sm font-black text-brand-dark">{item.label}</p>
+                        <p className="mt-1 text-[10px] font-bold text-slate-400">قراءة فقط</p>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-center rounded-2xl bg-white p-3 shadow-inner">
+                      <img
+                        src={buildQrImageUrl(item.url)}
+                        alt={`QR ${item.label}`}
+                        className="h-40 w-40"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <input
+                      readOnly
+                      value={item.url}
+                      onFocus={(event) => event.currentTarget.select()}
+                      className="mt-3 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-left text-[10px] font-bold text-slate-500 outline-none focus:border-brand-navy"
+                      dir="ltr"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => window.open(item.url, '_blank', 'noopener,noreferrer')}
+                      className="mt-3 w-full rounded-xl bg-brand-navy px-4 py-3 text-xs font-black text-white transition hover:bg-brand-dark"
+                    >
+                      فتح الرابط
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Delete Confirmation Modal */}
       {
-        caseToDelete && (
+        !isReadOnlyView && caseToDelete && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
             <div className="bg-white rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl text-right fade-in">
               <div className="w-16 h-16 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -2821,7 +2999,7 @@ export default function MyCases() {
 
       {/* New Folder Modal */}
       {
-        isNewFolderModalOpen && (
+        !isReadOnlyView && isNewFolderModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
             <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-right fade-in">
               <h3 className="text-lg font-bold text-brand-dark mb-4">مجلد جديد</h3>
@@ -2855,7 +3033,7 @@ export default function MyCases() {
 
       {/* Move Document Modal */}
       {
-        movingDocId && activeCase && (
+        !isReadOnlyView && movingDocId && activeCase && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
             <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-right fade-in">
               {docMoveConfirmTo !== undefined ? (
@@ -2922,7 +3100,7 @@ export default function MyCases() {
 
       {/* New Custom Field Modal */}
       {
-        isNewFieldModalOpen && (
+        !isReadOnlyView && isNewFieldModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
             <div className="bg-white rounded-3xl p-6 max-w-sm w-full shadow-2xl text-right fade-in">
               <h3 className="text-lg font-bold text-brand-dark mb-4">إضافة حقل بيانات جديد</h3>
@@ -2973,7 +3151,7 @@ export default function MyCases() {
 
       {/* Signature Modal */}
       {
-        docToSign && (
+        !isReadOnlyView && docToSign && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
             <div className="bg-white rounded-3xl p-6 md:p-8 max-w-lg w-full shadow-2xl text-right fade-in relative">
               <h3 className="text-xl font-bold text-brand-dark mb-2">التوقيع الإلكتروني</h3>
@@ -3019,7 +3197,7 @@ export default function MyCases() {
 
       {/* New Case Modal */}
       <AnimatePresence>
-        {isNewCaseModalOpen && (
+        {!isReadOnlyView && isNewCaseModalOpen && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-[160] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4"
@@ -3214,7 +3392,7 @@ export default function MyCases() {
 
       {/* Document Reply Modal */}
       <AnimatePresence>
-        {replyModalDoc && (
+        {!isReadOnlyView && replyModalDoc && (
           <div className="fixed inset-0 z-[250] flex items-center justify-center bg-brand-dark/40 backdrop-blur-sm px-4">
             <motion.div
               initial={{ scale: 0.9, opacity: 0 }}
