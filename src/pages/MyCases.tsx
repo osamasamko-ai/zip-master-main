@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ActionButton from '../components/ui/ActionButton';
@@ -2814,11 +2815,13 @@ export default function MyCases() {
       </div>
 
       {/* Instant Document Previewer (Lightbox) */}
+      {typeof document !== 'undefined' && createPortal((
       <AnimatePresence>
         {activePreviewDoc && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[200] flex items-center justify-center bg-brand-dark/90 p-3 backdrop-blur-md sm:p-5 md:p-8"
+            onClick={() => setActivePreviewDoc(null)}
+            className="fixed inset-0 z-[9998] flex h-dvh w-dvw items-center justify-center overflow-y-auto bg-brand-dark/90 p-3 backdrop-blur-md sm:p-5 md:p-8"
           >
             <button
               onClick={() => setActivePreviewDoc(null)}
@@ -2834,7 +2837,10 @@ export default function MyCases() {
 
             <motion.div
               initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.9, y: 20 }}
-              className="relative flex h-[min(82vh,760px)] w-full max-w-4xl flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl md:rounded-[2rem]"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              className="relative mx-auto my-auto flex h-[min(82dvh,760px)] w-full max-w-4xl flex-col overflow-hidden rounded-[1.75rem] bg-white shadow-2xl md:rounded-[2rem]"
             >
               <div className="min-h-0 flex-1 bg-slate-100 p-3 sm:p-5">
                 {activePreviewDoc.type === 'image' ? (
@@ -2892,17 +2898,23 @@ export default function MyCases() {
           </motion.div>
         )}
       </AnimatePresence>
+      ), document.body)}
 
       {/* Read-only QR Modal */}
+      {typeof document !== 'undefined' && createPortal((
       <AnimatePresence>
         {isQrModalOpen && activeCase && readOnlyLinks && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[220] flex items-center justify-center bg-brand-dark/50 px-4 backdrop-blur-sm"
+            onClick={() => setIsQrModalOpen(false)}
+            className="fixed inset-0 z-[9999] flex h-dvh w-dvw items-center justify-center overflow-y-auto bg-brand-dark/50 p-4 backdrop-blur-sm"
           >
             <motion.div
               initial={{ scale: 0.92, y: 18 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 18 }}
-              className="w-full max-w-2xl rounded-[2rem] bg-white p-6 text-right shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              className="relative mx-auto my-auto w-full max-w-2xl rounded-[2rem] bg-white p-6 text-right shadow-2xl"
             >
               <div className="flex items-start justify-between gap-4">
                 <button
@@ -2965,6 +2977,7 @@ export default function MyCases() {
           </motion.div>
         )}
       </AnimatePresence>
+      ), document.body)}
 
       {/* Delete Confirmation Modal */}
       {
