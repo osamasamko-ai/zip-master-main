@@ -78,6 +78,7 @@ const workspaceCaseSelect = {
     select: {
       id: true,
       name: true,
+      img: true,
       location: true,
     },
   },
@@ -224,6 +225,7 @@ export function mapWorkspaceCase(item: any) {
     client: item.client.name,
     id: item.id,
     clientId: item.client.id,
+    clientImg: item.client.img || '',
     lawyerId: item.lawyer.id,
     title: item.title,
     lawyer: {

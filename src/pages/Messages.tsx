@@ -20,6 +20,10 @@ const LAWYER_QUICK_MESSAGE_PROMPTS = [
 
 const UPLOAD_MESSAGE_MARKERS = ['وثيقة جديدة:', 'مستند جديد:'];
 
+const buildAvatarUrl = (name: string, image?: string | null, background = '1A237E') => {
+  return image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=${background}&color=ffffff&rounded=true`;
+};
+
 type MessageDeliveryState = 'sending' | 'failed';
 type SmartComposerTool = 'brief' | 'next' | 'documents' | 'polish' | 'risk';
 
@@ -48,6 +52,7 @@ type WorkspaceCase = {
   };
   client: string;
   clientId: string;
+  clientImg?: string;
   messages: MessageItem[];
   documents: LegalDocument[];
 };
@@ -290,7 +295,8 @@ export default function Messages() {
       : 'اكتب رسالتك أو استفسارك هنا...';
   const selectedCaseDocumentsNeedingAction = selectedCase?.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length ?? 0;
   const selectedCaseSignedDocuments = selectedCase?.documents.filter((doc) => doc.isSigned).length ?? 0;
-  const viewerAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(user?.name || (viewerRole === 'lawyer' ? 'محامي' : 'مستخدم'))}&background=1A237E&color=ffffff`;
+  const viewerName = user?.name || (viewerRole === 'lawyer' ? 'محامي' : 'مستخدم');
+  const viewerAvatar = buildAvatarUrl(viewerName, user?.img || user?.avatar);
 
   const replaceCaseInState = useCallback((nextCase: WorkspaceCase) => {
     setCases((current) => {
@@ -1206,6 +1212,9 @@ export default function Messages() {
                               <img
                                 src={isMe ? viewerAvatar : selectedConversation.participantImg}
                                 alt={isMe ? 'أنت' : selectedConversation.participantName}
+                                onError={(event) => {
+                                  event.currentTarget.src = buildAvatarUrl(isMe ? viewerName : selectedConversation.participantName, null);
+                                }}
                                 className="h-8 w-8 shrink-0 rounded-full border border-white object-cover shadow-sm"
                               />
                               <div className={`relative max-w-[88%] rounded-[1.35rem] px-4 py-2.5 text-right md:max-w-[72%] md:px-4 group ${isMe
@@ -1969,12 +1978,12 @@ function buildConversations(cases: WorkspaceCase[], viewerRole: string): Convers
       participantId = item.lawyer.id || 'unknown-lawyer'; // Fallback for safety
       participantName = item.lawyer.name;
       participantRole = item.lawyer.role;
-      participantImg = item.lawyer.img;
+      participantImg = buildAvatarUrl(item.lawyer.name, item.lawyer.img, '0d2a59');
     } else { // viewerRole === 'lawyer'
       participantId = item.clientId;
       participantName = item.client;
       participantRole = 'عميل'; // Assuming client role is always 'عميل'
-      participantImg = `https://ui-avatars.com/api/?name=${encodeURIComponent(item.client)}&background=0d2a59&color=ffffff`;
+      participantImg = buildAvatarUrl(item.client, item.clientImg, '0d2a59');
     }
 
     const existing = grouped.get(participantId);
