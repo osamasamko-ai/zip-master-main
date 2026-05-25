@@ -143,6 +143,8 @@ export default function Messages() {
   const [isLawyerTyping, setIsLawyerTyping] = useState(false);
   const [isAiConsulting, setIsAiConsulting] = useState(false);
   const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [isAiDeskOpen, setIsAiDeskOpen] = useState(false);
+  const [smartDraftPreview, setSmartDraftPreview] = useState<{ title: string; text: string } | null>(null);
   const [showJumpToBottom, setShowJumpToBottom] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -619,8 +621,7 @@ export default function Messages() {
         : viewerRole === 'lawyer'
           ? `مرحباً ${selectedCase.client}،\nراجعت ملف ${selectedCase.title}. الخطوة التالية هي متابعة الإجراء الحالي وسأوافيك بأي تحديث مهم.`
           : `أستاذي، هل يمكن تزويدي بالخطوة التالية المتوقعة في قضية ${selectedCase.title}؟`;
-      setReplyingToMessage(null);
-      setDraft(nextText);
+      setSmartDraftPreview({ title: 'مسودة الخطوة التالية', text: nextText });
       return;
     }
 
@@ -628,8 +629,7 @@ export default function Messages() {
       const documentText = viewerRole === 'lawyer'
         ? `مرحباً ${selectedCase.client}،\nيرجى تزويدي بالمستندات الناقصة أو الداعمة لقضية ${selectedCase.title}${pendingDocs[0] ? `، خصوصاً: ${pendingDocs[0].name}` : ''}.\nشكراً لتعاونكم.`
         : `أستاذي، هل توجد مستندات إضافية مطلوبة مني الآن لقضية ${selectedCase.title}؟ أرجو تحديدها بالاسم حتى أرفعها بشكل صحيح.`;
-      setReplyingToMessage(null);
-      setDraft(documentText);
+      setSmartDraftPreview({ title: 'مسودة طلب مستندات', text: documentText });
       return;
     }
 
@@ -809,6 +809,7 @@ export default function Messages() {
 
   useEffect(() => {
     setReplyingToMessage(null);
+    setSmartDraftPreview(null);
   }, [selectedCase?.id]);
 
   useEffect(() => {
@@ -1444,41 +1445,120 @@ export default function Messages() {
                               </div>
                             </div>
 
-                            <div className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto no-scrollbar lg:justify-end">
+                            <div className="flex items-center gap-2 lg:justify-end">
+                              {!isAiDeskOpen && smartDraftPreview && (
+                                <span className="rounded-full bg-amber-50 px-2.5 py-1 text-[10px] font-black text-amber-700">
+                                  مسودة جاهزة
+                                </span>
+                              )}
                               <button
                                 type="button"
-                                onClick={() => handleSmartComposerTool('polish')}
-                                disabled={isConversationClosed || isAiConsulting}
-                                className="flex h-9 shrink-0 items-center gap-2 rounded-xl bg-brand-navy px-3 text-[10px] font-black text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-40"
+                                onClick={() => setIsAiDeskOpen((current) => !current)}
+                                className="flex h-9 items-center gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 text-[10px] font-black text-slate-600 transition hover:bg-white hover:text-brand-navy"
+                                aria-expanded={isAiDeskOpen}
                               >
-                                {isAiConsulting ? (
-                                  <span className="h-3 w-3 rounded-full border-2 border-white/70 border-t-transparent animate-spin"></span>
-                                ) : (
-                                  <i className="fa-solid fa-pen-nib"></i>
-                                )}
-                                صياغة احترافية
+                                {isAiDeskOpen ? 'إخفاء الأدوات' : 'فتح الأدوات'}
+                                <i className={`fa-solid fa-chevron-down text-[9px] transition ${isAiDeskOpen ? 'rotate-180' : ''}`}></i>
                               </button>
-                              {[
-                                { id: 'brief' as const, label: 'ملخص', icon: 'fa-align-right' },
-                                { id: 'next' as const, label: 'خطوة', icon: 'fa-route' },
-                                { id: 'documents' as const, label: 'مستندات', icon: 'fa-file-circle-plus' },
-                                { id: 'risk' as const, label: 'فحص', icon: 'fa-shield-halved' },
-                              ].map((tool) => (
-                                <button
-                                  key={tool.id}
-                                  type="button"
-                                  title={tool.label}
-                                  onClick={() => handleSmartComposerTool(tool.id)}
-                                  disabled={isConversationClosed}
-                                  className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50 px-3 text-[10px] font-black text-slate-600 transition hover:border-brand-navy/10 hover:bg-brand-navy/5 hover:text-brand-navy disabled:cursor-not-allowed disabled:opacity-40"
-                                >
-                                  <i className={`fa-solid ${tool.icon}`}></i>
-                                  {tool.label}
-                                </button>
-                              ))}
                             </div>
                           </div>
+
+                          <AnimatePresence initial={false}>
+                            {isAiDeskOpen && (
+                              <motion.div
+                                initial={{ height: 0, opacity: 0 }}
+                                animate={{ height: 'auto', opacity: 1 }}
+                                exit={{ height: 0, opacity: 0 }}
+                                className="overflow-hidden border-t border-slate-100"
+                              >
+                                <div className="flex min-w-0 items-center gap-2 overflow-x-auto p-2.5 no-scrollbar lg:justify-end">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSmartComposerTool('polish')}
+                                    disabled={isConversationClosed || isAiConsulting}
+                                    className="flex h-9 shrink-0 items-center gap-2 rounded-xl bg-brand-navy px-3 text-[10px] font-black text-white shadow-sm transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-40"
+                                  >
+                                    {isAiConsulting ? (
+                                      <span className="h-3 w-3 rounded-full border-2 border-white/70 border-t-transparent animate-spin"></span>
+                                    ) : (
+                                      <i className="fa-solid fa-pen-nib"></i>
+                                    )}
+                                    صياغة احترافية
+                                  </button>
+                                  {[
+                                    { id: 'brief' as const, label: 'ملخص', icon: 'fa-align-right' },
+                                    { id: 'next' as const, label: 'خطوة', icon: 'fa-route' },
+                                    { id: 'documents' as const, label: 'مستندات', icon: 'fa-file-circle-plus' },
+                                    { id: 'risk' as const, label: 'فحص', icon: 'fa-shield-halved' },
+                                  ].map((tool) => (
+                                    <button
+                                      key={tool.id}
+                                      type="button"
+                                      title={tool.label}
+                                      onClick={() => handleSmartComposerTool(tool.id)}
+                                      disabled={isConversationClosed}
+                                      className="flex h-9 shrink-0 items-center gap-1.5 rounded-xl border border-slate-100 bg-slate-50 px-3 text-[10px] font-black text-slate-600 transition hover:border-brand-navy/10 hover:bg-brand-navy/5 hover:text-brand-navy disabled:cursor-not-allowed disabled:opacity-40"
+                                    >
+                                      <i className={`fa-solid ${tool.icon}`}></i>
+                                      {tool.label}
+                                    </button>
+                                  ))}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
                         </div>
+
+                        <AnimatePresence>
+                          {smartDraftPreview && (
+                            <motion.div
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              exit={{ opacity: 0, y: 8 }}
+                              className="mb-2 rounded-2xl border border-amber-100 bg-amber-50/70 p-3 text-right shadow-sm"
+                            >
+                              <div className="mb-2 flex items-start justify-between gap-3">
+                                <button
+                                  type="button"
+                                  onClick={() => setSmartDraftPreview(null)}
+                                  className="shrink-0 rounded-lg bg-white px-2 py-1 text-[10px] font-black text-slate-400 transition hover:text-red-500"
+                                >
+                                  تجاهل
+                                </button>
+                                <div className="min-w-0">
+                                  <p className="text-xs font-black text-amber-800">{smartDraftPreview.title}</p>
+                                  <p className="mt-1 line-clamp-2 text-xs font-bold leading-6 text-amber-900/80">{smartDraftPreview.text}</p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap justify-start gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReplyingToMessage(null);
+                                    setDraft(smartDraftPreview.text);
+                                    setSmartDraftPreview(null);
+                                    textareaRef.current?.focus();
+                                  }}
+                                  className="rounded-xl bg-brand-navy px-3 py-2 text-[10px] font-black text-white transition hover:bg-brand-dark"
+                                >
+                                  استخدام
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReplyingToMessage(null);
+                                    setDraft((current) => current ? `${current}\n\n${smartDraftPreview.text}` : smartDraftPreview.text);
+                                    setSmartDraftPreview(null);
+                                    textareaRef.current?.focus();
+                                  }}
+                                  className="rounded-xl bg-white px-3 py-2 text-[10px] font-black text-brand-navy ring-1 ring-amber-100 transition hover:bg-amber-50"
+                                >
+                                  إلحاق
+                                </button>
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
 
                         <div className="mb-2 flex items-center gap-2 rounded-2xl border border-white/70 bg-white/80 p-2 shadow-sm">
                           <div className="flex shrink-0 items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-black text-blue-600">

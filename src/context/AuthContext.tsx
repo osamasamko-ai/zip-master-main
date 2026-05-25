@@ -11,6 +11,7 @@ export interface AuthUser {
   verified?: boolean;
   licenseStatus?: string;
   img?: string;
+  avatar?: string;
   roleDescription?: string;
   accountBalance?: number;
 }
@@ -35,8 +36,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const applyUser = (nextUser: AuthUser) => {
+    setUser(nextUser);
+    localStorage.setItem('auth_user', JSON.stringify(nextUser));
+  };
+
   // Load token from localStorage on mount
   useEffect(() => {
+    let isMounted = true;
     const storedToken = localStorage.getItem('auth_token');
     const storedUser = localStorage.getItem('auth_user');
 
@@ -53,7 +60,42 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    setIsLoading(false);
+    const refreshUserProfile = async () => {
+      if (!storedToken) return;
+
+      try {
+        const response = await apiClient.getSettings();
+        const profile = response.data?.profile;
+        if (!profile || !isMounted) return;
+
+        setUser((current) => {
+          if (!current) return current;
+
+          const nextUser = {
+            ...current,
+            name: profile.name || current.name,
+            email: profile.email || current.email,
+            img: profile.img || profile.avatar || current.img,
+            avatar: profile.avatar || profile.img || current.avatar,
+            roleDescription: profile.roleDescription || current.roleDescription,
+            accountBalance: profile.accountBalance ?? current.accountBalance,
+          };
+
+          localStorage.setItem('auth_user', JSON.stringify(nextUser));
+          return nextUser;
+        });
+      } catch (e) {
+        console.error('Failed to refresh current user profile', e);
+      }
+    };
+
+    refreshUserProfile().finally(() => {
+      if (isMounted) setIsLoading(false);
+    });
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
@@ -64,10 +106,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { token, user } = response.data;
 
       setToken(token);
-      setUser(user);
+      applyUser(user);
       apiClient.setToken(token);
       localStorage.setItem('auth_token', token);
-      localStorage.setItem('auth_user', JSON.stringify(user));
       return user;
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || 'Login failed';
@@ -86,10 +127,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { token, user } = response.data;
 
       setToken(token);
-      setUser(user);
+      applyUser(user);
       apiClient.setToken(token);
       localStorage.setItem('auth_token', token);
-      localStorage.setItem('auth_user', JSON.stringify(user));
       return user;
     } catch (err: any) {
       const errorMessage = err.response?.data?.error || 'تعذر إنشاء الحساب.';

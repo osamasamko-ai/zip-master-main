@@ -184,7 +184,8 @@ export default function MainLayout() {
   const displayRole = user?.roleDescription || 'تصفح عام';
   const displayAvatar =
     user?.img ||
-    'https://ui-avatars.com/api/?name=Guest&background=1B365D&color=ffffff&rounded=true';
+    user?.avatar ||
+    `https://ui-avatars.com/api/?name=${encodeURIComponent(displayName)}&background=1B365D&color=ffffff&rounded=true`;
 
   useEffect(() => {
     const fetchSettings = async () => {

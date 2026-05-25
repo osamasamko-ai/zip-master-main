@@ -209,6 +209,7 @@ export async function getCurrentUserProfile(userId: string) {
     language: user.language || 'العربية',
     location: user.location || '',
     img: user.img || '',
+    avatar: user.img || user.lawyerProfile?.avatar || '',
     verified: user.verified,
     subscriptionTier: user.subscriptionTier,
     accountBalance: user.accountBalance,
