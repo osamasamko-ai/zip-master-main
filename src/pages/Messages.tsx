@@ -416,7 +416,7 @@ export default function Messages() {
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 96)}px`;
     }
   }, [draft]);
 
@@ -1368,29 +1368,33 @@ export default function Messages() {
                           </div>
                         </div>
                       )}
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <span className="rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-black text-slate-400">
-                          {draftLength.toLocaleString('ar-IQ')} حرف
-                        </span>
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">ردود سريعة</p>
-                      </div>
-                      <div className="flex flex-wrap justify-end gap-2 mb-3">
-                        {quickMessagePrompts.map((prompt) => (
-                          <button
-                            key={prompt}
-                            type="button"
-                            onClick={() => {
-                              setReplyingToMessage(null);
-                              setDraft(prompt);
-                            }}
-                            disabled={isConversationClosed}
-                            className="rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-black text-slate-600 transition hover:bg-blue-50 hover:text-blue-600"
-                          >
-                            {prompt}
-                          </button>
-                        ))}
-                      </div>
                       <div className="rounded-[1.4rem] bg-slate-100 p-2 focus-within:ring-4 focus-within:ring-blue-50">
+                        <div className="mb-2 flex items-center gap-2 rounded-2xl border border-white/70 bg-white/80 p-2 shadow-sm">
+                          <div className="flex shrink-0 items-center gap-2 rounded-full bg-blue-50 px-3 py-1.5 text-[10px] font-black text-blue-600">
+                            <i className="fa-solid fa-bolt text-[9px]"></i>
+                            ردود سريعة
+                          </div>
+                          <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto no-scrollbar">
+                            {quickMessagePrompts.map((prompt) => (
+                              <button
+                                key={prompt}
+                                type="button"
+                                title={prompt}
+                                onClick={() => {
+                                  setReplyingToMessage(null);
+                                  setDraft(prompt);
+                                }}
+                                disabled={isConversationClosed}
+                                className="max-w-[240px] shrink-0 truncate rounded-full border border-slate-100 bg-slate-50 px-3 py-1.5 text-[10px] font-black text-slate-600 transition hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                              >
+                                {prompt}
+                              </button>
+                            ))}
+                          </div>
+                          <span className="hidden shrink-0 rounded-full bg-slate-100 px-3 py-1.5 text-[10px] font-black text-slate-400 sm:inline-flex">
+                            {draftLength.toLocaleString('ar-IQ')} حرف
+                          </span>
+                        </div>
                         {replyingToMessage && (
                           <div className="mb-3 flex items-start justify-between gap-3 rounded-xl border border-brand-navy/10 bg-slate-50 px-4 py-3 text-right">
                             <div className="min-w-0">
@@ -1421,7 +1425,7 @@ export default function Messages() {
                           }}
                           placeholder={composerPlaceholder}
                           disabled={isConversationClosed}
-                          className="max-h-[150px] min-h-[48px] w-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 py-2 text-[14px] font-medium leading-7 text-slate-700 outline-none transition placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-400"
+                          className="max-h-24 min-h-10 w-full resize-none overflow-y-auto rounded-xl border-0 bg-transparent px-3 py-1.5 text-[14px] font-medium leading-6 text-slate-700 outline-none transition placeholder:text-slate-400 disabled:cursor-not-allowed disabled:text-slate-400"
                         />
 
                         <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
