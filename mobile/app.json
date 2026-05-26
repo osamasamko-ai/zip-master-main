@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "القسطاس الذكي",
+    "slug": "qistas-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      }
+    },
+    "extra": {
+      "apiUrl": "http://127.0.0.1:3000"
+    }
+  }
+}
