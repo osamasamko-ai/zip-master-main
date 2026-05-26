@@ -1,8 +1,15 @@
 import React, { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
+import {
+  IBMPlexSansArabic_400Regular,
+  IBMPlexSansArabic_500Medium,
+  IBMPlexSansArabic_600SemiBold,
+  IBMPlexSansArabic_700Bold,
+  useFonts,
+} from '@expo-google-fonts/ibm-plex-sans-arabic';
 import { AuthUser } from './src/api/client';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminScreen } from './src/screens/AdminScreen';
@@ -24,6 +31,48 @@ import { ProWorkspaceScreen } from './src/screens/ProWorkspaceScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { SupportScreen } from './src/screens/SupportScreen';
 import { colors } from './src/theme/colors';
+
+const appFontRegular = 'IBMPlexSansArabic_400Regular';
+const appFontMedium = 'IBMPlexSansArabic_500Medium';
+const appFontSemiBold = 'IBMPlexSansArabic_600SemiBold';
+const appFontBold = 'IBMPlexSansArabic_700Bold';
+
+function fontForWeight(weight?: TextStyle['fontWeight']) {
+  const numericWeight = Number(weight);
+
+  if (numericWeight >= 700 || weight === 'bold') return appFontBold;
+  if (numericWeight >= 600) return appFontSemiBold;
+  if (numericWeight >= 500) return appFontMedium;
+  return appFontRegular;
+}
+
+function withAppFont(style: unknown) {
+  const flattened = StyleSheet.flatten(style) as TextStyle | undefined;
+
+  if (flattened?.fontFamily) {
+    return style;
+  }
+
+  const fontFamily = fontForWeight(flattened?.fontWeight);
+
+  return [style, { fontFamily, fontWeight: 'normal' as const }];
+}
+
+function applyDefaultFont(Component: typeof Text | typeof TextInput) {
+  const componentWithRender = Component as unknown as {
+    render?: (props: Record<string, unknown>, ref: unknown) => React.ReactElement;
+  };
+  const originalRender = componentWithRender.render;
+
+  if (!originalRender) return;
+
+  componentWithRender.render = function renderWithAppFont(props, ref) {
+    return originalRender.call(this, { ...props, style: withAppFont(props?.style) }, ref);
+  };
+}
+
+applyDefaultFont(Text);
+applyDefaultFont(TextInput);
 
 type TabKey = 'home' | 'lawyers' | 'cases' | 'ai' | 'messages' | 'more';
 type RouteKey = TabKey | MoreRoute | 'profile';
@@ -106,11 +155,28 @@ function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKe
       return <ProfileScreen />;
     case 'home':
     default:
-      return <HomeScreen />;
+      return <HomeScreen onOpen={setRoute} />;
   }
 }
 
 export default function App() {
+  const [fontsLoaded] = useFonts({
+    IBMPlexSansArabic_400Regular,
+    IBMPlexSansArabic_500Medium,
+    IBMPlexSansArabic_600SemiBold,
+    IBMPlexSansArabic_700Bold,
+  });
+
+  if (!fontsLoaded) {
+    return (
+      <SafeAreaProvider>
+        <View style={styles.loading}>
+          <ActivityIndicator color={colors.gold} />
+        </View>
+      </SafeAreaProvider>
+    );
+  }
+
   return (
     <SafeAreaProvider>
       <AuthProvider>
@@ -125,6 +191,12 @@ const styles = StyleSheet.create({
   safeArea: {
     backgroundColor: colors.canvas,
     flex: 1,
+  },
+  loading: {
+    alignItems: 'center',
+    backgroundColor: colors.canvas,
+    flex: 1,
+    justifyContent: 'center',
   },
   content: {
     flex: 1,
