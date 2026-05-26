@@ -117,6 +117,21 @@ class ApiClient {
     return this.request<any>(`/api/app/feed/${id}/like`, { method: 'POST' });
   }
 
+  saveFeedPost(id: string) {
+    return this.request<any>(`/api/app/feed/${id}/save`, { method: 'POST' });
+  }
+
+  shareFeedPost(id: string) {
+    return this.request<any>(`/api/app/feed/${id}/share`, { method: 'POST' });
+  }
+
+  addFeedComment(id: string, content: string) {
+    return this.request<any>(`/api/app/feed/${id}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+    });
+  }
+
   getFollowing() {
     return this.request<any[]>('/api/app/following');
   }
@@ -203,6 +218,34 @@ class ApiClient {
 
   getProWorkspace() {
     return this.request<any>('/api/app/pro/workspace');
+  }
+
+  createProCase(data: { title: string; client: string; matter: string; priority: string }) {
+    return this.request<any>('/api/app/pro/workspace/cases', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  createProAppointment(data: { title: string; time: string; client: string; type: string; caseId?: string | null }) {
+    return this.request<any>('/api/app/pro/workspace/appointments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  uploadProVaultDocument(caseId?: string | null) {
+    return this.request<any>('/api/app/pro/workspace/vault-upload', {
+      method: 'POST',
+      body: JSON.stringify({ caseId }),
+    });
+  }
+
+  updateProMessageState(id: string, data: { unread?: boolean; awaitingResponse?: boolean }) {
+    return this.request<any>(`/api/app/pro/workspace/messages/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
   }
 
   getAdminMetrics() {

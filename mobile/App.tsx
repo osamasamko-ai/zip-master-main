@@ -14,6 +14,7 @@ import { ContractWizardScreen } from './src/screens/ContractWizardScreen';
 import { FeedScreen } from './src/screens/FeedScreen';
 import { FollowingScreen } from './src/screens/FollowingScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
+import { IntelligenceScreen } from './src/screens/IntelligenceScreen';
 import { LawyersScreen } from './src/screens/LawyersScreen';
 import { LegalDocsScreen } from './src/screens/LegalDocsScreen';
 import { MessagesScreen } from './src/screens/MessagesScreen';
@@ -44,6 +45,15 @@ function Shell() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      {!tabs.some((tab) => tab.key === activeRoute) ? (
+        <View style={styles.topBar}>
+          <Pressable onPress={() => setActiveRoute('more')} style={styles.backButton}>
+            <Ionicons name="chevron-forward" size={20} color={colors.navy} />
+            <Text style={styles.backText}>رجوع</Text>
+          </Pressable>
+          <Text style={styles.topTitle}>القسطاس الذكي</Text>
+        </View>
+      ) : null}
       <View style={styles.content}>{renderScreen(activeRoute, user, setActiveRoute)}</View>
       <View style={styles.tabBar}>
         {tabs.map((tab) => {
@@ -86,6 +96,8 @@ function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKe
       return <SupportScreen />;
     case 'settings':
       return <SettingsScreen />;
+    case 'intelligence':
+      return <IntelligenceScreen />;
     case 'pro':
       return <ProWorkspaceScreen />;
     case 'admin':
@@ -137,5 +149,30 @@ const styles = StyleSheet.create({
   },
   activeTabLabel: {
     color: colors.gold,
+  },
+  topBar: {
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  backButton: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 4,
+  },
+  backText: {
+    color: colors.navy,
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  topTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
   },
 });

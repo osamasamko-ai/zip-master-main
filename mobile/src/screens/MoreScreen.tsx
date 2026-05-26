@@ -13,8 +13,10 @@ export type MoreRoute =
   | 'following'
   | 'support'
   | 'settings'
+  | 'intelligence'
   | 'pro'
-  | 'admin';
+  | 'admin'
+  | 'profile';
 
 type Item = {
   key: MoreRoute;
@@ -32,6 +34,8 @@ const items: Item[] = [
   { key: 'following', title: 'المتابَعون', note: 'محامون تتابعهم', icon: 'star-outline' },
   { key: 'support', title: 'الدعم', note: 'طلبات ومساعدة فنية', icon: 'headset-outline' },
   { key: 'settings', title: 'الإعدادات', note: 'الحساب والتفضيلات', icon: 'settings-outline' },
+  { key: 'intelligence', title: 'الذكاء التشغيلي', note: 'تنبيهات واقتراحات مخصصة', icon: 'analytics-outline' },
+  { key: 'profile', title: 'حسابي', note: 'الملف الشخصي وتسجيل الخروج', icon: 'person-outline' },
   { key: 'pro', title: 'مساحة المحامي', note: 'عملاء وقضايا مهنية', icon: 'briefcase-outline', roles: ['pro', 'admin'] },
   { key: 'admin', title: 'الإدارة', note: 'مؤشرات ومراجعات المنصة', icon: 'shield-checkmark-outline', roles: ['admin'] },
 ];
@@ -63,4 +67,3 @@ export function MoreScreen({ user, onOpen }: { user: AuthUser; onOpen: (route: M
     </Screen>
   );
 }
-

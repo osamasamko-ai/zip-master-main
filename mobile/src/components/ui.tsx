@@ -28,6 +28,19 @@ export function EmptyState({ title, note }: { title: string; note?: string }) {
   );
 }
 
+export function KeyValue({ label, value }: { label: string; value: string | number }) {
+  return (
+    <View style={styles.keyValue}>
+      <Text style={styles.keyValueValue}>{value}</Text>
+      <Text style={styles.keyValueLabel}>{label}</Text>
+    </View>
+  );
+}
+
+export function Divider() {
+  return <View style={styles.divider} />;
+}
+
 export function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'gold' | 'green' | 'red' | 'blue' }) {
   const toneStyle = {
     neutral: styles.pillNeutral,
@@ -187,6 +200,28 @@ export const styles = StyleSheet.create({
   },
   pillTextStrong: {
     color: colors.ink,
+  },
+  keyValue: {
+    alignItems: 'flex-end',
+    flex: 1,
+    gap: 4,
+  },
+  keyValueValue: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  keyValueLabel: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'right',
+  },
+  divider: {
+    backgroundColor: colors.line,
+    height: 1,
+    marginVertical: 12,
   },
   button: {
     alignItems: 'center',
