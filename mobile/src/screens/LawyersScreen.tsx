@@ -120,7 +120,6 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
 
   const selectedLawyer = filteredLawyers.find((lawyer) => lawyer.id === selectedLawyerId) || filteredLawyers[0] || null;
   const recommendedLawyer = filteredLawyers[0] || null;
-  const highestRatedLawyer = filteredLawyers.reduce((best, lawyer) => (!best || (lawyer.rating || 0) > (best.rating || 0) ? lawyer : best), null);
   const activeFilterCount = [query.trim().length > 0, specialty !== 'الكل', verifiedOnly, onlineOnly, sortMode !== 'best'].filter(Boolean).length;
   const onlineCount = filteredLawyers.filter((lawyer) => lawyer.isOnline).length;
   const verifiedCount = filteredLawyers.filter((lawyer) => lawyer.verified).length;
@@ -203,14 +202,14 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />} showsVerticalScrollIndicator={false}>
         <View style={styles.heroPanel}>
           <View style={styles.heroTopRow}>
-            <View style={styles.heroIcon}>
-              <Ionicons name="scale-outline" size={22} color={colors.gold} />
-            </View>
             <View style={styles.flex}>
-              <Text style={styles.kicker}>دليل المحامين</Text>
-              <Text style={styles.heroTitle}>اختر المحامي المناسب بسرعة</Text>
-              <Text style={styles.mutedText}>بحث، فلاتر، مقارنة، واستشارة مدفوعة من شاشة واحدة.</Text>
+              <Text style={styles.heroTitle}>المحامون</Text>
+              <Text style={styles.mutedText}>{filteredLawyers.length.toLocaleString('ar-IQ')} نتيجة · {onlineCount.toLocaleString('ar-IQ')} متاح الآن · {verifiedCount.toLocaleString('ar-IQ')} موثق</Text>
             </View>
+            <Pressable onPress={() => setFiltersOpen((current) => !current)} style={[styles.filterButton, activeFilterCount > 0 && styles.filterButtonActive]}>
+              <Ionicons name="options-outline" size={18} color={activeFilterCount > 0 ? '#fff' : colors.navy} />
+              {activeFilterCount > 0 ? <Text style={styles.filterButtonBadge}>{activeFilterCount}</Text> : null}
+            </Pressable>
           </View>
 
           <View style={styles.searchShell}>
@@ -230,41 +229,31 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
             <Ionicons name="search-outline" size={19} color={colors.navy} />
           </View>
 
-          <View style={styles.heroStatsRow}>
-            <MiniStat label="النتائج" value={filteredLawyers.length} />
-            <MiniStat label="متاحون" value={onlineCount} />
-            <MiniStat label="موثقون" value={verifiedCount} />
+          <View style={styles.quickFilterRow}>
+            <Pressable onPress={() => setOnlineOnly((current) => !current)} style={[styles.quickFilter, onlineOnly && styles.quickFilterActive]}>
+              <Ionicons name="radio-button-on-outline" size={15} color={onlineOnly ? '#fff' : colors.green} />
+              <Text style={[styles.quickFilterText, onlineOnly && styles.quickFilterTextActive]}>متاح الآن</Text>
+            </Pressable>
+            <Pressable onPress={() => setVerifiedOnly((current) => !current)} style={[styles.quickFilter, verifiedOnly && styles.quickFilterActive]}>
+              <Ionicons name="shield-checkmark-outline" size={15} color={verifiedOnly ? '#fff' : colors.blue} />
+              <Text style={[styles.quickFilterText, verifiedOnly && styles.quickFilterTextActive]}>موثق</Text>
+            </Pressable>
+            <Pressable onPress={() => setSortMode(sortMode === 'rating' ? 'best' : 'rating')} style={[styles.quickFilter, sortMode === 'rating' && styles.quickFilterActive]}>
+              <Ionicons name="star-outline" size={15} color={sortMode === 'rating' ? '#fff' : colors.gold} />
+              <Text style={[styles.quickFilterText, sortMode === 'rating' && styles.quickFilterTextActive]}>الأعلى تقييماً</Text>
+            </Pressable>
           </View>
         </View>
 
-        <View style={styles.recommendationPanel}>
-          <View style={styles.recommendationHeader}>
-            <Pressable onPress={() => setFiltersOpen((current) => !current)} style={styles.filterButton}>
-              <Ionicons name="options-outline" size={18} color={colors.navy} />
-              <Text style={styles.filterButtonText}>{filtersOpen ? 'إخفاء الفلاتر' : 'الفلاتر'}</Text>
-              {activeFilterCount > 0 ? (
-                <View style={styles.filterCount}>
-                  <Text style={styles.filterCountText}>{activeFilterCount}</Text>
-                </View>
-              ) : null}
-            </Pressable>
+        {recommendedLawyer ? (
+          <Pressable onPress={() => setSelectedLawyerId(recommendedLawyer.id)} style={styles.matchBar}>
+            <Ionicons name="sparkles-outline" size={18} color={colors.gold} />
             <View style={styles.flex}>
-              <Text style={styles.kicker}>أفضل تطابق</Text>
-              <Text style={styles.cardTitle} numberOfLines={1}>{recommendedLawyer?.name || 'بانتظار النتائج'}</Text>
-              <Text style={styles.mutedText} numberOfLines={1}>
-                {highestRatedLawyer ? `أعلى تقييم: ${highestRatedLawyer.name} · ${Number(highestRatedLawyer.rating || 0).toFixed(1)}` : 'اسحب للتحديث عند الحاجة'}
-              </Text>
+              <Text style={styles.matchTitle} numberOfLines={1}>أفضل تطابق: {recommendedLawyer.name}</Text>
+              <Text style={styles.matchMeta} numberOfLines={1}>{recommendedLawyer.specialty} · {recommendedLawyer.responseTime || recommendedLawyer.availability}</Text>
             </View>
-          </View>
-
-          {recommendedLawyer ? (
-            <Pressable onPress={() => setSelectedLawyerId(recommendedLawyer.id)} style={styles.recommendedCard}>
-              <Pill label="مقترح" tone="gold" />
-              <Text style={styles.cardTitle}>{recommendedLawyer.name}</Text>
-              <Text style={styles.mutedText}>{recommendedLawyer.specialty} · {recommendedLawyer.responseTime || recommendedLawyer.availability}</Text>
-            </Pressable>
-          ) : null}
-        </View>
+          </Pressable>
+        ) : null}
 
         {filtersOpen ? (
         <Card>
@@ -318,8 +307,8 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
 
         {filteredLawyers.length > 0 ? (
           <View style={styles.resultHeader}>
-            <Text style={styles.resultTitle}>المحامون المطابقون</Text>
-            <Text style={styles.resultMeta}>{filteredLawyers.length.toLocaleString('ar-IQ')} نتيجة · {sortModeLabel(sortMode)}</Text>
+            <Text style={styles.resultTitle}>النتائج</Text>
+            <Text style={styles.resultMeta}>{filteredLawyers.length.toLocaleString('ar-IQ')} · {sortModeLabel(sortMode)}</Text>
           </View>
         ) : null}
 
@@ -339,12 +328,6 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
           />
         ))}
 
-        <SelectedLawyerSummary
-          lawyer={selectedLawyer}
-          onConsult={() => selectedLawyer && openConsultation(selectedLawyer)}
-          onOpenCase={() => onOpen?.('cases')}
-          onOpenProfile={() => onOpen?.('profile')}
-        />
       </ScrollView>
 
       <ConsultationModal
@@ -390,31 +373,24 @@ function LawyerCard({
 
   return (
     <Pressable onPress={onSelect} style={[styles.lawyerCard, selected && styles.lawyerCardSelected]}>
-      <View style={styles.cardAccentRow}>
-        <View style={[styles.cardAccent, selected && styles.cardAccentActive]} />
-      </View>
-
       <View style={styles.lawyerTopRow}>
         <Pressable onPress={onFollow} style={[styles.saveButton, followed && styles.saveButtonActive]}>
           <Ionicons name={followed ? 'bookmark' : 'bookmark-outline'} size={18} color={followed ? colors.gold : colors.muted} />
         </Pressable>
 
         <View style={styles.flex}>
-          <View style={styles.badgeRow}>
-            {best ? <Pill label="أفضل تطابق" tone="gold" /> : null}
-            {lawyer.verified ? <Pill label="موثق" tone="blue" /> : null}
-            <Pill label={lawyer.isOnline ? 'متاح الآن' : 'حسب الجدول'} tone={lawyer.isOnline ? 'green' : 'neutral'} />
-          </View>
-
           <View style={styles.lawyerHeader}>
             <View style={styles.avatar}>
               <Text style={styles.avatarText}>{String(lawyer.name || 'م').charAt(0)}</Text>
               <View style={[styles.onlineDot, lawyer.isOnline ? styles.onlineDotActive : styles.onlineDotIdle]} />
             </View>
             <View style={styles.flex}>
-              <Text style={styles.lawyerName} numberOfLines={1}>{lawyer.name}</Text>
+              <View style={styles.lawyerTitleRow}>
+                {best ? <View style={styles.bestDot} /> : null}
+                <Text style={styles.lawyerName} numberOfLines={1}>{lawyer.name}</Text>
+              </View>
               <Text style={styles.specialtyLine} numberOfLines={1}>{lawyer.specialty} · {lawyer.location}</Text>
-              <Text style={styles.tagline} numberOfLines={2}>{lawyer.tagline || lawyer.bio}</Text>
+              <Text style={styles.tagline} numberOfLines={selected ? 2 : 1}>{lawyer.tagline || lawyer.bio}</Text>
             </View>
           </View>
         </View>
@@ -440,16 +416,17 @@ function LawyerCard({
         </View>
       </View>
 
-      <View style={styles.factGrid}>
-        <Fact icon="time-outline" label="الرد" value={lawyer.responseTime || lawyer.availability} />
-        <Fact icon="briefcase-outline" label="الخبرة" value={lawyer.experience} />
-        <Fact icon="folder-open-outline" label="القضايا" value={lawyer.casesHandled} />
-        <Fact icon="pulse-outline" label="الجاهزية" value={`${readiness}%`} />
-      </View>
+      {selected ? (
+        <View style={styles.factGrid}>
+          <Fact icon="time-outline" label="الرد" value={lawyer.responseTime || lawyer.availability} />
+          <Fact icon="briefcase-outline" label="الخبرة" value={lawyer.experience} />
+          <Fact icon="folder-open-outline" label="القضايا" value={lawyer.casesHandled} />
+          <Fact icon="pulse-outline" label="الجاهزية" value={`${readiness}%`} />
+        </View>
+      ) : null}
 
       <View style={styles.pricePanel}>
         <View style={styles.flex}>
-          <Text style={styles.kicker}>سعر الاستشارة</Text>
           <Text style={styles.priceText} numberOfLines={1}>{lawyer.consultationFee || 'غير محدد'}</Text>
           <Text style={styles.availabilityHint}>{lawyer.isOnline ? 'جاهز للاستشارة الآن' : 'يفضل فتح قضية منظمة'}</Text>
         </View>
@@ -674,9 +651,7 @@ function sortModeLabel(sortMode: SortMode) {
 const styles = StyleSheet.create({
   activeFilterPill: {
     backgroundColor: '#eef2f6',
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 999,
     justifyContent: 'center',
     minHeight: 36,
     paddingHorizontal: 10,
@@ -697,11 +672,11 @@ const styles = StyleSheet.create({
   },
   avatar: {
     alignItems: 'center',
-    backgroundColor: colors.navy,
-    borderRadius: 8,
-    height: 58,
+    backgroundColor: colors.blue,
+    borderRadius: 999,
+    height: 54,
     justifyContent: 'center',
-    width: 58,
+    width: 54,
   },
   avatarText: {
     color: '#fff',
@@ -719,6 +694,12 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 3,
     textAlign: 'right',
+  },
+  bestDot: {
+    backgroundColor: colors.gold,
+    borderRadius: 999,
+    height: 8,
+    width: 8,
   },
   balance: {
     color: colors.gold,
@@ -750,7 +731,7 @@ const styles = StyleSheet.create({
   cardAction: {
     alignItems: 'center',
     backgroundColor: '#eef2f6',
-    borderRadius: 8,
+    borderRadius: 999,
     flex: 1,
     flexDirection: 'row-reverse',
     gap: 6,
@@ -772,7 +753,7 @@ const styles = StyleSheet.create({
   chip: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 999,
     borderWidth: 1,
     minHeight: 40,
     paddingHorizontal: 12,
@@ -820,8 +801,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#fff1f0',
     borderColor: '#fecdca',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 999,
+    borderWidth: 0,
     flexDirection: 'row-reverse',
     gap: 5,
     justifyContent: 'center',
@@ -835,8 +816,8 @@ const styles = StyleSheet.create({
   },
   consultButton: {
     alignItems: 'center',
-    backgroundColor: colors.navy,
-    borderRadius: 8,
+    backgroundColor: colors.blue,
+    borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 6,
     minHeight: 46,
@@ -857,8 +838,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#f8fafc',
     borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 0,
     flexBasis: '48%',
     flexDirection: 'row-reverse',
     flexGrow: 1,
@@ -896,11 +877,21 @@ const styles = StyleSheet.create({
   filterButton: {
     alignItems: 'center',
     backgroundColor: '#eef2f6',
-    borderRadius: 8,
+    borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 6,
-    minHeight: 42,
-    paddingHorizontal: 10,
+    height: 42,
+    justifyContent: 'center',
+    minWidth: 42,
+    paddingHorizontal: 12,
+  },
+  filterButtonActive: {
+    backgroundColor: colors.navy,
+  },
+  filterButtonBadge: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '900',
   },
   filterButtonText: {
     color: colors.navy,
@@ -940,10 +931,9 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: colors.ink,
-    fontSize: 22,
+    fontSize: 24,
     fontWeight: '900',
-    lineHeight: 32,
-    marginTop: 8,
+    lineHeight: 31,
     textAlign: 'right',
   },
   heroIcon: {
@@ -956,9 +946,7 @@ const styles = StyleSheet.create({
   },
   heroPanel: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 22,
     marginBottom: 12,
     padding: 14,
   },
@@ -968,13 +956,13 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   heroTopRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    flexDirection: 'row',
     gap: 12,
   },
   info: {
     backgroundColor: '#f8fafc',
-    borderRadius: 8,
+    borderRadius: 16,
     padding: 10,
   },
   infoGrid: {
@@ -1015,14 +1003,12 @@ const styles = StyleSheet.create({
   },
   lawyerCard: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
-    marginBottom: 12,
+    borderRadius: 20,
+    marginBottom: 10,
     padding: 14,
   },
   lawyerCardSelected: {
-    borderColor: colors.navy,
+    backgroundColor: '#f7fbff',
     shadowColor: colors.navy,
     shadowOpacity: 0.08,
     shadowRadius: 14,
@@ -1030,10 +1016,14 @@ const styles = StyleSheet.create({
   },
   lawyerName: {
     color: colors.ink,
-    fontSize: 19,
+    fontSize: 18,
     fontWeight: '900',
-    marginTop: 8,
     textAlign: 'right',
+  },
+  lawyerTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 7,
   },
   lawyerTopRow: {
     alignItems: 'flex-start',
@@ -1064,7 +1054,7 @@ const styles = StyleSheet.create({
   },
   miniStat: {
     backgroundColor: '#eef2f6',
-    borderRadius: 8,
+    borderRadius: 16,
     flexBasis: '30%',
     flexGrow: 1,
     padding: 10,
@@ -1078,7 +1068,7 @@ const styles = StyleSheet.create({
   },
   modalPanel: {
     backgroundColor: colors.paper,
-    borderRadius: 8,
+    borderRadius: 22,
     maxHeight: '90%',
     padding: 14,
     width: '94%',
@@ -1093,7 +1083,7 @@ const styles = StyleSheet.create({
   noteInput: {
     backgroundColor: colors.canvas,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
     color: colors.ink,
     minHeight: 96,
@@ -1121,7 +1111,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     gap: 10,
@@ -1135,9 +1125,7 @@ const styles = StyleSheet.create({
   pricePanel: {
     alignItems: 'center',
     backgroundColor: '#f8fafc',
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 18,
     flexDirection: 'row-reverse',
     gap: 12,
     marginTop: 12,
@@ -1149,6 +1137,32 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 3,
     textAlign: 'right',
+  },
+  quickFilter: {
+    alignItems: 'center',
+    backgroundColor: '#f2f4f7',
+    borderRadius: 999,
+    flexDirection: 'row-reverse',
+    gap: 5,
+    minHeight: 34,
+    paddingHorizontal: 10,
+  },
+  quickFilterActive: {
+    backgroundColor: colors.navy,
+  },
+  quickFilterRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  quickFilterText: {
+    color: colors.navy,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  quickFilterTextActive: {
+    color: '#fff',
   },
   progressFill: {
     backgroundColor: colors.gold,
@@ -1165,7 +1179,7 @@ const styles = StyleSheet.create({
   recommendedCard: {
     backgroundColor: 'rgba(184,137,46,0.08)',
     borderColor: 'rgba(184,137,46,0.2)',
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
     marginTop: 12,
     padding: 12,
@@ -1178,10 +1192,32 @@ const styles = StyleSheet.create({
   recommendationPanel: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 18,
     borderWidth: 1,
     marginBottom: 12,
     padding: 14,
+  },
+  matchBar: {
+    alignItems: 'center',
+    backgroundColor: '#fff6df',
+    borderRadius: 18,
+    flexDirection: 'row-reverse',
+    gap: 10,
+    marginBottom: 12,
+    padding: 12,
+  },
+  matchMeta: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    marginTop: 3,
+    textAlign: 'right',
+  },
+  matchTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'right',
   },
   resultHeader: {
     alignItems: 'center',
@@ -1212,9 +1248,7 @@ const styles = StyleSheet.create({
   saveButton: {
     alignItems: 'center',
     backgroundColor: '#f8fafc',
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 999,
     height: 38,
     justifyContent: 'center',
     width: 38,
@@ -1241,7 +1275,7 @@ const styles = StyleSheet.create({
   scoreStrip: {
     alignItems: 'center',
     backgroundColor: '#f8fafc',
-    borderRadius: 8,
+    borderRadius: 16,
     flexDirection: 'row-reverse',
     gap: 8,
     marginTop: 12,
@@ -1255,7 +1289,7 @@ const styles = StyleSheet.create({
   searchClear: {
     alignItems: 'center',
     backgroundColor: '#eef2f6',
-    borderRadius: 8,
+    borderRadius: 999,
     height: 30,
     justifyContent: 'center',
     width: 30,
@@ -1269,10 +1303,8 @@ const styles = StyleSheet.create({
   },
   searchShell: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: '#f2f4f7',
+    borderRadius: 999,
     flexDirection: 'row',
     gap: 8,
     marginTop: 14,
@@ -1325,7 +1357,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 999,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     gap: 8,
