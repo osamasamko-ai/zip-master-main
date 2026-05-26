@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { Card, EmptyState, Heading, Pill, Screen } from '../components/ui';
@@ -50,6 +50,18 @@ const workspaceModes: Array<{ id: WorkspaceMode; label: string; note: string; ra
   { id: 'week', label: 'هذا الأسبوع', note: 'المواعيد والتحركات القريبة', range: 'week', focus: 'all', tab: 'schedule' },
 ];
 
+const headerRanges: Array<{ value: HeaderRange; label: string }> = [
+  { value: 'today', label: 'اليوم' },
+  { value: 'week', label: 'آخر 7 أيام' },
+  { value: 'month', label: 'هذا الشهر' },
+];
+
+const headerFocuses: Array<{ value: HeaderFocus; label: string }> = [
+  { value: 'all', label: 'كل الأنشطة' },
+  { value: 'urgent', label: 'الأولوية العالية' },
+  { value: 'pending', label: 'بانتظارك' },
+];
+
 const quickActions: Array<{ id: string; label: string; note: string; icon: keyof typeof Ionicons.glyphMap; route?: RouteKey; tab?: DashboardTab }> = [
   { id: 'start', label: 'ابدأ خدمة جديدة', note: 'إنشاء طلب أو اختيار خدمة قانونية مناسبة', icon: 'add-circle-outline', route: 'cases' },
   { id: 'upload', label: 'رفع مستند مطلوب', note: 'أرسل الملفات الناقصة لإكمال قضيتك الحالية', icon: 'cloud-upload-outline', tab: 'documents' },
@@ -70,12 +82,20 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [selectedLawyerId, setSelectedLawyerId] = useState('');
   const [showInsight, setShowInsight] = useState(true);
+  const [commandOpen, setCommandOpen] = useState(false);
+  const [commandQuery, setCommandQuery] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false);
+  const [showAnonConfirm, setShowAnonConfirm] = useState(false);
+  const [followedLawyers, setFollowedLawyers] = useState<string[]>([]);
+  const [pendingFollowId, setPendingFollowId] = useState<string | null>(null);
 
   const load = async () => {
     setRefreshing(true);
     try {
       const response = await apiClient.getDashboard();
       setDashboard(response.data);
+      const followingResponse = await apiClient.getFollowing().catch(() => ({ data: [] }));
+      setFollowedLawyers((followingResponse.data || []).map((item: any) => item.id));
     } catch {
       setDashboard(null);
     } finally {
@@ -210,6 +230,15 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
   }, [headerFocus, priorityQueue, rangeLimit]);
 
   const topPriority = filteredPriorityQueue[0] ?? priorityQueue[0];
+  const dashboardSignals = useMemo(
+    () => [
+      { id: 'priority', label: 'أولوية', value: priorityQueue.length, note: priorityQueue.length > 0 ? 'تحتاج مراجعة' : 'لا توجد', icon: 'flash-outline' as const, tab: 'overview' as DashboardTab },
+      { id: 'documents', label: 'مستندات', value: requiredDocuments.length, note: requiredDocuments.length > 0 ? 'مطلوبة' : 'مكتملة', icon: 'cloud-upload-outline' as const, tab: 'documents' as DashboardTab },
+      { id: 'schedule', label: 'موعد قريب', value: schedule.length, note: schedule[0]?.time ?? 'لا يوجد', icon: 'calendar-outline' as const, tab: 'schedule' as DashboardTab },
+      { id: 'payments', label: 'مدفوعات', value: pendingPayments.length, note: pendingPayments.length > 0 ? 'بانتظارك' : 'مستقرة', icon: 'wallet-outline' as const, tab: 'payments' as DashboardTab },
+    ],
+    [pendingPayments.length, priorityQueue.length, requiredDocuments.length, schedule],
+  );
   const timeline = useMemo(() => {
     const caseEvents = cases.slice(0, 3).map((item: any) => ({
       id: `case-${item.id}`,
@@ -257,6 +286,35 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
     return `${parts.join('، ')}. ابدأ بالأولوية الأعلى للحفاظ على سير ملفك بسلاسة.`;
   }, [cases, requiredDocuments.length, schedule]);
 
+  const filteredLawyers = useMemo(() => {
+    return [...lawyers].sort((left: any, right: any) => {
+      const leftFollowed = followedLawyers.includes(left.id) ? 1 : 0;
+      const rightFollowed = followedLawyers.includes(right.id) ? 1 : 0;
+      if (leftFollowed !== rightFollowed) return rightFollowed - leftFollowed;
+      return (right.rating || 0) - (left.rating || 0);
+    });
+  }, [followedLawyers, lawyers]);
+
+  const myFollowing = useMemo(
+    () => filteredLawyers.filter((lawyer: any) => followedLawyers.includes(lawyer.id)).slice(0, 3),
+    [filteredLawyers, followedLawyers],
+  );
+
+  const commandResults = useMemo(() => {
+    const query = commandQuery.trim().toLowerCase();
+    const items = [
+      { id: 'action-new-case', type: 'إجراء', title: 'ابدأ قضية جديدة', subtitle: 'فتح طلب جديد واختيار محام مناسب', icon: 'add-circle-outline' as const, action: () => openCommandRoute('cases') },
+      { id: 'action-upload-doc', type: 'إجراء', title: 'رفع مستند مطلوب', subtitle: 'الانتقال مباشرة إلى المستندات', icon: 'cloud-upload-outline' as const, action: () => openCommandTab('documents') },
+      { id: 'action-ai', type: 'إجراء', title: 'فتح AI Chat', subtitle: 'تلخيص أو سؤال سريع عن القضية', icon: 'sparkles-outline' as const, action: () => openCommandRoute('ai') },
+      ...cases.map((item: any) => ({ id: `case-${item.id}`, type: 'قضية', title: item.title, subtitle: item.status, icon: 'folder-open-outline' as const, action: () => openCommandTab('cases', item.id) })),
+      ...services.map((item: any) => ({ id: `service-${item.id}`, type: 'خدمة', title: item.title, subtitle: item.price, icon: 'heart-outline' as const, action: () => openCommandTab('services') })),
+      ...documents.map((item: any) => ({ id: `doc-${item.id}`, type: 'مستند', title: item.name, subtitle: item.caseName, icon: 'document-text-outline' as const, action: () => openCommandTab('documents') })),
+    ];
+
+    if (!query) return items.slice(0, 8);
+    return items.filter((item) => `${item.type} ${item.title} ${item.subtitle}`.toLowerCase().includes(query));
+  }, [cases, commandQuery, documents, services]);
+
   const applyWorkspaceMode = (mode: WorkspaceMode) => {
     const nextMode = workspaceModes.find((item) => item.id === mode);
     if (!nextMode) return;
@@ -273,6 +331,36 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
 
   const openRoute = (route?: RouteKey) => {
     if (route) onOpen?.(route);
+  };
+
+  const openCommandTab = (tab: DashboardTab, caseId?: string) => {
+    setCommandOpen(false);
+    setCommandQuery('');
+    openTab(tab, caseId);
+  };
+
+  const openCommandRoute = (route: RouteKey) => {
+    setCommandOpen(false);
+    setCommandQuery('');
+    openRoute(route);
+  };
+
+  const toggleFollow = async (lawyerId: string) => {
+    const isFollowing = followedLawyers.includes(lawyerId);
+    setPendingFollowId(lawyerId);
+    setFollowedLawyers((current) => (isFollowing ? current.filter((id) => id !== lawyerId) : [...current, lawyerId]));
+
+    try {
+      if (isFollowing) {
+        await apiClient.unfollowLawyer(lawyerId);
+      } else {
+        await apiClient.followLawyer(lawyerId);
+      }
+    } catch {
+      setFollowedLawyers((current) => (isFollowing ? [...current, lawyerId] : current.filter((id) => id !== lawyerId)));
+    } finally {
+      setPendingFollowId(null);
+    }
   };
 
   const greeting = getGreeting();
@@ -320,6 +408,51 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
           />
         </Card>
 
+        <View style={localStyles.signalsGrid}>
+          {dashboardSignals.map((signal) => (
+            <Pressable key={signal.id} onPress={() => openTab(signal.tab)} style={localStyles.signalCard}>
+              <Ionicons name={signal.icon} size={18} color={colors.navy} />
+              <Text style={localStyles.signalValue}>{formatValue(signal.value)}</Text>
+              <Text style={localStyles.signalLabel}>{signal.label}</Text>
+              <Text style={localStyles.signalNote}>{signal.note}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <Card>
+          <View style={localStyles.headerRow}>
+            <Pressable onPress={() => setCommandOpen(true)} style={localStyles.searchButton}>
+              <Ionicons name="search-outline" size={18} color={colors.navy} />
+              <Text style={localStyles.searchButtonText}>البحث السريع</Text>
+            </Pressable>
+            <Text style={localStyles.headerTitle}>مركز التحكم اليومي</Text>
+          </View>
+          <Text style={localStyles.mutedText}>
+            {headerRange === 'today' ? 'عرض اليوم' : headerRange === 'week' ? 'عرض آخر 7 أيام' : 'عرض هذا الشهر'}
+            {' · '}
+            {headerFocus === 'all' ? 'كل الأنشطة' : headerFocus === 'urgent' ? 'الأولوية العالية' : 'العناصر التي تنتظر إجراءك'}
+          </Text>
+
+          <Text style={localStyles.controlLabel}>الفترة</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.tabStrip}>
+            {headerRanges.map((range) => (
+              <Chip key={range.value} label={range.label} active={headerRange === range.value} onPress={() => setHeaderRange(range.value)} />
+            ))}
+          </ScrollView>
+
+          <Text style={localStyles.controlLabel}>التركيز</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.tabStrip}>
+            {headerFocuses.map((focus) => (
+              <Chip key={focus.value} label={focus.label} active={headerFocus === focus.value} onPress={() => setHeaderFocus(focus.value)} />
+            ))}
+          </ScrollView>
+
+          <View style={localStyles.actionRow}>
+            <SecondaryAction title="رفع مستند" icon="cloud-upload-outline" onPress={() => openTab('documents')} />
+            <SecondaryAction title="استشارة عاجلة" icon="flash-outline" onPress={() => openRoute('support')} />
+          </View>
+        </Card>
+
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.tabStrip}>
           {tabs.map((tab) => (
             <Chip
@@ -340,8 +473,25 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
               <Text style={localStyles.metricLabel}>{stat.label}</Text>
               <Text style={localStyles.metricNote}>{stat.note}</Text>
             </Pressable>
-          ))}
+            ))}
         </View>
+
+        <CommandPalette
+          open={commandOpen}
+          query={commandQuery}
+          results={commandResults}
+          onClose={() => setCommandOpen(false)}
+          onQueryChange={setCommandQuery}
+        />
+
+        <AnonymousModal
+          visible={showAnonConfirm}
+          onCancel={() => setShowAnonConfirm(false)}
+          onConfirm={() => {
+            setIsAnonymous(true);
+            setShowAnonConfirm(false);
+          }}
+        />
 
         {isInitialLoading ? (
           <Card>
@@ -593,7 +743,33 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
   function renderLawyerFinder() {
     return (
       <Section title="ابحث عن محامٍ من القائمة">
-        {lawyers.length > 0 ? lawyers.slice(0, 6).map((lawyer: any) => (
+        <Card>
+          <Text style={localStyles.cardTitle}>الهوية في التواصل الأولي</Text>
+          <Text style={localStyles.mutedText}>
+            {isAnonymous ? 'الهوية المجهولة مفعلة. سيظهر اسمك للمحامي كمستخدم مجهول في المحادثات الأولية.' : 'يمكنك تفعيل الهوية المجهولة قبل التواصل الأولي مع المحامين.'}
+          </Text>
+          <SecondaryAction
+            title={isAnonymous ? 'الهوية المجهولة مفعلة' : 'تفعيل الهوية المجهولة'}
+            icon="person-circle-outline"
+            onPress={() => (isAnonymous ? setIsAnonymous(false) : setShowAnonConfirm(true))}
+          />
+        </Card>
+
+        {myFollowing.length > 0 ? (
+          <Card>
+            <Text style={localStyles.cardTitle}>قائمة المتابعة</Text>
+            <Text style={localStyles.mutedText}>المتابَعون يظهرون أولاً في النتائج لتسهيل العودة السريعة.</Text>
+            <View style={localStyles.lawyerMeta}>
+              {myFollowing.map((lawyer: any) => (
+                <Pill key={lawyer.id} label={lawyer.name} tone="green" />
+              ))}
+            </View>
+          </Card>
+        ) : null}
+
+        {filteredLawyers.length > 0 ? filteredLawyers.slice(0, 6).map((lawyer: any) => {
+          const isFollowing = followedLawyers.includes(lawyer.id);
+          return (
           <Pressable key={lawyer.id} onPress={() => setSelectedLawyerId(lawyer.id)}>
             <Card>
               <View style={localStyles.lawyerHeader}>
@@ -609,14 +785,21 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
                 <Pill label={lawyer.specialty} tone="blue" />
                 <Pill label={`${lawyer.rating} ★`} tone="gold" />
                 <Pill label={lawyer.availability || lawyer.consultationFee} />
+                {isFollowing ? <Pill label="متابع" tone="green" /> : null}
               </View>
               <View style={localStyles.actionRow}>
                 <SecondaryAction title="الملف" icon="person-outline" onPress={() => openRoute('profile')} />
+                <SecondaryAction
+                  title={pendingFollowId === lawyer.id ? 'جار التحديث...' : isFollowing ? 'إلغاء المتابعة' : 'متابعة'}
+                  icon={isFollowing ? 'checkmark-circle-outline' : 'add-circle-outline'}
+                  onPress={() => toggleFollow(lawyer.id)}
+                />
                 <PrimaryAction title="تواصل" icon="chatbubble-outline" onPress={() => openRoute('messages')} />
               </View>
             </Card>
           </Pressable>
-        )) : <EmptyState title="لا توجد قائمة محامين حالياً" note="جرّب تحديث الصفحة أو افتح صفحة المحامين الكاملة." />}
+        );
+        }) : <EmptyState title="لا توجد قائمة محامين حالياً" note="جرّب تحديث الصفحة أو افتح صفحة المحامين الكاملة." />}
         {selectedLawyer ? (
           <Card>
             <Text style={localStyles.cardTitle}>تفاصيل المحامي المختار</Text>
@@ -645,6 +828,94 @@ function Chip({ label, active, onPress, icon }: { label: string; active: boolean
       {icon ? <Ionicons name={icon} size={16} color={active ? '#fff' : colors.navy} /> : null}
       <Text style={[localStyles.chipText, active && localStyles.chipTextActive]}>{label}</Text>
     </Pressable>
+  );
+}
+
+function CommandPalette({
+  open,
+  query,
+  results,
+  onClose,
+  onQueryChange,
+}: {
+  open: boolean;
+  query: string;
+  results: Array<{ id: string; type: string; title: string; subtitle: string; icon: keyof typeof Ionicons.glyphMap; action: () => void }>;
+  onClose: () => void;
+  onQueryChange: (value: string) => void;
+}) {
+  return (
+    <Modal animationType="fade" transparent visible={open} onRequestClose={onClose}>
+      <View style={localStyles.modalBackdrop}>
+        <View style={localStyles.commandPanel}>
+          <View style={localStyles.commandHeader}>
+            <Pressable onPress={onClose} style={localStyles.iconButton}>
+              <Ionicons name="close" size={18} color={colors.muted} />
+            </Pressable>
+            <View style={localStyles.commandInputWrap}>
+              <Ionicons name="search-outline" size={18} color={colors.muted} />
+              <TextInput
+                autoCapitalize="none"
+                onChangeText={onQueryChange}
+                placeholder="ابحث عن ملف، موعد، أو إجراء..."
+                placeholderTextColor="#98a2b3"
+                style={localStyles.commandInput}
+                value={query}
+              />
+            </View>
+          </View>
+          <ScrollView style={localStyles.commandResults} showsVerticalScrollIndicator={false}>
+            <Text style={localStyles.controlLabel}>{query ? 'النتائج' : 'اقتراحات سريعة'}</Text>
+            {results.length > 0 ? results.map((item) => (
+              <Pressable key={item.id} onPress={item.action} style={localStyles.commandItem}>
+                <Pill label={item.type} tone="blue" />
+                <View style={localStyles.commandItemBody}>
+                  <Ionicons name={item.icon} size={22} color={colors.navy} />
+                  <View style={localStyles.flex}>
+                    <Text style={localStyles.cardTitle}>{item.title}</Text>
+                    <Text style={localStyles.mutedText}>{item.subtitle}</Text>
+                  </View>
+                </View>
+              </Pressable>
+            )) : (
+              <EmptyState title="لا توجد نتائج" note="جرّب كلمة أخرى أو افتح أحد الأقسام من التبويبات." />
+            )}
+          </ScrollView>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
+function AnonymousModal({
+  visible,
+  onCancel,
+  onConfirm,
+}: {
+  visible: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  return (
+    <Modal animationType="fade" transparent visible={visible} onRequestClose={onCancel}>
+      <View style={localStyles.modalBackdrop}>
+        <View style={localStyles.confirmPanel}>
+          <Ionicons name="person-circle-outline" size={34} color={colors.navy} />
+          <Text style={localStyles.heroTitle}>تفعيل الهوية المجهولة</Text>
+          <Text style={localStyles.mutedText}>
+            عند تفعيل هذه الخاصية، سيتم حجب اسمك الحقيقي وسيظهر للمحامي كمستخدم مجهول في المحادثات الأولية.
+          </Text>
+          <View style={localStyles.warningBox}>
+            <Text style={localStyles.warningTitle}>تنبيه هام</Text>
+            <Text style={localStyles.warningText}>المحامي قد يطلب التحقق من هويتك لاحقاً عند البدء بإجراءات قانونية رسمية.</Text>
+          </View>
+          <View style={localStyles.actionRow}>
+            <SecondaryAction title="إلغاء" icon="close-outline" onPress={onCancel} />
+            <PrimaryAction title="تأكيد التفعيل" icon="checkmark-outline" onPress={onConfirm} />
+          </View>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
@@ -844,6 +1115,64 @@ const localStyles = StyleSheet.create({
   chipTextActive: {
     color: '#fff',
   },
+  commandHeader: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    gap: 10,
+    padding: 14,
+  },
+  commandInput: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 15,
+    minHeight: 44,
+    textAlign: 'right',
+  },
+  commandInputWrap: {
+    alignItems: 'center',
+    backgroundColor: colors.canvas,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  commandItem: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+    paddingVertical: 12,
+  },
+  commandItemBody: {
+    alignItems: 'flex-start',
+    flexDirection: 'row-reverse',
+    gap: 12,
+    marginTop: 8,
+  },
+  commandPanel: {
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    maxHeight: '82%',
+    overflow: 'hidden',
+    width: '92%',
+  },
+  commandResults: {
+    paddingHorizontal: 14,
+  },
+  confirmPanel: {
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    padding: 18,
+    width: '90%',
+  },
+  controlLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '900',
+    marginBottom: 8,
+    marginTop: 12,
+    textAlign: 'right',
+  },
   currentDot: {
     backgroundColor: colors.gold,
   },
@@ -952,6 +1281,13 @@ const localStyles = StyleSheet.create({
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 10,
+  },
+  modalBackdrop: {
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 24, 40, 0.42)',
+    flex: 1,
+    justifyContent: 'center',
+    padding: 16,
   },
   milestoneDot: {
     alignItems: 'center',
@@ -1092,6 +1428,20 @@ const localStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
+  searchButton: {
+    alignItems: 'center',
+    backgroundColor: '#eef2f6',
+    borderRadius: 8,
+    flexDirection: 'row-reverse',
+    gap: 6,
+    minHeight: 38,
+    paddingHorizontal: 10,
+  },
+  searchButtonText: {
+    color: colors.navy,
+    fontSize: 12,
+    fontWeight: '900',
+  },
   section: {
     marginTop: 10,
   },
@@ -1107,6 +1457,42 @@ const localStyles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     lineHeight: 19,
+    marginTop: 8,
+    textAlign: 'right',
+  },
+  signalsGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  signalCard: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexBasis: '48%',
+    flexGrow: 1,
+    marginBottom: 10,
+    minHeight: 112,
+    padding: 12,
+  },
+  signalLabel: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  signalNote: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  signalValue: {
+    color: colors.navy,
+    fontSize: 21,
+    fontWeight: '900',
     marginTop: 8,
     textAlign: 'right',
   },
@@ -1143,5 +1529,26 @@ const localStyles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row-reverse',
     gap: 12,
+  },
+  warningBox: {
+    backgroundColor: '#fff6df',
+    borderColor: '#fedf89',
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 14,
+    padding: 12,
+  },
+  warningText: {
+    color: '#93370d',
+    fontSize: 12,
+    lineHeight: 19,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  warningTitle: {
+    color: '#7a2e0e',
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'right',
   },
 });
