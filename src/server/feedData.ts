@@ -5,6 +5,12 @@ const getInitialsAvatar = (name = 'User') =>
 
 const getProfileImage = (user: any) => user?.img || user?.lawyerProfile?.avatar || getInitialsAvatar(user?.name || 'User');
 
+function formatConsultationFee(value?: string | null) {
+  const digitsOnly = String(value || '').replace(/[^\d]/g, '');
+  if (!digitsOnly) return 'غير محدد';
+  return `${Number(digitsOnly).toLocaleString('en-US')} د.ع`;
+}
+
 type FeedFilter = 'all' | 'videos' | 'articles' | 'lawyers' | 'admins' | 'popular';
 
 const POST_SELECT = {
@@ -31,6 +37,7 @@ const POST_SELECT = {
           avatar: true,
           licenseStatus: true,
           specialty: true,
+          consultationFee: true,
         },
       },
     },
@@ -126,6 +133,7 @@ function mapPost(post: any, viewerId?: string) {
       roleLabel: authorRole === 'admin' ? 'إدارة المنصة' : 'محامٍ موثق',
       avatar: getProfileImage(post.author),
       specialty: post.author.lawyerProfile?.specialty || '',
+      consultationFee: formatConsultationFee(post.author.lawyerProfile?.consultationFee),
     },
     likesCount: post.likes.length,
     savesCount: post.saves.length,

@@ -19,6 +19,7 @@ export type FeedPost = {
     roleLabel: string;
     avatar: string;
     specialty?: string;
+    consultationFee?: string;
   };
   likesCount: number;
   savesCount: number;

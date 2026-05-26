@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import apiClient from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
 import EmptyState from '../ui/EmptyState';
@@ -14,6 +15,27 @@ import type { FeedFilter, FeedPost, FeedStory, SuggestedLawyer } from './types';
 import { useTrackEvent, useUserIntelligence } from '../../hooks/useIntelligence';
 
 const FEED_PAGE_SIZE = 8;
+
+const FEED_CONSULTATION_PAYMENT_METHODS = [
+  {
+    id: 'zain-cash',
+    label: 'زين كاش',
+    subtitle: 'تأكيد سريع وآمن',
+    icon: 'fa-mobile-screen-button',
+  },
+  {
+    id: 'card',
+    label: 'بطاقة مصرفية',
+    subtitle: 'Visa / Mastercard',
+    icon: 'fa-credit-card',
+  },
+  {
+    id: 'wallet-balance',
+    label: 'رصيد المنصة',
+    subtitle: 'خصم مباشر من المحفظة',
+    icon: 'fa-wallet',
+  },
+];
 
 function SkeletonPost() {
   return (
@@ -35,6 +57,7 @@ function SkeletonPost() {
 }
 
 export default function FeedPage() {
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { trackEvent } = useTrackEvent('feed');
   const { data: intelligence, refresh: refreshIntelligence } = useUserIntelligence();
@@ -49,6 +72,11 @@ export default function FeedPage() {
   const [nextOffset, setNextOffset] = useState(0);
   const [hasMorePosts, setHasMorePosts] = useState(false);
   const [postSortMode, setPostSortMode] = useState<'smart' | 'latest'>('smart');
+  const [consultationPost, setConsultationPost] = useState<FeedPost | null>(null);
+  const [consultationNote, setConsultationNote] = useState('');
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState(FEED_CONSULTATION_PAYMENT_METHODS[0].id);
+  const [isStartingConsultation, setIsStartingConsultation] = useState(false);
+  const [consultationError, setConsultationError] = useState('');
   const [error, setError] = useState('');
   const [toast, setToast] = useState('');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
@@ -405,6 +433,53 @@ export default function FeedPage() {
     }
   };
 
+  const openConsultationFromPost = (post: FeedPost) => {
+    if (post.author.role !== 'lawyer') return;
+    const excerpt = post.content.length > 120 ? `${post.content.slice(0, 120)}...` : post.content;
+    setConsultationPost(post);
+    setConsultationNote(`بخصوص منشورك في تواصل: "${excerpt}"`);
+    setSelectedPaymentMethod(FEED_CONSULTATION_PAYMENT_METHODS[0].id);
+    setConsultationError('');
+    trackEvent('feed_consultation_opened', {
+      authorId: post.author.id,
+      category: post.category,
+      title: post.content,
+    }, post.id);
+  };
+
+  const closeConsultationModal = () => {
+    if (isStartingConsultation) return;
+    setConsultationPost(null);
+    setConsultationError('');
+  };
+
+  const startConsultationFromPost = async () => {
+    if (!consultationPost) return;
+    const paymentMethod = FEED_CONSULTATION_PAYMENT_METHODS.find((item) => item.id === selectedPaymentMethod);
+    setIsStartingConsultation(true);
+    setConsultationError('');
+
+    try {
+      const response = await apiClient.startLawyerConsultation(consultationPost.author.id, {
+        paymentMethod: paymentMethod?.label || selectedPaymentMethod,
+        note: consultationNote.trim() || `استشارة بخصوص منشور في تواصل: ${consultationPost.content.slice(0, 180)}`,
+      });
+      trackEvent('feed_consultation_started', {
+        authorId: consultationPost.author.id,
+        paymentMethod: paymentMethod?.id,
+        category: consultationPost.category,
+      }, consultationPost.id);
+      flash('تم بدء الاستشارة من المنشور.');
+      const redirectTo = response.data?.redirectTo || `/messages?lawyerId=${encodeURIComponent(consultationPost.author.id)}`;
+      setConsultationPost(null);
+      window.setTimeout(() => navigate(redirectTo), 500);
+    } catch (err: any) {
+      setConsultationError(err.response?.data?.error || 'تعذر بدء الاستشارة من المنشور حالياً.');
+    } finally {
+      setIsStartingConsultation(false);
+    }
+  };
+
   const openPost = (postId: string) => {
     const post = posts.find((item) => item.id === postId);
     trackEvent('feed_post_opened', { category: post?.category, title: post?.content, authorId: post?.author.id }, postId);
@@ -541,6 +616,7 @@ export default function FeedPage() {
                   onPin={(id, pinned) => adminUpdate(id, { pinned }, pinned ? 'تم تثبيت المنشور.' : 'تم إلغاء التثبيت.')}
                   onFeature={(id, featured) => adminUpdate(id, { featured }, featured ? 'تم تمييز المنشور.' : 'تم إلغاء التمييز.')}
                   onFollow={followLawyer}
+                  onConsult={openConsultationFromPost}
                 />
               ))}
               <div ref={loadMoreRef} className="min-h-10">
@@ -569,6 +645,131 @@ export default function FeedPage() {
           <FeedSidebar posts={posts} suggestedLawyers={smartLawyers.length ? smartLawyers : lawyers} onFollow={followLawyer} onOpenPost={openPost} />
         </aside>
       </div>
+
+      <AnimatePresence>
+        {consultationPost && (
+          <motion.div
+            className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/45 px-3 py-4 backdrop-blur-sm sm:items-center"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={closeConsultationModal}
+          >
+            <motion.div
+              role="dialog"
+              aria-modal="true"
+              className="w-full max-w-lg overflow-hidden rounded-lg border border-slate-200 bg-white text-right shadow-2xl"
+              initial={{ y: 18, scale: 0.98 }}
+              animate={{ y: 0, scale: 1 }}
+              exit={{ y: 18, scale: 0.98 }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="border-b border-slate-100 px-5 py-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <h2 className="text-base font-black text-slate-950">بدء استشارة من المنشور</h2>
+                    <p className="mt-1 text-xs font-bold text-slate-500">ابدأ الاستشارة خلال أقل من دقيقة</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={closeConsultationModal}
+                    disabled={isStartingConsultation}
+                    className="h-9 w-9 rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 disabled:opacity-50"
+                    aria-label="إغلاق"
+                  >
+                    <i className="fa-solid fa-xmark"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-4 px-5 py-5">
+                <div className="flex items-start gap-3 rounded-lg border border-slate-100 bg-slate-50 p-3">
+                  <img src={consultationPost.author.avatar} alt="" loading="lazy" decoding="async" className="h-12 w-12 rounded-full object-cover ring-1 ring-slate-200" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-black text-slate-950">{consultationPost.author.name}</p>
+                        <p className="mt-1 text-[11px] font-bold text-slate-500">{consultationPost.author.specialty || consultationPost.author.roleLabel}</p>
+                      </div>
+                      <div className="rounded-md bg-white px-3 py-2 text-center shadow-sm ring-1 ring-slate-100">
+                        <p className="text-[10px] font-black text-slate-400">سعر الاستشارة</p>
+                        <p className="mt-1 text-xs font-black text-brand-navy">{consultationPost.author.consultationFee || 'غير محدد'}</p>
+                      </div>
+                    </div>
+                    <p className="mt-3 line-clamp-2 rounded-md bg-white px-3 py-2 text-xs font-bold leading-6 text-slate-600">
+                      {consultationPost.content}
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <p className="mb-2 text-xs font-black text-slate-800">طريقة الدفع</p>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {FEED_CONSULTATION_PAYMENT_METHODS.map((method) => {
+                      const active = selectedPaymentMethod === method.id;
+                      return (
+                        <button
+                          key={method.id}
+                          type="button"
+                          onClick={() => setSelectedPaymentMethod(method.id)}
+                          className={`rounded-lg border p-3 text-right transition ${
+                            active
+                              ? 'border-brand-navy bg-brand-navy text-white shadow-sm'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50'
+                          }`}
+                        >
+                          <i className={`fa-solid ${method.icon} text-sm ${active ? 'text-brand-gold' : 'text-slate-400'}`}></i>
+                          <p className="mt-2 text-xs font-black">{method.label}</p>
+                          <p className={`mt-1 text-[10px] font-bold ${active ? 'text-white/75' : 'text-slate-400'}`}>{method.subtitle}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div>
+                  <label htmlFor="feed-consultation-note" className="mb-2 block text-xs font-black text-slate-800">
+                    ملاحظة للمحامي
+                  </label>
+                  <textarea
+                    id="feed-consultation-note"
+                    value={consultationNote}
+                    onChange={(event) => setConsultationNote(event.target.value)}
+                    rows={3}
+                    className="w-full resize-none rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-bold leading-7 text-slate-800 outline-none transition focus:border-brand-navy focus:ring-2 focus:ring-brand-navy/10"
+                  />
+                </div>
+
+                {consultationError && (
+                  <div className="rounded-lg border border-red-100 bg-red-50 px-4 py-3 text-xs font-black text-red-700">
+                    {consultationError}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-3 border-t border-slate-100 bg-slate-50 px-5 py-4">
+                <button
+                  type="button"
+                  onClick={closeConsultationModal}
+                  disabled={isStartingConsultation}
+                  className="rounded-md bg-white px-4 py-2.5 text-xs font-black text-slate-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-slate-100 disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={startConsultationFromPost}
+                  disabled={isStartingConsultation}
+                  className="inline-flex items-center justify-center gap-2 rounded-md bg-brand-navy px-5 py-2.5 text-xs font-black text-white transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-70"
+                >
+                  {isStartingConsultation && <i className="fa-solid fa-circle-notch fa-spin"></i>}
+                  ابدأ الاستشارة
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

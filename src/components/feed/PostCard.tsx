@@ -23,6 +23,7 @@ export default function PostCard({
   onPin,
   onFeature,
   onFollow,
+  onConsult,
 }: {
   post: FeedPost;
   user: AuthUser | null;
@@ -36,6 +37,7 @@ export default function PostCard({
   onPin: (id: string, pinned: boolean) => void;
   onFeature: (id: string, featured: boolean) => void;
   onFollow: (lawyerId: string) => void;
+  onConsult: (post: FeedPost) => void;
 }) {
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
@@ -79,9 +81,14 @@ export default function PostCard({
 
           <div className="flex shrink-0 items-center gap-2">
             {post.author.role === 'lawyer' && post.author.id !== user?.id && (
-              <button onClick={() => onFollow(post.author.id)} className="rounded-md bg-[#e7f3ff] px-3 py-2 text-[11px] font-black text-[#1877f2] transition hover:bg-[#dbeafe]">
-                متابعة
-              </button>
+              <>
+                <button onClick={() => onConsult(post)} className="rounded-md bg-brand-navy px-3 py-2 text-[11px] font-black text-white transition hover:bg-brand-dark">
+                  استشارة
+                </button>
+                <button onClick={() => onFollow(post.author.id)} className="rounded-md bg-[#e7f3ff] px-3 py-2 text-[11px] font-black text-[#1877f2] transition hover:bg-[#dbeafe]">
+                  متابعة
+                </button>
+              </>
             )}
             {canManage && (
               <div className="flex gap-1">
