@@ -95,6 +95,13 @@ class ApiClient {
     });
   }
 
+  updatePassword(currentPassword: string, newPassword: string) {
+    return this.request<any>('/api/app/settings/password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  }
+
   addCreditBalance(data: { amount: number; paymentMethod: string; note?: string }) {
     return this.request<any>('/api/app/billing/top-up', {
       method: 'POST',
@@ -250,6 +257,51 @@ class ApiClient {
 
   getAdminMetrics() {
     return this.request<any>('/api/admin/metrics');
+  }
+
+  getAdminUsers() {
+    return this.request<any[]>('/api/admin/users');
+  }
+
+  getAdminKyc() {
+    return this.request<any[]>('/api/admin/kyc');
+  }
+
+  updateAdminKyc(id: string, status: string) {
+    return this.request<any>(`/api/admin/kyc/${id}`, {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+  }
+
+  getAdminTransactions() {
+    return this.request<any[]>('/api/admin/transactions');
+  }
+
+  getAdminSupportTickets() {
+    return this.request<any[]>('/api/admin/support-tickets');
+  }
+
+  updateAdminSupportTicket(id: string, data: any) {
+    return this.request<any>(`/api/admin/support-tickets/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getAdminLegalServices() {
+    return this.request<any[]>('/api/admin/legal-services');
+  }
+
+  addAdminLegalService(data: any) {
+    return this.request<any>('/api/admin/legal-services', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  clearAdminCache() {
+    return this.request<any>('/api/admin/cache/clear', { method: 'POST' });
   }
 
   async askAi(question: string, history: Array<{ role: string; content: string }> = []) {
