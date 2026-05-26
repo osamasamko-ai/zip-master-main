@@ -52,23 +52,6 @@ export default function MainLayout() {
     'settings': 'الإعدادات',
   };
 
-  const pathnames = location.pathname.split('/').filter((x) => x);
-
-  // Helper to resolve dynamic titles for IDs
-  const getBreadcrumbLabel = (name: string, index: number, allSegments: string[]) => {
-    // 1. Check static map first
-    if (pathMap[name]) return pathMap[name];
-
-    // 2. Handle ID patterns (e.g., case-123, doc-456)
-    const parent = index > 0 ? allSegments[index - 1] : null;
-
-    if (parent === 'cases' || parent === 'pro') {
-      return (name.includes('-') || !isNaN(Number(name))) ? 'ملف القضية' : name; // Changed to be more generic
-    }
-
-    return name;
-  };
-
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 20);
@@ -644,34 +627,6 @@ export default function MainLayout() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Dynamic Breadcrumbs */}
-      <div className="mx-auto w-full max-w-[1440px] px-4 pt-4 sm:px-6 lg:px-8">
-        <nav className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 overflow-x-auto no-scrollbar whitespace-nowrap">
-          <Link to="/user" className="hover:text-brand-navy transition-colors">
-            <i className="fa-solid fa-house-chimney"></i>
-          </Link>
-          {pathnames.length > 0 && <i className="fa-solid fa-chevron-left text-[7px] opacity-30"></i>}
-          {pathnames.map((name, index) => {
-            const routeTo = `/${pathnames.slice(0, index + 1).join('/')}`;
-            const isLast = index === pathnames.length - 1;
-            const label = getBreadcrumbLabel(name, index, pathnames);
-
-            return (
-              <React.Fragment key={name}>
-                {isLast ? (
-                  <span className="text-brand-gold">{label}</span>
-                ) : (
-                  <>
-                    <Link to={routeTo} className="hover:text-brand-navy transition-colors">{label}</Link>
-                    <i className="fa-solid fa-chevron-left text-[7px] opacity-30"></i>
-                  </>
-                )}
-              </React.Fragment>
-            );
-          })}
-        </nav>
-      </div>
 
       {systemSettings?.announcement && (
         <div className="mx-auto mt-2 max-w-[1400px] rounded-3xl bg-brand-gold/10 px-4 py-4 text-right text-[#1B365D] shadow-sm md:px-6 lg:px-8">

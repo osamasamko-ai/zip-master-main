@@ -880,9 +880,10 @@ export default function Messages() {
   }, [selectedCase?.id]);
 
   return (
-    <div className="app-view fade-in mx-auto max-w-[1500px] pb-4 text-right">
+    <div className="app-view fade-in relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] min-h-[100dvh] w-screen bg-slate-100 px-3 py-3 text-right sm:px-4 lg:px-6">
+      <div className="pointer-events-none fixed inset-0 -z-10 bg-slate-100" aria-hidden="true"></div>
       {conversations.length > 0 ? (
-        <section className={`grid overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-premium ${isChatHeightExpanded ? 'xl:h-[calc(100vh-96px)] xl:min-h-[820px]' : 'xl:h-[calc(100vh-126px)] xl:min-h-[700px]'} ${isChatExpanded ? 'xl:grid-cols-[minmax(0,1fr)]' : selectedConversation && selectedCase ? 'xl:grid-cols-[340px_minmax(0,1fr)_320px]' : 'xl:grid-cols-[340px_minmax(0,1fr)]'}`}>
+        <section className={`mx-auto grid w-full max-w-[1500px] overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white shadow-premium ${isChatHeightExpanded ? 'min-h-[calc(100dvh-112px)] xl:h-[calc(100dvh-112px)] xl:min-h-[820px]' : 'min-h-[calc(100dvh-142px)] xl:h-[calc(100dvh-142px)] xl:min-h-[700px]'} ${isChatExpanded ? 'xl:grid-cols-[minmax(0,1fr)]' : selectedConversation && selectedCase ? 'xl:grid-cols-[340px_minmax(0,1fr)_320px]' : 'xl:grid-cols-[340px_minmax(0,1fr)]'}`}>
           {!isChatExpanded && (
             <aside className="flex max-h-[720px] flex-col overflow-hidden border-b border-slate-200 bg-white xl:max-h-none xl:border-b-0 xl:border-l">
               <div className="border-b border-slate-100 p-4">
