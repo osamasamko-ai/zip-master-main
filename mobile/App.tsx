@@ -122,7 +122,7 @@ function Shell() {
 function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKey) => void) {
   switch (route) {
     case 'lawyers':
-      return <LawyersScreen />;
+      return <LawyersScreen onOpen={setRoute} />;
     case 'cases':
       return <CasesScreen />;
     case 'ai':
