@@ -417,6 +417,7 @@ export async function getLawyers(currentUserId?: string, search?: string) {
       select: {
         id: true,
         name: true,
+        role: true,
         location: true,
         verified: true,
         img: true,

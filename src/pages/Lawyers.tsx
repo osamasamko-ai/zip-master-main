@@ -9,9 +9,9 @@ import apiClient from '../api/client';
 import { FOLLOW_STATE_EVENT, useFollowedLawyers } from '../hooks/useFollowedLawyers';
 
 const CONSULTATION_PAYMENT_METHODS = [
-  { id: 'zain-cash', label: 'زين كاش', subtitle: 'تأكيد فوري وآمن', recommended: true },
-  { id: 'card', label: 'بطاقة مصرفية', subtitle: 'Visa / Mastercard' },
-  { id: 'bank-transfer', label: 'تحويل بنكي', subtitle: 'إشعار دفع إلكتروني' },
+  { id: 'zain-cash', label: 'زين كاش', subtitle: 'تأكيد فوري وآمن', icon: 'fa-mobile-screen-button', recommended: true },
+  { id: 'card', label: 'بطاقة مصرفية', subtitle: 'Visa / Mastercard', icon: 'fa-credit-card' },
+  { id: 'wallet-balance', label: 'رصيد المنصة', subtitle: 'خصم مباشر من محفظتك', icon: 'fa-wallet' },
 ];
 
 function parseConsultationFee(value: string) {
@@ -174,10 +174,6 @@ export default function Lawyers() {
     setConsultationNote('');
     setSelectedPaymentMethod(CONSULTATION_PAYMENT_METHODS[0].id);
     setConsultationError('');
-  };
-
-  const handleContact = (lawyer: LawyerItem) => {
-    navigate(`/messages?lawyerId=${encodeURIComponent(lawyer.id)}`);
   };
 
   const handleStartConsultation = async () => {
@@ -403,105 +399,151 @@ export default function Lawyers() {
               ))}
             </div>
           ) : filteredLawyers.length > 0 ? (
-            <div className="grid gap-4">
+            <div className="grid gap-3 2xl:grid-cols-2">
               {filteredLawyers.map((lawyer, index) => (
                 <article
                   key={lawyer.id}
-                  className={`relative overflow-hidden rounded-[2rem] border bg-white p-5 text-right shadow-sm transition ${selectedLawyer?.id === lawyer.id ? 'border-brand-navy shadow-lg shadow-brand-navy/10' : 'border-slate-200 hover:border-brand-navy/30 hover:shadow-md'}`}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setSelectedLawyerId(lawyer.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      setSelectedLawyerId(lawyer.id);
+                    }
+                  }}
+                  className={`group relative cursor-pointer overflow-hidden rounded-2xl border bg-white p-4 text-right shadow-sm outline-none transition focus-visible:ring-4 focus-visible:ring-brand-navy/10 ${selectedLawyer?.id === lawyer.id ? 'border-brand-navy shadow-md shadow-brand-navy/10' : 'border-slate-200 hover:-translate-y-0.5 hover:border-brand-navy/30 hover:shadow-md'}`}
                 >
-                  <div className={`absolute inset-y-0 right-0 w-1.5 ${selectedLawyer?.id === lawyer.id ? 'bg-brand-navy' : 'bg-transparent'}`}></div>
-                  <div className="flex flex-col gap-4 lg:flex-row-reverse lg:items-start lg:justify-between">
-                    <div className="flex items-start gap-4">
-                      <div
-                        className="relative shrink-0 cursor-pointer"
-                        onClick={() => navigate(`/profile/${lawyer.id}`)}
-                        title="عرض الملف"
-                      >
-                        <img src={lawyer.avatar} alt={lawyer.name} className="h-20 w-20 rounded-[1.75rem] object-cover shadow-sm ring-4 ring-slate-50" />
-                        {lawyer.isOnline && <span className="absolute bottom-1 left-1 h-3.5 w-3.5 rounded-full border-2 border-white bg-emerald-500"></span>}
-                      </div>
-                      <div className="min-w-0 space-y-3">
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                          {index === 0 && sortMode === 'best' && <StatusBadge tone="warning">أفضل تطابق</StatusBadge>}
-                          {lawyer.verified && <StatusBadge tone="info">موثق</StatusBadge>}
-                          {followedIds.includes(lawyer.id) && <StatusBadge tone="warning">محفوظ</StatusBadge>}
-                          <StatusBadge tone={lawyer.isOnline ? 'success' : 'neutral'}>
-                            {lawyer.isOnline ? 'متاح الآن' : 'متاح حسب الجدول'}
-                          </StatusBadge>
-                        </div>
-                        <div>
-                          <h3 className="text-2xl font-black text-brand-dark">{lawyer.name}</h3>
-                          <p className="mt-1 text-sm font-bold text-slate-500">{lawyer.tagline}</p>
-                        </div>
-                        <div className="flex flex-wrap items-center justify-end gap-3 text-xs font-black text-slate-500">
-                          <span>{lawyer.specialty}</span>
-                          <span>{lawyer.location}</span>
-                          <span>{lawyer.responseTime}</span>
-                        </div>
-                      </div>
-                    </div>
+                  <div className={`absolute inset-x-0 top-0 h-1 ${selectedLawyer?.id === lawyer.id ? 'bg-brand-navy' : 'bg-slate-100 group-hover:bg-brand-gold/70'}`}></div>
 
+                  <div className="flex items-start justify-between gap-3">
                     <button
                       type="button"
-                      onClick={() => setSelectedLawyerId(lawyer.id)}
-                      className={`rounded-2xl border px-4 py-3 text-xs font-black transition ${selectedLawyer?.id === lawyer.id ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-200 bg-slate-50 text-slate-600 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setSelectedLawyerId(lawyer.id);
+                      }}
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border text-xs transition ${selectedLawyer?.id === lawyer.id ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-200 bg-slate-50 text-slate-500 hover:border-brand-navy hover:bg-white hover:text-brand-navy'}`}
+                      title={selectedLawyer?.id === lawyer.id ? 'معروض في الملخص' : 'عرض الملخص'}
                     >
-                      {selectedLawyer?.id === lawyer.id ? 'معروض في الملخص' : 'عرض الملخص'}
+                      <i className="fa-solid fa-chart-simple"></i>
                     </button>
-                  </div>
 
-                  <div className="mt-5 grid gap-3 md:grid-cols-4">
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">التقييم</p>
-                      <p className="mt-1 text-sm font-black text-brand-dark">{lawyer.rating.toFixed(1)} • {lawyer.reviewCount}</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">الاستجابة</p>
-                      <p className="mt-1 text-sm font-black text-brand-dark">{lawyer.responseTime}</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">الخبرة</p>
-                      <p className="mt-1 text-sm font-black text-brand-dark">{lawyer.experience}</p>
-                    </div>
-                    <div className="rounded-2xl bg-slate-50 px-4 py-3">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">الاستشارة</p>
-                      <p className="mt-1 text-sm font-black text-brand-dark">{lawyer.consultationFee}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 md:grid-cols-4">
-                    <ActionButton onClick={() => handleOpenConsultation(lawyer)} variant="primary" className="w-full">
-                      <i className="fa-solid fa-credit-card"></i>
-                      ابدأ استشارة
-                    </ActionButton>
-                    <ActionButton onClick={() => handleOpenCase(lawyer)} variant="secondary" className="w-full">
-                      <i className="fa-solid fa-folder-plus"></i>
-                      افتح قضية
-                    </ActionButton>
-                    <FollowButton
-                      isFollowing={followedIds.includes(lawyer.id)}
-                      isLoading={isPending(lawyer.id)}
-                      onToggle={() => toggleFollow(lawyer.id)}
-                      className="w-full"
-                    />
-                    <ActionButton onClick={() => handleContact(lawyer)} variant="ghost" className="w-full">
-                      رسالة مباشرة
-                    </ActionButton>
-                  </div>
-
-                  <div className="mt-4 rounded-[1.6rem] border border-slate-200 bg-[linear-gradient(135deg,rgba(248,250,252,1),rgba(255,255,255,1))] px-4 py-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="text-right">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">أفضل خطوة الآن</p>
-                        <p className="mt-1 text-sm font-black text-brand-dark">
-                          {lawyer.isOnline ? 'ابدأ برسالة سريعة لمعرفة التوفر الفوري.' : 'افتح ملفاً جديداً لتثبيت الطلب ومشاركة التفاصيل.'}
-                        </p>
+                    <div className="flex min-w-0 flex-1 items-start gap-3">
+                      <div
+                        className="relative shrink-0"
+                        title="اختيار المحامي"
+                      >
+                        <img src={lawyer.avatar} alt={lawyer.name} className="h-14 w-14 rounded-2xl object-cover shadow-sm ring-4 ring-slate-50" />
+                        <span className={`absolute bottom-0 left-0 h-3.5 w-3.5 rounded-full border-2 border-white ${lawyer.isOnline ? 'bg-emerald-500' : 'bg-slate-300'}`}></span>
                       </div>
-                      <span className={`rounded-full px-3 py-1 text-[10px] font-black ${lawyer.isOnline ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'}`}>
-                        {lawyer.isOnline ? 'رد أسرع متوقع' : 'ابدأ بتنظيم الطلب'}
-                      </span>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex min-w-0 items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="max-w-full truncate text-base font-black text-brand-dark transition group-hover:text-brand-navy">
+                              {lawyer.name}
+                            </p>
+                            <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lawyer.specialty}</p>
+                          </div>
+                          <div className="flex shrink-0 flex-col items-end gap-1">
+                            <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">
+                              <i className="fa-solid fa-star text-[9px]"></i>
+                              {lawyer.rating.toFixed(1)}
+                            </div>
+                          </div>
+                        </div>
+
+                        <p className="mt-2 line-clamp-2 text-xs font-bold leading-5 text-slate-600">{lawyer.tagline}</p>
+
+                        <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
+                          {index === 0 && sortMode === 'best' && <StatusBadge tone="warning" className="px-2 py-1 text-[10px]">أفضل</StatusBadge>}
+                          {lawyer.verified && <StatusBadge tone="info" className="px-2 py-1 text-[10px]">موثق</StatusBadge>}
+                          {followedIds.includes(lawyer.id) && <StatusBadge tone="warning" className="px-2 py-1 text-[10px]">محفوظ</StatusBadge>}
+                          <StatusBadge tone={lawyer.isOnline ? 'success' : 'neutral'} className="px-2 py-1 text-[10px]">
+                            {lawyer.isOnline ? 'متاح' : 'مجدول'}
+                          </StatusBadge>
+                        </div>
+                      </div>
                     </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                  </div>
+
+                  <div className="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-[9px] font-black text-slate-400">الموقع</p>
+                      <p className="mt-0.5 truncate text-xs font-black text-brand-dark">{lawyer.location}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-[9px] font-black text-slate-400">الرد</p>
+                      <p className="mt-0.5 truncate text-xs font-black text-brand-dark">{lawyer.responseTime}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-[9px] font-black text-slate-400">الخبرة</p>
+                      <p className="mt-0.5 truncate text-xs font-black text-brand-dark">{lawyer.experience}</p>
+                    </div>
+                    <div className="rounded-xl bg-slate-50 px-3 py-2">
+                      <p className="text-[9px] font-black text-slate-400">القضايا</p>
+                      <p className="mt-0.5 truncate text-xs font-black text-brand-dark">{lawyer.casesHandled}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-100 bg-slate-50/70 px-3 py-2.5">
+                    <div className="flex items-center gap-2 text-[11px] font-black text-slate-500">
+                      <span>{lawyer.reviewCount.toLocaleString('ar-IQ')} مراجعة</span>
+                      <span className="h-1 w-1 rounded-full bg-slate-300"></span>
+                      <span>{lawyer.followers.toLocaleString('ar-IQ')} متابع</span>
+                    </div>
+                    <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 ring-1 ring-slate-100">
+                      {lawyer.isOnline ? 'متاح للاستشارة' : 'حسب الجدول'}
+                    </span>
+                  </div>
+
+                  <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,1fr)]">
+                    <div
+                      onClick={(event) => event.stopPropagation()}
+                      className="flex min-w-0 overflow-hidden rounded-xl border border-brand-navy bg-white shadow-sm shadow-brand-navy/10"
+                    >
+                      <div className="flex min-w-0 flex-1 flex-col justify-center px-3 py-2 text-right">
+                        <span className="text-[9px] font-black text-slate-400">سعر الاستشارة</span>
+                        <span className="truncate text-sm font-black text-brand-dark">{lawyer.consultationFee || 'غير محدد'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenConsultation(lawyer)}
+                        className="flex min-h-10 shrink-0 items-center justify-center gap-1.5 bg-brand-navy px-3 text-xs font-black text-white transition hover:bg-brand-dark"
+                      >
+                        <i className="fa-solid fa-credit-card text-[10px]"></i>
+                        استشارة
+                      </button>
+                    </div>
+                    <ActionButton
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        handleOpenCase(lawyer);
+                      }}
+                      variant="secondary"
+                      size="sm"
+                      className="w-full"
+                    >
+                      <i className="fa-solid fa-folder-plus"></i>
+                      قضية
+                    </ActionButton>
+                    <div onClick={(event) => event.stopPropagation()}>
+                      <FollowButton
+                        isFollowing={followedIds.includes(lawyer.id)}
+                        isLoading={isPending(lawyer.id)}
+                        onToggle={() => toggleFollow(lawyer.id)}
+                        className="w-full rounded-xl px-3 py-2 text-xs shadow-sm"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mt-3">
+                    <div className="mb-1.5 flex items-center justify-between text-[10px] font-black text-slate-400">
+                      <span>{lawyer.isOnline ? 'جاهز للاستشارة' : 'يفضل فتح قضية منظمة'}</span>
+                      <span>{Math.min(100, Math.round((lawyer.rating / 5) * 72 + (lawyer.isOnline ? 14 : 0) + (lawyer.verified ? 14 : 0)))}%</span>
+                    </div>
+                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                       <div
                         className="h-full rounded-full bg-brand-gold transition-all"
                         style={{ width: `${Math.min(100, Math.round((lawyer.rating / 5) * 72 + (lawyer.isOnline ? 14 : 0) + (lawyer.verified ? 14 : 0)))}%` }}
@@ -555,7 +597,7 @@ export default function Lawyers() {
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
                     <p className="text-[11px] font-black text-slate-400">أفضل خطوة الآن</p>
                     <p className="mt-1 text-sm font-black text-brand-dark">
-                      {selectedLawyer.isOnline ? 'ابدأ رسالة مباشرة الآن' : 'افتح قضية وحدد هذا المحامي من البداية'}
+                      {selectedLawyer.isOnline ? 'ابدأ استشارة سريعة لتأكيد التوفر' : 'افتح قضية وحدد هذا المحامي من البداية'}
                     </p>
                   </div>
                   <div className="rounded-2xl bg-slate-50 px-4 py-3">
@@ -618,7 +660,7 @@ export default function Lawyers() {
                   <p className="text-xs font-black uppercase tracking-[0.24em] text-brand-gold">Consultation Checkout</p>
                   <h2 className="mt-2 text-2xl font-black text-brand-dark">ابدأ الاستشارة خلال أقل من دقيقة</h2>
                   <p className="mt-2 text-sm font-bold leading-7 text-slate-500">
-                    سعر واضح، دفع فوري، ثم يتم إنشاء المحادثة تلقائياً وتحويلك مباشرة إلى شاشة الرسائل.
+                    اختر زين كاش، بطاقة مصرفية، أو الدفع من رصيدك داخل المنصة، ثم يتم إنشاء المحادثة وتحويلك مباشرة إلى الرسائل.
                   </p>
                 </div>
               </div>
@@ -669,17 +711,25 @@ export default function Lawyers() {
                           type="button"
                           onClick={() => setSelectedPaymentMethod(method.id)}
                           className={`rounded-2xl border px-4 py-3 text-right transition ${selectedPaymentMethod === method.id
-                            ? 'border-brand-navy bg-white shadow-sm'
+                            ? 'border-brand-navy bg-white shadow-sm ring-4 ring-brand-navy/5'
                             : 'border-slate-200 bg-white/70 hover:border-brand-navy/30'}`}
                         >
                           <div className="flex items-center justify-between gap-3">
-                            {method.recommended ? (
-                              <span className="rounded-full bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black text-brand-gold">موصى به</span>
-                            ) : (
-                              <span className="text-[10px] font-black text-slate-300">طريقة دفع</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              {method.recommended && (
+                                <span className="rounded-full bg-brand-gold/10 px-2.5 py-1 text-[10px] font-black text-brand-gold">موصى به</span>
+                              )}
+                              <span className={`flex h-5 w-5 items-center justify-center rounded-full border ${selectedPaymentMethod === method.id ? 'border-brand-navy bg-brand-navy text-white' : 'border-slate-200 bg-white text-transparent'}`}>
+                                <i className="fa-solid fa-check text-[8px]"></i>
+                              </span>
+                            </div>
                             <div className="text-right">
-                              <p className="text-sm font-black text-brand-dark">{method.label}</p>
+                              <div className="flex items-center justify-end gap-2">
+                                <p className="text-sm font-black text-brand-dark">{method.label}</p>
+                                <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 text-brand-navy">
+                                  <i className={`fa-solid ${method.icon} text-xs`}></i>
+                                </span>
+                              </div>
                               <p className="mt-1 text-[11px] font-bold text-slate-500">{method.subtitle}</p>
                             </div>
                           </div>
