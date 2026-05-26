@@ -114,6 +114,7 @@ import {
   deleteCaseWorkspace,
   deleteProCases,
   getClientWorkspace,
+  getCaseWorkspace,
   getLawyerWorkspace,
   getProWorkspace,
   moveCaseDocuments,
@@ -270,7 +271,17 @@ async function startServer() {
   });
 
   const fileFilter = (req: express.Request, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
-    const allowedMimes = ['image/jpeg', 'image/png', 'image/webp', 'application/pdf', 'video/mp4', 'video/webm', 'video/quicktime'];
+    const allowedMimes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'video/mp4',
+      'video/webm',
+      'video/quicktime',
+    ];
 
     if (!allowedMimes.includes(file.mimetype)) {
       return cb(new Error('نوع الملف غير مدعوم. استخدم صورة، PDF، أو فيديو MP4/WebM فقط.'));
@@ -1184,6 +1195,11 @@ async function startServer() {
       const currentUser = (req as any).user;
       const fileUrl = `/uploads/${req.file.filename}`;
       const senderRole = currentUser.role === 'pro' || currentUser.role === 'admin' ? 'lawyer' : 'user';
+      const uploadedType = req.file.mimetype.includes('pdf')
+        ? 'pdf'
+        : req.file.mimetype.includes('image')
+          ? 'image'
+          : 'other';
 
       const document = await prisma.document.create({
         data: {
@@ -1192,7 +1208,8 @@ async function startServer() {
           fileUrl,
           previewUrl: fileUrl,
           size: (req.file.size / (1024 * 1024)).toFixed(2) + ' MB',
-          type: req.file.mimetype.includes('pdf') ? 'pdf' : 'image',
+          type: uploadedType,
+          folderId: typeof req.body.folderId === 'string' && req.body.folderId ? req.body.folderId : null,
           status: 'Draft',
           tags: '[]',
         },
@@ -1210,8 +1227,13 @@ async function startServer() {
         size: req.file.size,
       });
 
-      // Automatically send a message about the new document
-      const updatedCase = await addCaseMessage(caseId, currentUser.userId, `رفع ${senderRole === 'lawyer' ? 'المحامي' : 'العميل'} وثيقة جديدة: ${req.file.originalname}`, senderRole);
+      // Automatically send a message about the new document when the thread allows it.
+      let updatedCase = await getCaseWorkspace(caseId);
+      try {
+        updatedCase = await addCaseMessage(caseId, currentUser.userId, `رفع ${senderRole === 'lawyer' ? 'المحامي' : 'العميل'} وثيقة جديدة: ${req.file.originalname}`, senderRole);
+      } catch (messageError) {
+        console.warn('Document uploaded but upload message was skipped:', messageError);
+      }
 
       res.json({ data: updatedCase, document });
     } catch (error) {

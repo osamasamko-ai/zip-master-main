@@ -780,7 +780,14 @@ export async function clearDocumentAction(caseId: string, documentId: string) {
   return getCaseWorkspace(caseId);
 }
 
-export async function addCaseDocument(caseId: string, payload: { name: string; size: string; type: string; folderId?: string | null; }) {
+export async function addCaseDocument(caseId: string, payload: {
+  name: string;
+  size: string;
+  type: string;
+  folderId?: string | null;
+  actionRequired?: string | null;
+  tags?: string[];
+}) {
   const previewUrl = `https://dummyimage.com/600x400/f3f4f6/1f2937&text=${encodeURIComponent(payload.name)}`;
   await prisma.document.create({
     data: {
@@ -792,7 +799,8 @@ export async function addCaseDocument(caseId: string, payload: { name: string; s
       type: payload.type,
       folderId: payload.folderId ?? null,
       status: 'Draft',
-      tags: '[]',
+      actionRequired: payload.actionRequired || null,
+      tags: JSON.stringify(Array.isArray(payload.tags) ? payload.tags : []),
     },
   });
   return getCaseWorkspace(caseId);

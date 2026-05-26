@@ -10,7 +10,7 @@ type DocumentType = 'pdf' | 'image' | 'other';
 type CaseStatus = 'pending' | 'review' | 'active' | 'closed';
 
 type WorkspaceTab = 'summary' | 'chat' | 'financials' | 'resolution';
-type DocFilter = 'all' | 'pending' | 'expired' | 'signed' | 'uploaded' | 'contracts';
+type DocFilter = 'all' | 'pending' | 'agency' | 'expired' | 'signed' | 'uploaded' | 'contracts';
 type SidebarFilter = 'all' | 'needs_action' | 'in_progress' | 'waiting' | 'completed' | 'drafts';
 type CaseAiMode = 'brief' | 'risk' | 'plan' | 'message';
 
@@ -135,6 +135,7 @@ const SIDEBAR_FILTERS: Array<{ id: SidebarFilter; label: string; icon: string }>
 const DOC_FILTERS: Array<{ id: DocFilter; label: string; icon: string; activeClass: string; idleClass: string }> = [
   { id: 'all', label: 'الكل', icon: 'fa-layer-group', activeClass: 'bg-brand-navy text-white shadow-md', idleClass: 'bg-slate-50 text-slate-500 hover:bg-white hover:shadow-sm' },
   { id: 'pending', label: 'للتوقيع', icon: 'fa-signature', activeClass: 'bg-amber-500 text-white shadow-md', idleClass: 'bg-amber-50 text-amber-700 hover:bg-white hover:shadow-sm' },
+  { id: 'agency', label: 'الوكالة', icon: 'fa-file-shield', activeClass: 'bg-indigo-600 text-white shadow-md', idleClass: 'bg-indigo-50 text-indigo-700 hover:bg-white hover:shadow-sm' },
   { id: 'contracts', label: 'العقود', icon: 'fa-file-contract', activeClass: 'bg-brand-gold text-brand-dark shadow-md', idleClass: 'bg-yellow-50 text-yellow-700 hover:bg-white hover:shadow-sm' },
   { id: 'signed', label: 'موقعة', icon: 'fa-circle-check', activeClass: 'bg-emerald-500 text-white shadow-md', idleClass: 'bg-emerald-50 text-emerald-700 hover:bg-white hover:shadow-sm' },
   { id: 'expired', label: 'منتهية', icon: 'fa-clock', activeClass: 'bg-red-500 text-white shadow-md', idleClass: 'bg-red-50 text-red-700 hover:bg-white hover:shadow-sm' },
@@ -201,6 +202,9 @@ const getMessageTimeLabel = (message: CaseMessage) => {
 
   return createdAt.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' });
 };
+
+const isAgencyDocument = (doc: LegalDocument) =>
+  doc.tags?.includes('agency') || doc.tags?.includes('power_of_attorney') || doc.name.includes('وكالة') || doc.name.includes('توكيل');
 
 const getLifecycleIndex = (legalCase: LegalCase) => {
   if (legalCase.status === 'closed') return 5;
@@ -658,6 +662,7 @@ const SummaryTab = ({
   const currentStep = roadmapSteps.find((step) => step.state === 'current') ?? roadmapSteps[roadmapSteps.length - 1];
   const completedSteps = roadmapSteps.filter((step) => step.state === 'completed').length;
   const sortedTimeline = [...activeCase.timeline];
+  const hasAgencyDocument = activeCase.documents.some(isAgencyDocument);
 
   return (
     <div className="flex-1 overflow-y-auto p-5 bg-slate-50/30 space-y-6 custom-scrollbar">
@@ -695,7 +700,7 @@ const SummaryTab = ({
           <div className="flex gap-4">
             {[
               { label: 'الهوية', done: true },
-              { label: 'التوكيل', done: activeCase.progress > 50 },
+              { label: 'الوكالة', done: hasAgencyDocument },
               { label: 'الدفعة الأولى', done: activeCase.financials.paid > 0 }
             ].map(item => (
               <div key={item.label} className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-xl border text-[10px] font-black ${item.done ? 'bg-emerald-50 border-emerald-100 text-emerald-600' : 'bg-slate-50 border-slate-100 text-slate-400'}`}>
@@ -1208,6 +1213,7 @@ export default function MyCases() {
   const [sidebarStatusFilter, setSidebarStatusFilter] = useState<SidebarFilter>('needs_action');
   const [isRecording, setIsRecording] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isCreatingAgencyDocument, setIsCreatingAgencyDocument] = useState(false);
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseType, setNewCaseType] = useState('civil');
@@ -1423,6 +1429,8 @@ export default function MyCases() {
       switch (docFilter) {
         case 'pending':
           return doc.actionRequired === 'بانتظار توقيعك' && !doc.isSigned;
+        case 'agency':
+          return isAgencyDocument(doc);
         case 'signed':
           return !!doc.isSigned;
         case 'expired':
@@ -1626,27 +1634,88 @@ export default function MyCases() {
 
       setCases((prev) => prev.map((c) => (c.id === activeCaseId ? { ...c, documents: [...c.documents, newDoc] } : c)));
 
-      window.setTimeout(async () => {
-        try {
-          const response = await apiClient.addCaseDocument(activeCaseId, {
-            name: file.name,
-            size: (file.size / (1024 * 1024)).toFixed(1) + ' MB',
-            type: fileType,
-            folderId: activeFolderId,
-          });
-          if (response.data) {
-            setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+      const formData = new FormData();
+      formData.append('file', file);
+      if (activeFolderId) {
+        formData.append('folderId', activeFolderId);
+      }
+
+      const xhr = new XMLHttpRequest();
+      const token = localStorage.getItem('auth_token') || localStorage.getItem('lexigate_token');
+
+      xhr.upload.onprogress = (event) => {
+        if (!event.lengthComputable) return;
+        const percent = Math.round((event.loaded / event.total) * 100);
+        setCases(prev => prev.map(c => c.id === activeCaseId ? {
+          ...c,
+          documents: c.documents.map(d => d.id === tempId ? { ...d, progress: percent } : d),
+        } : c));
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          const result = JSON.parse(xhr.responseText);
+          if (result.data) {
+            setCases(prev => prev.map(c => c.id === activeCaseId ? result.data : c));
           }
-        } catch (error: any) {
-          console.error('Failed to upload document', error);
-          // Remove the failed upload
-          setCases(prev => prev.map(c => c.id === activeCaseId ? { ...c, documents: c.documents.filter(d => d.id !== tempId) } : c));
+          return;
+        }
+
+        setCases(prev => prev.map(c => c.id === activeCaseId ? { ...c, documents: c.documents.filter(d => d.id !== tempId) } : c));
+        try {
+          const result = JSON.parse(xhr.responseText);
+          alert(result.error || `فشل رفع الملف "${file.name}".`);
+        } catch {
           alert(`فشل رفع الملف "${file.name}".`);
         }
-      }, 400);
+      };
+
+      xhr.onerror = () => {
+        setCases(prev => prev.map(c => c.id === activeCaseId ? { ...c, documents: c.documents.filter(d => d.id !== tempId) } : c));
+        alert(`فشل رفع الملف "${file.name}". تأكد من الاتصال ثم حاول مرة أخرى.`);
+      };
+
+      xhr.open('POST', `/api/app/workspace/cases/${activeCaseId}/documents/upload`);
+      if (token) {
+        xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      }
+      xhr.send(formData);
     });
 
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const createAgencyDocument = async () => {
+    if (isReadOnlyView || !activeCase || activeCase.status === 'closed') return;
+
+    const existingAgency = activeCase.documents.find(isAgencyDocument);
+    if (existingAgency) {
+      setDocFilter('agency');
+      setActivePreviewDoc(existingAgency);
+      return;
+    }
+
+    setIsCreatingAgencyDocument(true);
+    try {
+      const response = await apiClient.addCaseDocument(activeCaseId, {
+        name: `وكالة المحامي - ${activeCase.title}`,
+        size: 'نموذج رسمي',
+        type: 'pdf',
+        folderId: activeFolderId,
+        actionRequired: 'بانتظار توقيعك',
+        tags: ['agency', 'power_of_attorney'],
+      });
+
+      if (response.data) {
+        setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
+        setDocFilter('agency');
+      }
+    } catch (error: any) {
+      console.error('Failed to create agency document', error);
+      alert(error.response?.data?.error || 'تعذر إضافة الوكالة.');
+    } finally {
+      setIsCreatingAgencyDocument(false);
+    }
   };
 
   const handleDrag = (e: React.DragEvent) => {
@@ -1835,6 +1904,7 @@ export default function MyCases() {
     return {
       all: docs.length,
       pending: docs.filter((doc) => doc.actionRequired === 'بانتظار توقيعك' && !doc.isSigned).length,
+      agency: docs.filter(isAgencyDocument).length,
       expired: docs.filter((doc) => doc.expiresAt && !doc.isSigned).length,
       signed: docs.filter((doc) => doc.isSigned).length,
       uploaded: docs.filter((doc) => doc.uploadedAt && Date.now() - new Date(doc.uploadedAt).getTime() < recentLimit).length,
@@ -1846,9 +1916,10 @@ export default function MyCases() {
     const docs = activeCase?.documents || [];
     const signed = docs.filter((doc) => doc.isSigned).length;
     const needsAction = docs.filter((doc) => doc.actionRequired || doc.expiresAt).length;
+    const hasAgency = docs.some(isAgencyDocument);
     const percent = docs.length ? Math.round((signed / docs.length) * 100) : 0;
 
-    return { signed, needsAction, percent };
+    return { signed, needsAction, percent, hasAgency };
   }, [activeCase]);
 
   const attentionQueue = useMemo(() => {
@@ -2563,6 +2634,25 @@ export default function MyCases() {
                         <span>{documentHealth.needsAction.toLocaleString('ar-IQ')}</span>
                       </button>
                     )}
+
+                    {!isReadOnlyView && activeCase.status !== 'closed' && (
+                      <button
+                        type="button"
+                        onClick={createAgencyDocument}
+                        disabled={isCreatingAgencyDocument}
+                        className={`mt-3 flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-right text-xs font-black transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                          documentHealth.hasAgency
+                            ? 'border-indigo-100 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                            : 'border-brand-navy/10 bg-brand-navy/5 text-brand-navy hover:border-brand-navy/20 hover:bg-white'
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          <i className={`fa-solid ${isCreatingAgencyDocument ? 'fa-circle-notch fa-spin' : documentHealth.hasAgency ? 'fa-file-shield' : 'fa-file-circle-plus'}`}></i>
+                          {documentHealth.hasAgency ? 'عرض الوكالة' : 'إضافة وكالة للمحامي'}
+                        </span>
+                        <i className="fa-solid fa-arrow-left text-[10px]"></i>
+                      </button>
+                    )}
                   </div>
 
                   <div className="border-b border-slate-100 bg-white px-4 py-3">
@@ -2609,7 +2699,7 @@ export default function MyCases() {
 
                   {/* Document Filters */}
                   <div className="flex gap-2 overflow-x-auto border-b border-slate-100 bg-white px-4 py-3 no-scrollbar">
-                    {DOC_FILTERS.filter((filter) => ['all', 'pending', 'signed', 'expired'].includes(filter.id)).map((filter) => (
+                    {DOC_FILTERS.filter((filter) => ['all', 'pending', 'agency', 'signed', 'expired'].includes(filter.id)).map((filter) => (
                       <button
                         key={filter.id}
                         type="button"
@@ -2665,7 +2755,12 @@ export default function MyCases() {
                         )}
                       </div>
                     )}
-                    {filteredDocuments.map((doc) => (
+                    {filteredDocuments.map((doc) => {
+                      const isAgency = isAgencyDocument(doc);
+                      const iconClass = isAgency ? 'fa-file-shield' : doc.type === 'pdf' ? 'fa-file-pdf' : doc.type === 'image' ? 'fa-file-image' : 'fa-file-lines';
+                      const iconTone = isAgency ? 'text-indigo-600' : doc.type === 'pdf' ? 'text-red-500' : doc.type === 'image' ? 'text-blue-500' : 'text-slate-500';
+
+                      return (
                       <motion.div
                         layout
                         key={doc.id}
@@ -2675,7 +2770,7 @@ export default function MyCases() {
                           }
                         }}
                         whileHover={{ y: -1 }}
-                        className={`border p-4 rounded-2xl hover:border-brand-navy cursor-pointer transition group flex flex-col gap-2 relative bg-white shadow-sm hover:shadow-md ${doc.actionRequired || doc.expiresAt ? 'border-amber-100 bg-amber-50/30' : 'border-slate-100'}`}
+                        className={`border p-4 rounded-2xl hover:border-brand-navy cursor-pointer transition group flex flex-col gap-2 relative bg-white shadow-sm hover:shadow-md ${isAgency ? 'border-indigo-100 bg-indigo-50/30' : doc.actionRequired || doc.expiresAt ? 'border-amber-100 bg-amber-50/30' : 'border-slate-100'}`}
                       >
                         {!isReadOnlyView && (
                           <input
@@ -2702,11 +2797,18 @@ export default function MyCases() {
                         )}
 
                         <div className="flex items-start gap-3">
-                          <div className={`text-2xl mt-1 ${doc.type === 'pdf' ? 'text-red-500' : 'text-blue-500'}`}>
-                            <i className={`fa-solid ${doc.type === 'pdf' ? 'fa-file-pdf' : 'fa-file-image'}`}></i>
+                          <div className={`text-2xl mt-1 ${iconTone}`}>
+                            <i className={`fa-solid ${iconClass}`}></i>
                           </div>
                           <div className="flex-1 overflow-hidden">
-                            <p className="text-[13px] font-black text-brand-dark truncate">{doc.name}</p>
+                            <div className="flex items-center gap-2">
+                              {isAgency && (
+                                <span className="shrink-0 rounded-lg border border-indigo-100 bg-white px-2 py-0.5 text-[8px] font-black text-indigo-700">
+                                  وكالة
+                                </span>
+                              )}
+                              <p className="truncate text-[13px] font-black text-brand-dark">{doc.name}</p>
+                            </div>
                             <p className="text-[10px] font-black text-slate-400 mt-1 uppercase">
                               {doc.isUploading ? `جارٍ رفع الوثيقة... ${doc.progress || 0}%` : `${doc.size} • ${doc.date}`}
                             </p>
@@ -2782,7 +2884,8 @@ export default function MyCases() {
                           </div>
                         )}
                       </motion.div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {!isReadOnlyView && activeCase.status !== 'closed' && (
