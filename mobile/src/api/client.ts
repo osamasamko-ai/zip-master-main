@@ -81,8 +81,132 @@ class ApiClient {
     return this.request<any>('/api/app/settings');
   }
 
+  updateSettingsProfile(data: any) {
+    return this.request<any>('/api/app/settings/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateSettingsPreferences(data: any) {
+    return this.request<any>('/api/app/settings/preferences', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  addCreditBalance(data: { amount: number; paymentMethod: string; note?: string }) {
+    return this.request<any>('/api/app/billing/top-up', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   getFeedPosts() {
     return this.request<any[]>('/api/app/feed?limit=10');
+  }
+
+  createFeedPost(content: string, category = 'عام') {
+    return this.request<any>('/api/app/feed', {
+      method: 'POST',
+      body: JSON.stringify({ content, category }),
+    });
+  }
+
+  likeFeedPost(id: string) {
+    return this.request<any>(`/api/app/feed/${id}/like`, { method: 'POST' });
+  }
+
+  getFollowing() {
+    return this.request<any[]>('/api/app/following');
+  }
+
+  followLawyer(id: string) {
+    return this.request<any>(`/api/app/lawyers/${id}/follow`, { method: 'POST' });
+  }
+
+  unfollowLawyer(id: string) {
+    return this.request<any>(`/api/app/lawyers/${id}/follow`, { method: 'DELETE' });
+  }
+
+  startLawyerConsultation(id: string, data: { paymentMethod: string; note?: string }) {
+    return this.request<any>(`/api/app/lawyers/${id}/consultation`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  createWorkspaceCase(data: any) {
+    return this.request<any>('/api/app/workspace/cases', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  addCaseMessage(caseId: string, text: string, senderRole = 'user') {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text, senderRole }),
+    });
+  }
+
+  getLegalDocs() {
+    return this.request<any[]>('/api/legal/docs');
+  }
+
+  getUserContracts() {
+    return this.request<any[]>('/api/legal/contracts');
+  }
+
+  getContractTemplates() {
+    return this.request<any[]>('/api/app/contract-templates');
+  }
+
+  generateCarContract(data: any) {
+    return this.request<{ contractText: string }>('/api/legal/car-contract', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  saveDraftContract(data: any) {
+    return this.request<any>('/api/legal/save-contract', {
+      method: 'POST',
+      body: JSON.stringify({ ...data, status: 'draft' }),
+    });
+  }
+
+  payFromWallet(amount: number, serviceName: string, promoCode?: string) {
+    return this.request<any>('/api/app/billing/pay-wallet', {
+      method: 'POST',
+      body: JSON.stringify({ amount, serviceName, promoCode }),
+    });
+  }
+
+  applyPromoCode(code: string) {
+    return this.request<{ discountAmount: number; message: string }>('/api/promo/apply', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
+    });
+  }
+
+  sendSupportRequest(data: { name: string; phone: string; subject: string; message: string }) {
+    return this.request<any>('/api/support/request', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getIntelligence() {
+    return this.request<any>('/api/app/intelligence');
+  }
+
+  getProWorkspace() {
+    return this.request<any>('/api/app/pro/workspace');
+  }
+
+  getAdminMetrics() {
+    return this.request<any>('/api/admin/metrics');
   }
 
   async askAi(question: string, history: Array<{ role: string; content: string }> = []) {

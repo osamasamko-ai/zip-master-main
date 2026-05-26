@@ -10,6 +10,40 @@ export function Card({ children }: { children: React.ReactNode }) {
   return <View style={styles.card}>{children}</View>;
 }
 
+export function SectionTitle({ title, action }: { title: string; action?: string }) {
+  return (
+    <View style={styles.sectionTitle}>
+      {action ? <Text style={styles.sectionAction}>{action}</Text> : <View />}
+      <Text style={styles.sectionText}>{title}</Text>
+    </View>
+  );
+}
+
+export function EmptyState({ title, note }: { title: string; note?: string }) {
+  return (
+    <Card>
+      <Text style={styles.emptyTitle}>{title}</Text>
+      {note ? <Text style={styles.emptyNote}>{note}</Text> : null}
+    </Card>
+  );
+}
+
+export function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'gold' | 'green' | 'red' | 'blue' }) {
+  const toneStyle = {
+    neutral: styles.pillNeutral,
+    gold: styles.pillGold,
+    green: styles.pillGreen,
+    red: styles.pillRed,
+    blue: styles.pillBlue,
+  }[tone];
+
+  return (
+    <View style={[styles.pill, toneStyle]}>
+      <Text style={[styles.pillText, tone !== 'neutral' && styles.pillTextStrong]}>{label}</Text>
+    </View>
+  );
+}
+
 export function Heading({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <View style={styles.heading}>
@@ -95,6 +129,65 @@ export const styles = StyleSheet.create({
     marginBottom: 12,
     padding: 14,
   },
+  sectionTitle: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+    marginTop: 8,
+  },
+  sectionText: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  sectionAction: {
+    color: colors.gold,
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  emptyTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  emptyNote: {
+    color: colors.muted,
+    lineHeight: 22,
+    marginTop: 6,
+    textAlign: 'right',
+  },
+  pill: {
+    alignSelf: 'flex-end',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  pillNeutral: {
+    backgroundColor: '#eef2f6',
+  },
+  pillGold: {
+    backgroundColor: '#fff6df',
+  },
+  pillGreen: {
+    backgroundColor: '#e9f8ef',
+  },
+  pillRed: {
+    backgroundColor: '#fff1f0',
+  },
+  pillBlue: {
+    backgroundColor: '#eff6ff',
+  },
+  pillText: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  pillTextStrong: {
+    color: colors.ink,
+  },
   button: {
     alignItems: 'center',
     backgroundColor: colors.navy,
@@ -127,4 +220,3 @@ export const styles = StyleSheet.create({
     textAlign: 'right',
   },
 });
-
