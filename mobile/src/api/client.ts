@@ -172,6 +172,19 @@ class ApiClient {
     });
   }
 
+  markCaseMessagesAsRead(caseId: string) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/mark-read`, {
+      method: 'POST',
+    });
+  }
+
+  reactToCaseMessage(caseId: string, messageId: string, reaction: string | null) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/messages/${messageId}/reaction`, {
+      method: 'POST',
+      body: JSON.stringify({ reaction }),
+    });
+  }
+
   getLegalDocs() {
     return this.request<any[]>('/api/legal/docs');
   }
