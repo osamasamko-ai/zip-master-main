@@ -19,6 +19,9 @@ const LAWYER_QUICK_MESSAGE_PROMPTS = [
 ];
 
 const UPLOAD_MESSAGE_MARKERS = ['وثيقة جديدة:', 'مستند جديد:'];
+const MESSAGE_REACTION_OPTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'] as const;
+
+type MessageReaction = typeof MESSAGE_REACTION_OPTIONS[number];
 
 const buildAvatarUrl = (name: string, image?: string | null, background = '1A237E') => {
   return image || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=${background}&color=ffffff&rounded=true`;
@@ -32,6 +35,7 @@ type MessageItem = {
   sender: 'user' | 'lawyer';
   text: string;
   awaitingResponse?: boolean;
+  reaction?: MessageReaction | null;
   createdAt: Date;
   deliveryState?: MessageDeliveryState;
   uploadProgress?: number;
@@ -144,6 +148,7 @@ export default function Messages() {
   const [isChatHeightExpanded, setIsChatHeightExpanded] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [replyingToMessage, setReplyingToMessage] = useState<MessageItem | null>(null);
+  const [activeReactionPicker, setActiveReactionPicker] = useState<string | number | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isLawyerTyping, setIsLawyerTyping] = useState(false);
   const [isAiConsulting, setIsAiConsulting] = useState(false);
@@ -335,6 +340,7 @@ export default function Messages() {
             return (
               message.id === currentMessage?.id &&
               message.awaitingResponse === currentMessage?.awaitingResponse &&
+              message.reaction === currentMessage?.reaction &&
               message.text === currentMessage?.text &&
               message.sender === currentMessage?.sender
             );
@@ -746,6 +752,56 @@ export default function Messages() {
     textareaRef.current?.focus();
   }, [viewerRole]);
 
+  const handleSelectMessageReaction = useCallback(async (message: MessageItem, reaction: MessageReaction) => {
+    if (!selectedCase || message.sender === viewerRole || message.deliveryState) {
+      return;
+    }
+
+    const previousReaction = message.reaction ?? null;
+    const nextReaction = previousReaction === reaction ? null : reaction;
+    setActiveReactionPicker(null);
+
+    setCases((current) =>
+      current.map((item) =>
+        item.id === selectedCase.id
+          ? {
+            ...item,
+            messages: item.messages.map((currentMessage) =>
+              currentMessage.id === message.id
+                ? { ...currentMessage, reaction: nextReaction }
+                : currentMessage,
+            ),
+          }
+          : item,
+      ),
+    );
+
+    try {
+      const response = await apiClient.reactToCaseMessage(selectedCase.id, String(message.id), nextReaction);
+      if (response.data) {
+        replaceCaseInState(response.data);
+      } else {
+        await loadCases(false);
+      }
+    } catch (error) {
+      console.error('Failed to update message reaction:', error);
+      setCases((current) =>
+        current.map((item) =>
+          item.id === selectedCase.id
+            ? {
+              ...item,
+              messages: item.messages.map((currentMessage) =>
+                currentMessage.id === message.id
+                  ? { ...currentMessage, reaction: previousReaction }
+                  : currentMessage,
+              ),
+            }
+            : item,
+        ),
+      );
+    }
+  }, [loadCases, replaceCaseInState, selectedCase, viewerRole]);
+
   const handleToggleConversationCompletion = useCallback(async () => {
     if (viewerRole !== 'lawyer' || !latestClientMessage?.id) {
       return;
@@ -815,6 +871,7 @@ export default function Messages() {
 
   useEffect(() => {
     setReplyingToMessage(null);
+    setActiveReactionPicker(null);
     setSmartDraftPreview(null);
   }, [selectedCase?.id]);
 
@@ -1217,7 +1274,7 @@ export default function Messages() {
                                 }}
                                 className="h-8 w-8 shrink-0 rounded-full border border-white object-cover shadow-sm"
                               />
-                              <div className={`relative max-w-[88%] rounded-[1.35rem] px-4 py-2.5 text-right md:max-w-[72%] md:px-4 group ${isMe
+                              <div className={`relative max-w-[88%] rounded-[1.35rem] px-4 py-2.5 text-right md:max-w-[72%] md:px-4 group ${!isMe && message.reaction ? 'mb-4' : ''} ${isMe
                                 ? 'bg-blue-600 text-white rounded-bl-md'
                                 : isRequestMessage(message.text)
                                   ? 'bg-amber-50 border border-amber-100 text-slate-800 rounded-br-md'
@@ -1253,6 +1310,42 @@ export default function Messages() {
                                   >
                                     <i className="fa-solid fa-reply text-xs"></i>
                                   </button>
+                                )}
+                                {!isMe && (
+                                  <div className="absolute left-2 top-2 z-20">
+                                    <button
+                                      type="button"
+                                      onClick={() => setActiveReactionPicker((current) => current === message.id ? null : message.id)}
+                                      className={`flex h-7 w-7 items-center justify-center rounded-lg border border-slate-100 bg-white text-slate-400 shadow-sm transition hover:text-brand-navy ${activeReactionPicker === message.id ? 'opacity-100 ring-2 ring-blue-100' : 'opacity-0 group-hover:opacity-100'}`}
+                                      title="إضافة تفاعل"
+                                      aria-expanded={activeReactionPicker === message.id}
+                                    >
+                                      <i className="fa-regular fa-face-smile text-xs"></i>
+                                    </button>
+                                    <AnimatePresence>
+                                      {activeReactionPicker === message.id && (
+                                        <motion.div
+                                          initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                                          exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                                          className="absolute left-0 top-9 flex items-center gap-1 rounded-full border border-slate-100 bg-white p-1.5 shadow-2xl"
+                                          dir="ltr"
+                                        >
+                                          {MESSAGE_REACTION_OPTIONS.map((reaction) => (
+                                            <button
+                                              key={reaction}
+                                              type="button"
+                                              onClick={() => handleSelectMessageReaction(message, reaction)}
+                                              className={`flex h-8 w-8 items-center justify-center rounded-full text-lg transition hover:-translate-y-0.5 hover:bg-slate-100 ${message.reaction === reaction ? 'bg-blue-50 ring-2 ring-blue-100' : ''}`}
+                                              title={message.reaction === reaction ? 'إزالة التفاعل' : 'اختيار التفاعل'}
+                                            >
+                                              {reaction}
+                                            </button>
+                                          ))}
+                                        </motion.div>
+                                      )}
+                                    </AnimatePresence>
+                                  </div>
                                 )}
                                 {message.uploadProgress !== undefined && (
                                   <div className="mt-3 mb-2 space-y-2">
@@ -1351,6 +1444,11 @@ export default function Messages() {
                                     />
                                   )}
                                 </div>
+                                {!isMe && message.reaction && (
+                                  <div className="absolute -bottom-4 left-4 flex h-7 min-w-8 items-center justify-center rounded-full border border-white bg-white px-2 text-base shadow-sm">
+                                    {message.reaction}
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </motion.div>

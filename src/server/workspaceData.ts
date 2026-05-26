@@ -166,6 +166,7 @@ const workspaceCaseSelect = {
           senderRole: true,
           text: true,
           awaitingResponse: true,
+          reaction: true,
           createdAt: true,
         },
         orderBy: { createdAt: 'asc' as const },
@@ -274,6 +275,7 @@ export function mapWorkspaceCase(item: any) {
       sender: message.senderRole === 'lawyer' ? 'lawyer' : 'user',
       text: message.text,
       awaitingResponse: message.awaitingResponse,
+      reaction: message.reaction,
       createdAt: message.createdAt, // Changed to return Date object
     })),
     timeline: item.timelineEntries.map((entry: any) => ({
@@ -823,6 +825,58 @@ export async function addCaseMessage(caseId: string, userId: string, text: strin
       unreadCount: senderRole === 'user' ? { increment: 1 } : 0,
     },
   });
+  return getCaseWorkspace(caseId);
+}
+
+const MESSAGE_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
+
+export async function updateCaseMessageReaction(
+  caseId: string,
+  userId: string,
+  messageId: string,
+  reaction: string | null,
+  viewerRole: 'user' | 'lawyer',
+) {
+  if (reaction !== null && !MESSAGE_REACTIONS.includes(reaction)) {
+    throw new Error('Unsupported message reaction');
+  }
+
+  const message = await prisma.message.findFirst({
+    where: {
+      id: messageId,
+      session: { caseId },
+    },
+    select: {
+      senderRole: true,
+      session: {
+        select: {
+          case: {
+            select: {
+              clientId: true,
+              lawyerId: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  const caseData = message?.session.case;
+  const canAccessCase = caseData && (caseData.clientId === userId || caseData.lawyerId === userId);
+
+  if (!message || !canAccessCase) {
+    throw new Error('Message not found');
+  }
+
+  if (message.senderRole === viewerRole) {
+    throw new Error('Only received messages can be reacted to');
+  }
+
+  await prisma.message.update({
+    where: { id: messageId },
+    data: { reaction },
+  });
+
   return getCaseWorkspace(caseId);
 }
 

@@ -246,6 +246,11 @@ class ApiClient {
         return response.data;
     }
 
+    async reactToCaseMessage(caseId: string, messageId: string, reaction: string | null): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/workspace/cases/${caseId}/messages/${messageId}/reaction`, { reaction });
+        return response.data;
+    }
+
     async markCaseMessagesAsRead(caseId: string): Promise<ApiResponse<any>> {
         const response = await this.client.post(`/api/app/workspace/cases/${caseId}/mark-read`);
         return response.data;

@@ -126,6 +126,7 @@ import {
   toggleCaseArchive,
   updateCaseProgress,
   markCaseMessagesAsRead,
+  updateCaseMessageReaction,
   // ... other imports
   mapWorkspaceCase,
   updateProCaseStatuses,
@@ -1290,6 +1291,30 @@ async function startServer() {
     } catch (error) {
       console.error('Add message error:', error);
       res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to send message' });
+    }
+  });
+
+  app.post('/api/app/workspace/cases/:caseId/messages/:messageId/reaction', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const viewerRole = currentUser.role === 'pro' || currentUser.role === 'admin' ? 'lawyer' : 'user';
+      const reaction = typeof req.body.reaction === 'string' ? req.body.reaction : null;
+      const caseData = await updateCaseMessageReaction(
+        req.params.caseId,
+        currentUser.userId,
+        req.params.messageId,
+        reaction,
+        viewerRole,
+      );
+
+      if (!caseData) {
+        return res.status(404).json({ error: 'Case not found' });
+      }
+
+      res.json({ data: caseData });
+    } catch (error) {
+      console.error('Update message reaction error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Failed to update message reaction' });
     }
   });
 
