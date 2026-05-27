@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
   Animated,
+  FlatList,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -482,39 +483,49 @@ export function AiChatScreen() {
     );
   };
 
-  const renderChat = () => (
-    <View style={styles.chatPanel}>
-      {errorMessage ? (
-        <View style={styles.alert}>
-          <Pressable onPress={() => setErrorMessage(null)}>
-            <Ionicons name="close-circle-outline" size={20} color={colors.red} />
-          </Pressable>
-          <Text style={styles.alertText}>{errorMessage}</Text>
-        </View>
-      ) : null}
+  const renderChat = () => {
+    const chatItems = useMemo(() => {
+      const items = [...activeSession.messages];
+      return items;
+    }, [activeSession.messages]);
 
-      {localOnlyMode ? (
-        <View style={styles.notice}>
-          <Ionicons name="server-outline" size={18} color={colors.gold} />
-          <Text style={styles.noticeText}>تم استخدام القاعدة المحلية. راجع المراجع قبل الاعتماد النهائي.</Text>
-        </View>
-      ) : null}
+    return (
+      <View style={styles.chatPanel}>
+        {errorMessage && (
+          <View style={styles.alert}>
+            <Pressable onPress={() => setErrorMessage(null)}>
+              <Ionicons name="close-circle-outline" size={20} color={colors.red} />
+            </Pressable>
+            <Text style={styles.alertText}>{errorMessage}</Text>
+          </View>
+        )}
 
-      {renderStarter()}
+        {localOnlyMode && (
+          <View style={styles.notice}>
+            <Ionicons name="server-outline" size={18} color={colors.gold} />
+            <Text style={styles.noticeText}>تم استخدام القاعدة المحلية. راجع المراجع قبل الاعتماد.</Text>
+          </View>
+        )}
 
-      {activeSession.messages.map((message) => (
-        <MessageBubble
-          key={message.id}
-          message={message}
-          copied={copiedMessageId === message.id}
-          onCopy={() => copyMessage(message)}
-          onSources={() => setActiveWorkspaceTab('sources')}
+        {renderStarter()}
+
+        <FlatList
+          data={chatItems}
+          scrollEnabled={false} // Container ScrollView handles scrolling
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <MessageBubble
+              message={item}
+              copied={copiedMessageId === item.id}
+              onCopy={() => copyMessage(item)}
+              onSources={() => setActiveWorkspaceTab('sources')}
+            />
+          )}
+          ListFooterComponent={loading ? <TypingIndicator iconPulse={iconPulse} /> : null}
         />
-      ))}
-
-      {loading ? <TypingIndicator /> : null}
-    </View>
-  );
+      </View>
+    );
+  };
 
   const renderSources = () => (
     <View style={styles.panel}>
@@ -656,7 +667,17 @@ function PanelHeader({ title, note, count }: { title: string; note?: string; cou
 }
 
 const MessageBubble = React.memo(({ message, copied, onCopy, onSources }: { message: Message; copied: boolean; onCopy: () => void; onSources: () => void }) => {
+  const entryAnim = useRef(new Animated.Value(0)).current;
   const isUser = message.role === 'user';
+
+  useEffect(() => {
+    Animated.spring(entryAnim, {
+      toValue: 1,
+      useNativeDriver: true,
+      tension: 50,
+      friction: 8
+    }).start();
+  }, []);
 
   const renderMarkdownContent = (content: string, isUser: boolean) => {
     const elements: React.ReactNode[] = [];
@@ -699,7 +720,11 @@ const MessageBubble = React.memo(({ message, copied, onCopy, onSources }: { mess
   };
 
   return (
-    <View style={[styles.messageRow, isUser && styles.messageRowUser]}>
+    <Animated.View style={[
+      styles.messageRow,
+      isUser && styles.messageRowUser,
+      { opacity: entryAnim, transform: [{ translateY: entryAnim.interpolate({ inputRange: [0, 1], outputRange: [20, 0] }) }] }
+    ]}>
       {!isUser ? (
         <View style={styles.assistantAvatar}>
           <Ionicons name="scale-outline" size={16} color={colors.navy} />
@@ -726,7 +751,7 @@ const MessageBubble = React.memo(({ message, copied, onCopy, onSources }: { mess
           ) : null}
         </View>
       </View>
-    </View>
+    </Animated.View>
   );
 });
 
@@ -1310,15 +1335,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     gap: 9,
     padding: 8,
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
   },
   input: {
     color: colors.ink,
