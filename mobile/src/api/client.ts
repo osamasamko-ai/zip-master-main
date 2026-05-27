@@ -165,6 +165,65 @@ class ApiClient {
     });
   }
 
+  toggleWorkspaceCaseArchive(id: string) {
+    return this.request<any>(`/api/app/workspace/cases/${id}/archive`, {
+      method: 'POST',
+    });
+  }
+
+  deleteWorkspaceCase(id: string) {
+    return this.request<any>(`/api/app/workspace/cases/${id}`, {
+      method: 'DELETE',
+    });
+  }
+
+  addCaseCollaborator(caseId: string, data: any) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/collaborators`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  removeCaseCollaborator(caseId: string, collaboratorId: string) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/collaborators/${collaboratorId}`, {
+      method: 'DELETE',
+    });
+  }
+
+  addCaseFolder(caseId: string, name: string) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/folders`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    });
+  }
+
+  addCaseCustomField(caseId: string, label: string, value: string) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/custom-fields`, {
+      method: 'POST',
+      body: JSON.stringify({ label, value }),
+    });
+  }
+
+  moveCaseDocuments(caseId: string, documentIds: string[], folderId: string | null) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/documents/move`, {
+      method: 'POST',
+      body: JSON.stringify({ documentIds, folderId }),
+    });
+  }
+
+  addCaseDocument(caseId: string, data: any) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/documents`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  signCaseDocument(caseId: string, documentId: string) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/documents/${documentId}/sign`, {
+      method: 'POST',
+    });
+  }
+
   addCaseMessage(caseId: string, text: string, senderRole = 'user') {
     return this.request<any>(`/api/app/workspace/cases/${caseId}/messages`, {
       method: 'POST',
