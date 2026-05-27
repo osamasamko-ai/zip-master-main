@@ -109,8 +109,28 @@ class ApiClient {
     });
   }
 
-  getFeedPosts() {
-    return this.request<any[]>('/api/app/feed?limit=10');
+  getFeedPosts(filter = 'all', options: { limit?: number; offset?: number } = {}) {
+    const params = new URLSearchParams({
+      filter,
+      limit: String(options.limit ?? 8),
+      offset: String(options.offset ?? 0),
+    });
+    return this.request<any[]>(`/api/app/feed?${params.toString()}`);
+  }
+
+  getFeedStories(mode: 'active' | 'archive' | 'all' = 'all') {
+    return this.request<any[]>(`/api/app/feed/stories?mode=${encodeURIComponent(mode)}`);
+  }
+
+  markFeedStoryViewed(storyId: string) {
+    return this.request<any>(`/api/app/feed/stories/${storyId}/view`, { method: 'POST' });
+  }
+
+  createFeedStory(text: string) {
+    return this.request<any>('/api/app/feed/stories', {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
   }
 
   createFeedPost(content: string, category = 'عام') {
@@ -118,6 +138,17 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ content, category }),
     });
+  }
+
+  updateFeedPost(id: string, data: { content?: string; status?: string; pinned?: boolean; featured?: boolean }) {
+    return this.request<any>(`/api/app/feed/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteFeedPost(id: string) {
+    return this.request<any>(`/api/app/feed/${id}`, { method: 'DELETE' });
   }
 
   likeFeedPost(id: string) {
