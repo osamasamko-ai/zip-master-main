@@ -444,7 +444,7 @@ export function ProWorkspaceScreen() {
           kicker="Professional Workspace"
           title="مساحة المحامي"
           subtitle="أهم أعمال اليوم في مكان واحد، مع أوامر سريعة وقوائم مختصرة للجوال."
-        // refreshing={refreshing}
+          refreshing={refreshing}
         >
           <View style={styles.commandGrid}>
             <QuickAction icon="add-circle-outline" label="قضية" onPress={() => { setActiveTab('cases'); setComposer(composer === 'case' ? null : 'case'); }} active={composer === 'case'} />

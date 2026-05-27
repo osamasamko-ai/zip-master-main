@@ -287,7 +287,7 @@ export function AdminScreen() {
           kicker="Admin Command Center"
           title="مركز الإدارة التشغيلي"
           subtitle="اعتمادات، مستخدمون، قضايا، محتوى، أموال، امتثال، وصحة النظام بتجربة مناسبة للجوال."
-        // refreshing={refreshing}
+          refreshing={refreshing}
         >
           <View style={styles.commandGrid}>
             <QuickAction icon="id-card-outline" label="KYC" count={pendingKyc.length} onPress={() => openTab('kyc', 'pending')} />

@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { ActivityIndicator, Animated, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { BottomSheet, Button, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
+import { HeroSection } from '../components/ui/HeroSection';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -42,6 +43,7 @@ export function FeedScreen() {
   const [nextOffset, setNextOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingStories, setLoadingStories] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [posting, setPosting] = useState(false);
   const [storyPosting, setStoryPosting] = useState(false);
@@ -122,6 +124,7 @@ export function FeedScreen() {
   };
 
   const loadSideData = async () => {
+    setLoadingStories(true);
     const [storyResponse, lawyerResponse, intelligenceResponse] = await Promise.all([
       apiClient.getFeedStories('all').catch(() => ({ data: [] })),
       apiClient.getLawyers().catch(() => ({ data: [] })),
@@ -130,6 +133,7 @@ export function FeedScreen() {
     setStories(storyResponse.data || []);
     setLawyers(lawyerResponse.data || []);
     setIntelligence(intelligenceResponse.data);
+    setLoadingStories(false);
   };
 
   useEffect(() => {
@@ -305,17 +309,17 @@ export function FeedScreen() {
   return (
     <Screen>
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing && posts.length > 0} onRefresh={refresh} />} showsVerticalScrollIndicator={false}>
-        <View style={styles.feedHeader}>
-          <View style={styles.heroTop}>
+        <HeroSection
+          icon="layers-outline"
+          title="المجتمع القانوني"
+          subtitle={`${posts.length.toLocaleString('ar-IQ')} منشور · ${sortMode === 'smart' ? 'اقتراحات ذكية' : 'الأحدث أولاً'}`}
+          refreshing={refreshing}
+          rightElement={
             <Pressable onPress={() => setSortMode(sortMode === 'smart' ? 'latest' : 'smart')} style={styles.headerIcon}>
               <Ionicons name={sortMode === 'smart' ? 'sparkles-outline' : 'time-outline'} size={20} color={colors.blue} />
             </Pressable>
-            <View style={styles.flex}>
-              <Text style={styles.title}>المجتمع القانوني</Text>
-              <Text style={styles.subtitle}>{posts.length.toLocaleString('ar-IQ')} منشور · {sortMode === 'smart' ? 'اقتراحات ذكية' : 'الأحدث أولاً'}</Text>
-            </View>
-          </View>
-        </View>
+          }
+        />
 
         <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
 
@@ -369,8 +373,14 @@ export function FeedScreen() {
             </View>
           ) : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
-            {smartStories.length === 0 ? <Text style={styles.mutedText}>{storyMode === 'archive' ? 'لا توجد قصص مؤرشفة حالياً.' : storyMode === 'seen' ? 'لم تشاهد أي قصة بعد.' : 'لا توجد قصص جديدة حالياً.'}</Text> : null}
-            {smartStories.map((story) => <StoryBubble key={story.id} story={story} onPress={() => viewStory(story)} />)}
+            {loadingStories && stories.length === 0 ? (
+              [1, 2, 3, 4].map((i) => <ShimmerStory key={i} />)
+            ) : (
+              <>
+                {smartStories.length === 0 ? <Text style={styles.mutedText}>{storyMode === 'archive' ? 'لا توجد قصص مؤرشفة حالياً.' : storyMode === 'seen' ? 'لم تشاهد أي قصة بعد.' : 'لا توجد قصص جديدة حالياً.'}</Text> : null}
+                {smartStories.map((story) => <StoryBubble key={story.id} story={story} onPress={() => viewStory(story)} />)}
+              </>
+            )}
           </ScrollView>
         </View>
 
@@ -462,6 +472,29 @@ export function FeedScreen() {
   );
 }
 
+function ShimmerStory() {
+  const anim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(anim, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(anim, {
+          toValue: 0,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  }, [anim]);
+
+  return <Animated.View style={[styles.storySkeleton, { opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0.8] }) }]} />;
+}
+
 function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide }: any) {
   const [expanded, setExpanded] = useState(false);
   const canManage = userRole === 'admin' || userId === post.author?.id;
@@ -484,8 +517,9 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
           <Avatar source={post.author?.avatar || post.author?.img} name={post.author?.name || 'م'} />
           <View style={styles.flex}>
             <View style={styles.authorLine}>
+              {post.author?.verified ? <Ionicons name="shield-checkmark" size={16} color={colors.blue} /> : null}
               {post.featured ? <Pill label="مميز" tone="gold" /> : null}
-              {post.author?.role === 'admin' ? <Pill label="إدارة" tone="blue" /> : <Pill label="محامي" tone="neutral" /> }
+              {post.author?.role === 'admin' ? <Pill label="إدارة" tone="blue" /> : <Pill label="محامي" tone="neutral" />}
               <Text style={styles.authorName} numberOfLines={1}>{post.author?.name || post.authorName || 'عضو المنصة'}</Text>
             </View>
             <Text style={styles.mutedText}>{post.author?.specialty || post.author?.roleLabel || post.category} · {formatDate(post.createdAt)}</Text>
@@ -600,8 +634,8 @@ function CommentModal({ postId, comment, loading, onChange, onClose, onSubmit }:
 function EditModal({ post, content, loading, onChange, onClose, onSubmit }: any) {
   return (
     <BottomSheet visible={Boolean(post)} title="تعديل المنشور" onClose={onClose}>
-        <TextInput multiline value={content} onChangeText={onChange} placeholder="نص المنشور" placeholderTextColor={colors.subtle} style={styles.modalInput} />
-        <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="حفظ" loading={loading} onPress={onSubmit} /></View>
+      <TextInput multiline value={content} onChangeText={onChange} placeholder="نص المنشور" placeholderTextColor={colors.subtle} style={styles.modalInput} />
+      <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="حفظ" loading={loading} onPress={onSubmit} /></View>
     </BottomSheet>
   );
 }
@@ -617,10 +651,10 @@ function StoryModal({ story, onClose }: { story: any | null; onClose: () => void
 function ConsultationModal({ post, note, paymentMethod, loading, onChangeNote, onChangePayment, onClose, onSubmit }: any) {
   return (
     <BottomSheet visible={Boolean(post)} title="بدء استشارة من المنشور" onClose={onClose}>
-        <Text style={styles.mutedText}>{post?.author?.name} · {post?.author?.consultationFee || 'سعر غير محدد'}</Text>
-        {paymentMethods.map((method) => <Pressable key={method.id} onPress={() => onChangePayment(method.id)} style={[styles.paymentItem, paymentMethod === method.id && styles.paymentItemActive]}><Ionicons name={method.icon} size={20} color={colors.navy} /><View style={styles.flex}><Text style={styles.cardTitle}>{method.label}</Text><Text style={styles.mutedText}>{method.subtitle}</Text></View></Pressable>)}
-        <TextInput multiline value={note} onChangeText={onChangeNote} placeholder="ملاحظة للمحامي" placeholderTextColor={colors.subtle} style={styles.modalInput} />
-        <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="ابدأ الاستشارة" loading={loading} onPress={onSubmit} /></View>
+      <Text style={styles.mutedText}>{post?.author?.name} · {post?.author?.consultationFee || 'سعر غير محدد'}</Text>
+      {paymentMethods.map((method) => <Pressable key={method.id} onPress={() => onChangePayment(method.id)} style={[styles.paymentItem, paymentMethod === method.id && styles.paymentItemActive]}><Ionicons name={method.icon} size={20} color={colors.navy} /><View style={styles.flex}><Text style={styles.cardTitle}>{method.label}</Text><Text style={styles.mutedText}>{method.subtitle}</Text></View></Pressable>)}
+      <TextInput multiline value={note} onChangeText={onChangeNote} placeholder="ملاحظة للمحامي" placeholderTextColor={colors.subtle} style={styles.modalInput} />
+      <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="ابدأ الاستشارة" loading={loading} onPress={onSubmit} /></View>
     </BottomSheet>
   );
 }
@@ -685,8 +719,19 @@ const styles = StyleSheet.create({
   commentAuthor: { color: colors.ink, fontSize: 11, fontWeight: '900', textAlign: 'right' },
   commentBubble: { alignSelf: 'flex-end', backgroundColor: colors.tint, borderRadius: 16, marginTop: 8, maxWidth: '92%', padding: 9 },
   commentText: { color: colors.ink, fontSize: 12, fontWeight: '700', lineHeight: 19, marginTop: 3, textAlign: 'right' },
-  composer: { backgroundColor: '#fff', borderBottomColor: colors.line, borderBottomWidth: 1, marginHorizontal: -18, marginBottom: 8, paddingHorizontal: 18, paddingVertical: 10 },
-  composerInput: { backgroundColor: colors.tint, borderRadius: 18, color: colors.ink, marginTop: 10, minHeight: 76, padding: 12, textAlign: 'right', textAlignVertical: 'top' },
+  composer: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 14,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10
+  },
+  composerInput: { backgroundColor: colors.surface, borderRadius: 12, color: colors.ink, marginTop: 10, minHeight: 80, padding: 12, textAlign: 'right', textAlignVertical: 'top', borderColor: colors.line, borderWidth: 1 },
   composerPrompt: { backgroundColor: colors.tint, borderRadius: 999, flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
   composerPromptText: { color: colors.muted, fontSize: 13, fontWeight: '800', textAlign: 'right' },
   composerTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 10 },
@@ -697,22 +742,22 @@ const styles = StyleSheet.create({
   dangerButton: { backgroundColor: colors.redTint },
   disabled: { opacity: 0.45 },
   endText: { color: colors.muted, fontSize: 12, fontWeight: '900', marginVertical: 14, textAlign: 'center' },
-  featuredItem: { backgroundColor: '#fff', borderRadius: 16, padding: 11, width: 210 },
+  featuredItem: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, padding: 11, width: 210 },
   featuredPanel: { marginBottom: 8 },
   featuredRow: { flexDirection: 'row-reverse', gap: 9, paddingBottom: 8 },
   featuredTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', lineHeight: 20, textAlign: 'right' },
   feedControls: { marginBottom: 4 },
-  feedHeader: { backgroundColor: '#fff', borderBottomColor: colors.line, borderBottomWidth: 1, marginHorizontal: -18, marginBottom: 0, paddingHorizontal: 18, paddingVertical: 12 },
-  filterChip: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 999, flexDirection: 'row-reverse', gap: 5, minHeight: 38, paddingHorizontal: 11 },
+  feedHeader: { marginBottom: 12 },
+  filterChip: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, flexDirection: 'row-reverse', gap: 5, minHeight: 38, paddingHorizontal: 11 },
   filterChipActive: { backgroundColor: colors.navy },
-  filterRow: { flexDirection: 'row-reverse', gap: 8, paddingBottom: 12 },
+  filterRow: { flexDirection: 'row-reverse', gap: 8, paddingBottom: 10 },
   filterText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   filterTextActive: { color: '#fff' },
   flex: { flex: 1 },
   followButton: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 6, justifyContent: 'center', minHeight: 38 },
   followText: { color: colors.blue, fontSize: 12, fontWeight: '900' },
   headerIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 40, justifyContent: 'center', width: 40 },
-  hero: { backgroundColor: '#fff', borderRadius: 22, marginBottom: 12, padding: 14 },
+  hero: { backgroundColor: colors.paper, borderRadius: 16, marginBottom: 12, padding: 14 },
   heroIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 44, justifyContent: 'center', width: 44 },
   heroTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 12 },
   iconButton: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 999, height: 34, justifyContent: 'center', width: 34 },
@@ -725,7 +770,7 @@ const styles = StyleSheet.create({
   lawyerCard: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 18, padding: 12, width: 138 },
   lawyerRow: { flexDirection: 'row-reverse', gap: 10, paddingTop: 8 },
   lawyersPanel: { backgroundColor: colors.surface, borderRadius: 18, marginBottom: 12, padding: 12 },
-  loadMore: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 999, justifyContent: 'center', marginVertical: 12, minHeight: 44 },
+  loadMore: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, justifyContent: 'center', marginVertical: 12, minHeight: 44 },
   loadMoreText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
   manageRow: { flexDirection: 'row', gap: 5 },
   mediaBox: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 16, gap: 4, marginTop: 12, padding: 18 },
@@ -740,28 +785,40 @@ const styles = StyleSheet.create({
   noticeTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', textAlign: 'right' },
   paymentItem: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 10 },
   paymentItemActive: { backgroundColor: colors.blueTint },
-  pinnedPost: { borderColor: '#bfdbfe', borderWidth: 1 },
+  pinnedPost: { borderColor: colors.blue, borderWidth: 1.5 },
   postAction: { alignItems: 'center', borderRadius: 10, flex: 1, gap: 3, justifyContent: 'center', minHeight: 42 },
   postActionActive: { backgroundColor: colors.blueTint },
   postActionText: { color: colors.muted, fontSize: 10, fontWeight: '900' },
-  postCard: { backgroundColor: '#fff', borderRadius: 0, marginHorizontal: -18, marginBottom: 8, overflow: 'hidden', paddingHorizontal: 18, paddingVertical: 12 },
+  postCard: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    overflow: 'hidden',
+    padding: 14,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10
+  },
   postHeader: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   postImage: { aspectRatio: 1, width: '100%' },
-  postRibbon: { alignItems: 'center', backgroundColor: colors.surface, flexDirection: 'row-reverse', gap: 6, marginHorizontal: -12, marginTop: -12, marginBottom: 12, padding: 9 },
+  postRibbon: { alignItems: 'center', backgroundColor: colors.surface, flexDirection: 'row-reverse', gap: 6, marginHorizontal: -14, marginTop: -14, marginBottom: 14, padding: 9 },
   postRibbonText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
   postText: { color: colors.ink, fontSize: 14, fontWeight: '700', lineHeight: 24, marginTop: 12, textAlign: 'right' },
   readMore: { color: colors.blue, fontSize: 12, fontWeight: '900', marginTop: 6, textAlign: 'right' },
   rowBetween: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: '900', textAlign: 'right' },
-  sortOption: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 7 },
-  sortOptionActive: { backgroundColor: '#fff' },
-  sortPanel: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 18, flexDirection: 'row-reverse', gap: 12, marginBottom: 12, padding: 12 },
+  sortOption: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  sortOptionActive: { backgroundColor: colors.paper },
+  sortPanel: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, flexDirection: 'row-reverse', gap: 12, marginBottom: 12, padding: 12 },
   sortText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
   sortTextActive: { color: colors.blue },
   sortToggle: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', padding: 3 },
-  status: { color: colors.navy, fontSize: 12, fontWeight: '900', marginBottom: 10, textAlign: 'center' },
-  storyAvatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
-  storyBubble: { backgroundColor: '#fff', borderRadius: 16, minHeight: 138, padding: 10, width: 104 },
+  status: { color: colors.navy, fontSize: 12, fontWeight: '900', marginBottom: 8, textAlign: 'center' },
+  storyAvatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 36, justifyContent: 'center', width: 36 },
+  storyBubble: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, minHeight: 138, padding: 10, width: 104 },
   storyComposer: { alignItems: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
   storyCoverImage: { borderRadius: 12, height: 70, marginBottom: 8, width: '100%' },
   storyCreate: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, flexDirection: 'row-reverse', gap: 5, minHeight: 34, paddingHorizontal: 10 },
@@ -773,13 +830,14 @@ const styles = StyleSheet.create({
   storyModalClose: { position: 'absolute', right: 18, top: 48, zIndex: 2 },
   storyModalText: { color: '#fff', fontSize: 20, fontWeight: '800', lineHeight: 34, marginTop: 18, textAlign: 'center' },
   storyName: { color: colors.ink, fontSize: 11, fontWeight: '900', marginTop: 7, textAlign: 'right' },
-  storyPanel: { backgroundColor: colors.surface, borderBottomColor: colors.line, borderBottomWidth: 1, marginHorizontal: -18, marginBottom: 8, paddingHorizontal: 18, paddingVertical: 12 },
+  storyPanel: { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1, borderRadius: 16, marginBottom: 12, padding: 12 },
   storyPublish: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   storyRow: { flexDirection: 'row-reverse', gap: 10, paddingTop: 10 },
   storyText: { color: colors.muted, fontSize: 10, fontWeight: '800', lineHeight: 15, marginTop: 5, textAlign: 'right' },
-  storyTab: { alignItems: 'center', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 5, justifyContent: 'center', minHeight: 34 },
-  storyTabActive: { backgroundColor: '#fff' },
-  storyTabCount: { backgroundColor: '#fff', borderRadius: 999, color: colors.subtle, fontSize: 9, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 2 },
+  storySkeleton: { backgroundColor: colors.tint, borderRadius: 16, height: 138, width: 104 },
+  storyTab: { alignItems: 'center', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 5, justifyContent: 'center', minHeight: 32 },
+  storyTabActive: { backgroundColor: colors.paper },
+  storyTabCount: { backgroundColor: colors.paper, borderRadius: 999, color: colors.subtle, fontSize: 9, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 2 },
   storyTabCountActive: { backgroundColor: colors.blueTint, color: colors.blue },
   storyTabs: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', gap: 4, marginTop: 10, padding: 4 },
   storyTabText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
@@ -789,7 +847,7 @@ const styles = StyleSheet.create({
   tag: { backgroundColor: colors.blueTint, borderRadius: 999, color: colors.blue, fontSize: 11, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 },
   tagRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 12 },
   title: { color: colors.ink, fontSize: 24, fontWeight: '900', textAlign: 'right' },
-  topicPill: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
+  topicPill: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   topicText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
-  viewerNotice: { alignItems: 'center', backgroundColor: '#fff', borderBottomColor: colors.line, borderBottomWidth: 1, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, marginHorizontal: -18, paddingHorizontal: 18, paddingVertical: 12 },
+  viewerNotice: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 12, padding: 12 },
 });
