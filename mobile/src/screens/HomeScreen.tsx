@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
-import { Card, EmptyState, Heading, Pill, Screen } from '../components/ui';
+import { Card, EmptyState, Pill, Screen } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -50,18 +50,6 @@ const workspaceModes: Array<{ id: WorkspaceMode; label: string; note: string; ra
   { id: 'week', label: 'هذا الأسبوع', note: 'المواعيد والتحركات القريبة', range: 'week', focus: 'all', tab: 'schedule' },
 ];
 
-const headerRanges: Array<{ value: HeaderRange; label: string }> = [
-  { value: 'today', label: 'اليوم' },
-  { value: 'week', label: 'آخر 7 أيام' },
-  { value: 'month', label: 'هذا الشهر' },
-];
-
-const headerFocuses: Array<{ value: HeaderFocus; label: string }> = [
-  { value: 'all', label: 'كل الأنشطة' },
-  { value: 'urgent', label: 'الأولوية العالية' },
-  { value: 'pending', label: 'بانتظارك' },
-];
-
 const quickActions: Array<{ id: string; label: string; note: string; icon: keyof typeof Ionicons.glyphMap; route?: RouteKey; tab?: DashboardTab }> = [
   { id: 'start', label: 'ابدأ خدمة جديدة', note: 'إنشاء طلب أو اختيار خدمة قانونية مناسبة', icon: 'add-circle-outline', route: 'cases' },
   { id: 'upload', label: 'رفع مستند مطلوب', note: 'أرسل الملفات الناقصة لإكمال قضيتك الحالية', icon: 'cloud-upload-outline', tab: 'documents' },
@@ -81,7 +69,6 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
   const [serviceCategory, setServiceCategory] = useState('الكل');
   const [selectedCaseId, setSelectedCaseId] = useState('');
   const [selectedLawyerId, setSelectedLawyerId] = useState('');
-  const [showInsight, setShowInsight] = useState(true);
   const [commandOpen, setCommandOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [isAnonymous, setIsAnonymous] = useState(false);
@@ -133,21 +120,6 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
     if (serviceCategory === 'الكل') return services;
     return services.filter((item: any) => item.category === serviceCategory);
   }, [serviceCategory, services]);
-
-  const stats = useMemo(() => {
-    const activeCases = summary.activeCases ?? cases.length;
-    const actionRequiredCases = summary.actionRequiredCases ?? cases.filter((item: any) => item.status === 'بانتظارك' || item.unread).length;
-    const pendingDocuments = summary.requiredDocuments ?? requiredDocuments.length;
-    const totalDocuments = summary.totalDocuments ?? documents.length;
-    const fileHealth = summary.fileHealth ?? (totalDocuments > 0 ? Math.round((documents.filter((item: any) => item.status === 'مكتمل').length / totalDocuments) * 100) : 0);
-
-    return [
-      { label: 'القضايا النشطة', value: activeCases, note: actionRequiredCases > 0 ? `${actionRequiredCases} تحتاج إجراء` : 'كل القضايا تحت المتابعة', icon: 'briefcase-outline' as const, tab: 'cases' as const },
-      { label: 'المستندات المطلوبة', value: pendingDocuments, note: pendingDocuments > 0 ? 'جاهزة للرفع الآن' : 'لا توجد مستندات مطلوبة', icon: 'document-attach-outline' as const, tab: 'documents' as const },
-      { label: 'صحة الملف', value: `${fileHealth}%`, note: totalDocuments > 0 ? 'جاهزية الملف القانوني' : 'أضف أول مستند لبدء التقييم', icon: 'pulse-outline' as const, tab: 'documents' as const },
-      { label: 'الرصيد', value: availableBalance, note: 'IQD متاح', icon: 'wallet-outline' as const, tab: 'payments' as const },
-    ];
-  }, [availableBalance, cases, documents, requiredDocuments.length, summary]);
 
   const priorityQueue = useMemo(() => {
     const items: any[] = [];
@@ -371,87 +343,58 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />}
         showsVerticalScrollIndicator={false}
       >
-        <Heading
-          title={`${greeting}، ${user?.name?.split(' ')[0] || 'أهلاً'}`}
-          subtitle={activeTab === 'overview' ? 'مركز عملياتك القانوني: أولويات، قضايا، مستندات، مواعيد، ومدفوعات في مكان واحد.' : tabMeta(activeTab)}
-        />
-
-        {showInsight ? (
-          <Card>
-            <View style={localStyles.insightHeader}>
-              <Pressable onPress={() => setShowInsight(false)} style={localStyles.iconButton}>
-                <Ionicons name="close" size={18} color={colors.muted} />
-              </Pressable>
-              <View style={localStyles.rowEnd}>
-                <View style={localStyles.sparkIcon}>
-                  <Ionicons name="sparkles" size={18} color={colors.gold} />
-                </View>
-                <View style={localStyles.flex}>
-                  <Text style={localStyles.kicker}>توصية ذكية</Text>
-                  <Text style={localStyles.insightText}>{topPriority?.reason ?? executiveSummary}</Text>
-                </View>
-              </View>
+        <View style={localStyles.homeHero}>
+          <View style={localStyles.heroTopRow}>
+            <Pressable onPress={() => setCommandOpen(true)} style={localStyles.heroIconButton}>
+              <Ionicons name="search-outline" size={19} color={colors.navy} />
+            </Pressable>
+            <View style={localStyles.flex}>
+              <Text style={localStyles.homeGreeting}>{greeting}، {user?.name?.split(' ')[0] || 'أهلاً'}</Text>
+              <Text style={localStyles.homeSubtitle}>{tabMeta(activeTab)}</Text>
             </View>
-          </Card>
-        ) : null}
-
-        <Card>
-          <View style={localStyles.headerRow}>
-            <Pill label="آخر مزامنة: الآن" tone="blue" />
-            <Text style={localStyles.headerTitle}>{tabs.find((item) => item.id === activeTab)?.label}</Text>
           </View>
           <Text style={localStyles.summary}>{executiveSummary}</Text>
-          <PrimaryAction
-            title={topPriority?.cta ?? 'فتح القضايا'}
-            icon={topPriority?.icon ?? 'folder-open-outline'}
-            onPress={() => (topPriority ? openTab(topPriority.tab, topPriority.caseId) : openTab('cases'))}
-          />
-        </Card>
+          {topPriority ? (
+            <Pressable onPress={() => openTab(topPriority.tab, topPriority.caseId)} style={localStyles.nextActionCard}>
+              <View style={localStyles.nextActionIcon}>
+                <Ionicons name={topPriority.icon} size={20} color="#fff" />
+              </View>
+              <View style={localStyles.flex}>
+                <Text style={localStyles.nextActionLabel}>الأولوية الآن</Text>
+                <Text style={localStyles.nextActionTitle} numberOfLines={2}>{topPriority.title}</Text>
+                <Text style={localStyles.nextActionNote} numberOfLines={1}>{topPriority.cta}</Text>
+              </View>
+            </Pressable>
+          ) : null}
+        </View>
 
-        <View style={localStyles.signalsGrid}>
+        <View style={localStyles.quickRail}>
+          <Pressable onPress={() => openRoute('cases')} style={localStyles.quickRailItem}>
+            <Ionicons name="add-circle-outline" size={19} color={colors.blue} />
+            <Text style={localStyles.quickRailText}>قضية</Text>
+          </Pressable>
+          <Pressable onPress={() => openTab('documents')} style={localStyles.quickRailItem}>
+            <Ionicons name="cloud-upload-outline" size={19} color={colors.blue} />
+            <Text style={localStyles.quickRailText}>مستند</Text>
+          </Pressable>
+          <Pressable onPress={() => openRoute('ai')} style={localStyles.quickRailItem}>
+            <Ionicons name="sparkles-outline" size={19} color={colors.blue} />
+            <Text style={localStyles.quickRailText}>مساعد</Text>
+          </Pressable>
+          <Pressable onPress={() => openRoute('messages')} style={localStyles.quickRailItem}>
+            <Ionicons name="chatbubble-ellipses-outline" size={19} color={colors.blue} />
+            <Text style={localStyles.quickRailText}>رسائل</Text>
+          </Pressable>
+        </View>
+
+        <View style={localStyles.statusRail}>
           {dashboardSignals.map((signal) => (
-            <Pressable key={signal.id} onPress={() => openTab(signal.tab)} style={localStyles.signalCard}>
-              <Ionicons name={signal.icon} size={18} color={colors.navy} />
-              <Text style={localStyles.signalValue}>{formatValue(signal.value)}</Text>
-              <Text style={localStyles.signalLabel}>{signal.label}</Text>
-              <Text style={localStyles.signalNote}>{signal.note}</Text>
+            <Pressable key={signal.id} onPress={() => openTab(signal.tab)} style={localStyles.statusItem}>
+              <Text style={localStyles.statusValue}>{formatValue(signal.value)}</Text>
+              <Text style={localStyles.statusLabel}>{signal.label}</Text>
             </Pressable>
           ))}
         </View>
-
-        <Card>
-          <View style={localStyles.headerRow}>
-            <Pressable onPress={() => setCommandOpen(true)} style={localStyles.searchButton}>
-              <Ionicons name="search-outline" size={18} color={colors.navy} />
-              <Text style={localStyles.searchButtonText}>البحث السريع</Text>
-            </Pressable>
-            <Text style={localStyles.headerTitle}>مركز التحكم اليومي</Text>
-          </View>
-          <Text style={localStyles.mutedText}>
-            {headerRange === 'today' ? 'عرض اليوم' : headerRange === 'week' ? 'عرض آخر 7 أيام' : 'عرض هذا الشهر'}
-            {' · '}
-            {headerFocus === 'all' ? 'كل الأنشطة' : headerFocus === 'urgent' ? 'الأولوية العالية' : 'العناصر التي تنتظر إجراءك'}
-          </Text>
-
-          <Text style={localStyles.controlLabel}>الفترة</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.tabStrip}>
-            {headerRanges.map((range) => (
-              <Chip key={range.value} label={range.label} active={headerRange === range.value} onPress={() => setHeaderRange(range.value)} />
-            ))}
-          </ScrollView>
-
-          <Text style={localStyles.controlLabel}>التركيز</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.tabStrip}>
-            {headerFocuses.map((focus) => (
-              <Chip key={focus.value} label={focus.label} active={headerFocus === focus.value} onPress={() => setHeaderFocus(focus.value)} />
-            ))}
-          </ScrollView>
-
-          <View style={localStyles.actionRow}>
-            <SecondaryAction title="رفع مستند" icon="cloud-upload-outline" onPress={() => openTab('documents')} />
-            <SecondaryAction title="استشارة عاجلة" icon="flash-outline" onPress={() => openRoute('support')} />
-          </View>
-        </Card>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={localStyles.tabStrip}>
           {tabs.map((tab) => (
@@ -464,17 +407,6 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
             />
           ))}
         </ScrollView>
-
-        <View style={localStyles.metricsGrid}>
-          {stats.map((stat) => (
-            <Pressable key={stat.label} onPress={() => openTab(stat.tab)} style={localStyles.metricCard}>
-              <Ionicons name={stat.icon} size={20} color={colors.gold} />
-              <Text style={localStyles.metricValue}>{formatValue(stat.value)}</Text>
-              <Text style={localStyles.metricLabel}>{stat.label}</Text>
-              <Text style={localStyles.metricNote}>{stat.note}</Text>
-            </Pressable>
-            ))}
-        </View>
 
         <CommandPalette
           open={commandOpen}
@@ -1191,6 +1123,19 @@ const localStyles = StyleSheet.create({
   gridTwo: {
     gap: 10,
   },
+  heroIconButton: {
+    alignItems: 'center',
+    backgroundColor: '#f2f4f7',
+    borderRadius: 999,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  heroTopRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
   headerRow: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -1207,6 +1152,26 @@ const localStyles = StyleSheet.create({
     fontWeight: '900',
     lineHeight: 32,
     marginTop: 8,
+    textAlign: 'right',
+  },
+  homeGreeting: {
+    color: colors.ink,
+    fontSize: 24,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  homeHero: {
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    marginBottom: 12,
+    padding: 14,
+  },
+  homeSubtitle: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 19,
+    marginTop: 3,
     textAlign: 'right',
   },
   iconButton: {
@@ -1362,10 +1327,48 @@ const localStyles = StyleSheet.create({
     marginTop: 6,
     textAlign: 'right',
   },
+  nextActionCard: {
+    alignItems: 'center',
+    backgroundColor: '#eff6ff',
+    borderRadius: 18,
+    flexDirection: 'row-reverse',
+    gap: 12,
+    marginTop: 12,
+    padding: 12,
+  },
+  nextActionIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.blue,
+    borderRadius: 999,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  nextActionLabel: {
+    color: colors.blue,
+    fontSize: 11,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  nextActionNote: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  nextActionTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 21,
+    marginTop: 3,
+    textAlign: 'right',
+  },
   primaryAction: {
     alignItems: 'center',
-    backgroundColor: colors.navy,
-    borderRadius: 8,
+    backgroundColor: colors.blue,
+    borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 8,
     justifyContent: 'center',
@@ -1385,9 +1388,7 @@ const localStyles = StyleSheet.create({
   },
   quickCard: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 18,
     padding: 12,
   },
   quickNote: {
@@ -1404,6 +1405,28 @@ const localStyles = StyleSheet.create({
     marginTop: 8,
     textAlign: 'right',
   },
+  quickRail: {
+    backgroundColor: '#fff',
+    borderRadius: 18,
+    flexDirection: 'row-reverse',
+    gap: 8,
+    marginBottom: 12,
+    padding: 8,
+  },
+  quickRailItem: {
+    alignItems: 'center',
+    backgroundColor: '#f8fafc',
+    borderRadius: 14,
+    flex: 1,
+    gap: 5,
+    minHeight: 64,
+    justifyContent: 'center',
+  },
+  quickRailText: {
+    color: colors.navy,
+    fontSize: 11,
+    fontWeight: '900',
+  },
   redText: {
     color: colors.red,
   },
@@ -1415,7 +1438,7 @@ const localStyles = StyleSheet.create({
   secondaryAction: {
     alignItems: 'center',
     backgroundColor: '#eef2f6',
-    borderRadius: 8,
+    borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 8,
     justifyContent: 'center',
@@ -1510,6 +1533,31 @@ const localStyles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 23,
     marginTop: 12,
+    textAlign: 'right',
+  },
+  statusItem: {
+    alignItems: 'flex-end',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    flex: 1,
+    padding: 10,
+  },
+  statusLabel: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  statusRail: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    marginBottom: 12,
+  },
+  statusValue: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '900',
     textAlign: 'right',
   },
   tabStrip: {
