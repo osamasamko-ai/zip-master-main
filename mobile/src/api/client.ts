@@ -407,10 +407,10 @@ class ApiClient {
     return this.request<any>('/api/admin/cache/clear', { method: 'POST' });
   }
 
-  async askAi(question: string, history: Array<{ role: string; content: string }> = []) {
-    return this.request<{ answer?: string; response?: string; content?: string }>('/api/legal/ask', {
+  async askAi(question: string, history: Array<{ role: string; content: string }> = [], tone: 'formal' | 'simple' | 'friendly' = 'simple') {
+    return this.request<{ answer?: string; response?: string; content?: string; mode?: string; sources?: any[] }>('/api/legal/ask', {
       method: 'POST',
-      body: JSON.stringify({ question, message: question, history, tone: 'simple' }),
+      body: JSON.stringify({ question, message: question, history, tone }),
     });
   }
 }
