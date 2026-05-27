@@ -438,8 +438,30 @@ class ApiClient {
     return this.request<any>('/api/admin/metrics');
   }
 
+  getAdminIntelligence() {
+    return this.request<any>('/api/admin/intelligence');
+  }
+
   getAdminUsers() {
     return this.request<any[]>('/api/admin/users');
+  }
+
+  updateAdminUser(id: string, data: any) {
+    return this.request<any>(`/api/admin/users/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateAdminUserRole(id: string, role: string) {
+    return this.request<any>(`/api/admin/users/${id}/role`, {
+      method: 'POST',
+      body: JSON.stringify({ role }),
+    });
+  }
+
+  toggleAdminUserBlock(id: string) {
+    return this.request<any>(`/api/admin/users/${id}/block`, { method: 'POST' });
   }
 
   getAdminKyc() {
@@ -455,6 +477,14 @@ class ApiClient {
 
   getAdminTransactions() {
     return this.request<any[]>('/api/admin/transactions');
+  }
+
+  getAdminAlerts() {
+    return this.request<any[]>('/api/admin/alerts');
+  }
+
+  getAdminAuditLogs() {
+    return this.request<any[]>('/api/admin/audit-logs');
   }
 
   getAdminSupportTickets() {
@@ -477,6 +507,255 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  }
+
+  deleteAdminLegalService(id: string) {
+    return this.request<any>(`/api/admin/legal-services/${id}`, { method: 'DELETE' });
+  }
+
+  getAdminFeatureFlags() {
+    return this.request<any[]>('/api/admin/feature-flags');
+  }
+
+  updateAdminFeatureFlag(key: string, enabled: boolean) {
+    return this.request<any>(`/api/admin/feature-flags/${key}`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
+  }
+
+  getAdminPolicies() {
+    return this.request<any[]>('/api/admin/policies');
+  }
+
+  updateAdminPolicy(key: string, value: string) {
+    return this.request<any>(`/api/admin/policies/${key}`, {
+      method: 'POST',
+      body: JSON.stringify({ value }),
+    });
+  }
+
+  getAdminSystemSettings() {
+    return this.request<any>('/api/admin/system-settings');
+  }
+
+  updateAdminSystemSettings(data: any) {
+    return this.request<any>('/api/admin/system-settings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getAdminAiSettings() {
+    return this.request<any>('/api/admin/ai-settings');
+  }
+
+  updateAdminAiSettings(data: any) {
+    return this.request<any>('/api/admin/ai-settings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  restartAdminAi() {
+    return this.request<any>('/api/admin/ai/restart', { method: 'POST' });
+  }
+
+  getAdminPaymentGateways() {
+    return this.request<any[]>('/api/admin/payment-gateways');
+  }
+
+  updateAdminPaymentGateway(key: string, enabled: boolean, feePercent?: number) {
+    return this.request<any>(`/api/admin/payment-gateways/${key}`, {
+      method: 'POST',
+      body: JSON.stringify({ enabled, feePercent }),
+    });
+  }
+
+  getAdminWorkflowSettings() {
+    return this.request<any>('/api/admin/workflow-settings');
+  }
+
+  updateAdminWorkflowSettings(data: any) {
+    return this.request<any>('/api/admin/workflow-settings', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getAdminNotificationTemplates() {
+    return this.request<any[]>('/api/admin/notification-templates');
+  }
+
+  updateAdminNotificationTemplate(key: string, data: any) {
+    return this.request<any>(`/api/admin/notification-templates/${key}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getAdminModerationRules() {
+    return this.request<any[]>('/api/admin/moderation-rules');
+  }
+
+  addAdminModerationRule(data: any) {
+    return this.request<any>('/api/admin/moderation-rules', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateAdminModerationRule(id: string, data: any) {
+    return this.request<any>(`/api/admin/moderation-rules/${id}`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteAdminModerationRule(id: string) {
+    return this.request<any>(`/api/admin/moderation-rules/${id}`, { method: 'DELETE' });
+  }
+
+  getAdminLegalDocs() {
+    return this.request<any[]>('/api/admin/legal-docs');
+  }
+
+  addAdminLegalDoc(data: any) {
+    return this.request<any>('/api/admin/legal-docs', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteAdminLegalDoc(id: string) {
+    return this.request<any>(`/api/admin/legal-docs/${id}`, { method: 'DELETE' });
+  }
+
+  getAdminContracts() {
+    return this.request<any>('/api/admin/contracts');
+  }
+
+  getAdminCategories() {
+    return this.request<any[]>('/api/admin/categories');
+  }
+
+  addAdminCategory(data: any) {
+    return this.request<any>('/api/admin/categories', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateAdminCategory(id: string, data: any) {
+    return this.request<any>(`/api/admin/categories/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteAdminCategory(id: string) {
+    return this.request<any>(`/api/admin/categories/${id}`, { method: 'DELETE' });
+  }
+
+  getAdminUploads() {
+    return this.request<any[]>('/api/admin/uploads');
+  }
+
+  deleteAdminUpload(id: string) {
+    return this.request<any>(`/api/admin/uploads/${id}`, { method: 'DELETE' });
+  }
+
+  getAdminPages() {
+    return this.request<any[]>('/api/admin/pages');
+  }
+
+  addAdminPage(data: any) {
+    return this.request<any>('/api/admin/pages', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateAdminPage(id: string, data: any) {
+    return this.request<any>(`/api/admin/pages/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  deleteAdminPage(id: string) {
+    return this.request<any>(`/api/admin/pages/${id}`, { method: 'DELETE' });
+  }
+
+  addAdminPageBlock(pageId: string, data: any) {
+    return this.request<any>(`/api/admin/pages/${pageId}/blocks`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  getAdminRoles() {
+    return this.request<any[]>('/api/admin/roles');
+  }
+
+  getAdminPermissions() {
+    return this.request<any[]>('/api/admin/permissions');
+  }
+
+  addAdminRole(data: any) {
+    return this.request<any>('/api/admin/roles', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateAdminRole(id: string, data: any) {
+    return this.request<any>(`/api/admin/roles/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  updateAdminRolePermissions(id: string, permissions: string[]) {
+    return this.request<any>(`/api/admin/roles/${id}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify({ permissions }),
+    });
+  }
+
+  deleteAdminRole(id: string) {
+    return this.request<any>(`/api/admin/roles/${id}`, { method: 'DELETE' });
+  }
+
+  getAdminCases() {
+    return this.request<any[]>('/api/admin/cases');
+  }
+
+  updateAdminCase(id: string, data: any) {
+    return this.request<any>(`/api/admin/cases/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  }
+
+  addAdminCaseTimeline(id: string, data: any) {
+    return this.request<any>(`/api/admin/cases/${id}/timeline`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
+  async exportAdminCsv(type: 'kyc' | 'transactions') {
+    const response = await fetch(`${this.baseUrl}/api/admin/export?type=${type}`, {
+      headers: {
+        ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
+      },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => ({}));
+      throw new Error(payload?.error || 'Export failed');
+    }
+    return response.text();
   }
 
   clearAdminCache() {
