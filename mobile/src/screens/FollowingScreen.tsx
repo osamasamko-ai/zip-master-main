@@ -1,10 +1,29 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useState, useCallback, useRef } from 'react';
+import { ActivityIndicator, Animated, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { EmptyState, Screen, SkeletonCard } from '../components/ui';
 import { HeroSection } from '../components/ui/HeroSection';
 import { colors } from '../theme/colors';
+
+function InteractiveCard({ children, onPress, style }: any) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, friction: 8, tension: 40 }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 8, tension: 40 }).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View style={[style, { transform: [{ scale }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 export function FollowingScreen() {
   const [refreshing, setRefreshing] = useState(false);
@@ -13,6 +32,9 @@ export function FollowingScreen() {
   const [activeTab, setActiveTab] = useState<'lawyers' | 'posts'>('lawyers');
   const [search, setSearch] = useState('');
   const [busyId, setBusyId] = useState('');
+  const [sortMode, setSortMode] = useState<'date' | 'alpha'>('date');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [isSelectMode, setIsSelectMode] = useState(false);
 
   const load = async () => {
     setRefreshing(true);
@@ -34,27 +56,62 @@ export function FollowingScreen() {
     load();
   }, []);
 
+  useEffect(() => {
+    setSelectedIds([]);
+    setIsSelectMode(false);
+  }, [activeTab]);
+
   const filteredLawyers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return followedLawyers;
-    return followedLawyers.filter(lawyer =>
-      String(lawyer.name || '').toLowerCase().includes(q) ||
-      String(lawyer.specialty || '').toLowerCase().includes(q) ||
-      String(lawyer.location || '').toLowerCase().includes(q)
-    );
-  }, [followedLawyers, search]);
+    let list = [...followedLawyers];
+    if (q) {
+      list = list.filter(lawyer =>
+        String(lawyer.name || '').toLowerCase().includes(q) ||
+        String(lawyer.specialty || '').toLowerCase().includes(q) ||
+        String(lawyer.location || '').toLowerCase().includes(q)
+      );
+    }
+    if (sortMode === 'alpha') {
+      list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
+    }
+    return list;
+  }, [followedLawyers, search, sortMode]);
 
   const filteredPosts = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return savedPosts;
-    return savedPosts.filter(post =>
-      String(post.content || '').toLowerCase().includes(q) ||
-      String(post.category || '').toLowerCase().includes(q) ||
-      String(post.author?.name || '').toLowerCase().includes(q)
-    );
-  }, [savedPosts, search]);
+    let list = [...savedPosts];
+    if (q) {
+      list = list.filter(post =>
+        String(post.content || '').toLowerCase().includes(q) ||
+        String(post.category || '').toLowerCase().includes(q) ||
+        String(post.author?.name || '').toLowerCase().includes(q)
+      );
+    }
+    if (sortMode === 'alpha') {
+      list.sort((a, b) => String(a.content || '').localeCompare(String(b.content || ''), 'ar'));
+    }
+    return list;
+  }, [savedPosts, search, sortMode]);
+
+  const handleSelectAll = useCallback(() => {
+    const currentList = activeTab === 'lawyers' ? filteredLawyers : filteredPosts;
+    const allIds = currentList.map(item => item.id);
+    if (selectedIds.length === allIds.length && allIds.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(allIds);
+    }
+  }, [activeTab, filteredLawyers, filteredPosts, selectedIds.length]);
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  }, []);
 
   const handleUnfollow = async (lawyerId: string) => {
+    if (isSelectMode) {
+      toggleSelect(lawyerId);
+      return;
+    }
     setBusyId(lawyerId);
     try {
       await apiClient.unfollowLawyer(lawyerId);
@@ -67,10 +124,34 @@ export function FollowingScreen() {
   };
 
   const handleUnsave = async (postId: string) => {
+    if (isSelectMode) {
+      toggleSelect(postId);
+      return;
+    }
     setBusyId(postId);
     try {
       await apiClient.saveFeedPost(postId);
       setSavedPosts(prev => prev.filter(p => p.id !== postId));
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setBusyId('');
+    }
+  };
+
+  const handleBulkAction = async () => {
+    if (selectedIds.length === 0) return;
+    setBusyId('bulk');
+    try {
+      if (activeTab === 'lawyers') {
+        await Promise.all(selectedIds.map(id => apiClient.unfollowLawyer(id)));
+        setFollowedLawyers(prev => prev.filter(l => !selectedIds.includes(l.id)));
+      } else {
+        await Promise.all(selectedIds.map(id => apiClient.saveFeedPost(id)));
+        setSavedPosts(prev => prev.filter(p => !selectedIds.includes(p.id)));
+      }
+      setIsSelectMode(false);
+      setSelectedIds([]);
     } catch (e) {
       console.error(e);
     } finally {
@@ -107,6 +188,34 @@ export function FollowingScreen() {
             />
             <Ionicons name="search-outline" size={19} color={colors.navy} />
           </View>
+          <View style={styles.sortRow}>
+            <Pressable onPress={() => setSortMode('date')} style={[styles.sortChip, sortMode === 'date' && styles.sortChipActive]}>
+              <Ionicons name="time-outline" size={14} color={sortMode === 'date' ? '#fff' : colors.navy} />
+              <Text style={[styles.sortChipText, sortMode === 'date' && styles.sortChipTextActive]}>الأحدث</Text>
+            </Pressable>
+            <Pressable onPress={() => setSortMode('alpha')} style={[styles.sortChip, sortMode === 'alpha' && styles.sortChipActive]}>
+              <Ionicons name="text-outline" size={14} color={sortMode === 'alpha' ? '#fff' : colors.navy} />
+              <Text style={[styles.sortChipText, sortMode === 'alpha' && styles.sortChipTextActive]}>أبجدياً</Text>
+            </Pressable>
+            <View style={styles.flex} />
+            {isSelectMode && (activeTab === 'lawyers' ? filteredLawyers.length : filteredPosts.length) > 0 && (
+              <Pressable onPress={handleSelectAll} style={styles.selectAllButton}>
+                <Ionicons
+                  name={selectedIds.length === (activeTab === 'lawyers' ? filteredLawyers.length : filteredPosts.length) ? "checkbox" : "square-outline"}
+                  size={16}
+                  color={colors.blue}
+                />
+                <Text style={styles.selectAllText}>الكل</Text>
+              </Pressable>
+            )}
+            <Pressable
+              onPress={() => { setIsSelectMode(!isSelectMode); setSelectedIds([]); }}
+              style={[styles.enterSelect, isSelectMode && styles.enterSelectActive]}
+            >
+              <Ionicons name={isSelectMode ? "close-circle-outline" : "checkbox-outline"} size={16} color={isSelectMode ? colors.red : colors.blue} />
+              <Text style={[styles.enterSelectText, isSelectMode && styles.enterSelectTextActive]}>{isSelectMode ? 'إلغاء التحديد' : 'تحديد'}</Text>
+            </Pressable>
+          </View>
         </HeroSection>
 
         <View style={styles.tabSwitcher}>
@@ -136,8 +245,15 @@ export function FollowingScreen() {
                 note={search ? "جرّب تغيير كلمات البحث." : "ابدأ بمتابعة المحامين لتظهر قائمتهم هنا."}
               />
             ) : (
-              filteredLawyers.map(lawyer => (
-                <View key={lawyer.id} style={styles.lawyerCard}>
+              filteredLawyers.map((lawyer) => (
+                <InteractiveCard
+                  key={lawyer.id}
+                  onPress={() => isSelectMode ? toggleSelect(lawyer.id) : undefined}
+                  style={[styles.lawyerCard, selectedIds.includes(lawyer.id) && styles.activeCard]}
+                >
+                  {isSelectMode && (
+                    <View style={[styles.selectDot, selectedIds.includes(lawyer.id) && styles.selectDotActive]} />
+                  )}
                   <View style={styles.lawyerHeader}>
                     <View style={styles.avatar}>
                       <Text style={styles.avatarText}>{String(lawyer.name || 'م').charAt(0)}</Text>
@@ -161,7 +277,7 @@ export function FollowingScreen() {
                       )}
                     </Pressable>
                   </View>
-                </View>
+                </InteractiveCard>
               ))
             )}
           </View>
@@ -173,8 +289,15 @@ export function FollowingScreen() {
                 note={search ? "جرّب تغيير كلمات البحث." : "احفظ المنشورات المهمة للرجوع إليها لاحقاً."}
               />
             ) : (
-              filteredPosts.map(post => (
-                <View key={post.id} style={styles.postCard}>
+              filteredPosts.map((post) => (
+                <InteractiveCard
+                  key={post.id}
+                  onPress={() => isSelectMode ? toggleSelect(post.id) : undefined}
+                  style={[styles.postCard, selectedIds.includes(post.id) && styles.activeCard]}
+                >
+                  {isSelectMode && (
+                    <View style={[styles.selectDot, selectedIds.includes(post.id) && styles.selectDotActive]} />
+                  )}
                   <View style={styles.postHeader}>
                     <View style={styles.authorInfo}>
                       <View style={styles.avatarSmall}>
@@ -198,13 +321,22 @@ export function FollowingScreen() {
                     </Pressable>
                   </View>
                   <Text style={styles.postText} numberOfLines={3}>{post.content}</Text>
-                </View>
+                </InteractiveCard>
               ))
             )}
           </View>
         )}
 
-        {refreshing && (filteredLawyers.length === 0 || filteredPosts.length === 0) && (
+        {isSelectMode && selectedIds.length > 0 ? (
+          <View style={styles.bulkBar}>
+            <Text style={styles.bulkText}>{selectedIds.length.toLocaleString('ar-IQ')} مختارة</Text>
+            <Pressable onPress={handleBulkAction} style={styles.bulkButton} disabled={busyId === 'bulk'}>
+              {busyId === 'bulk' ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.bulkButtonText}>{activeTab === 'lawyers' ? 'إلغاء المتابعة' : 'حذف المحفوظات'}</Text>}
+            </Pressable>
+          </View>
+        ) : null}
+
+        {refreshing && (filteredLawyers.length === 0 && filteredPosts.length === 0) && (
           <View style={styles.skeletonContainer}>
             <SkeletonCard />
             <SkeletonCard />
@@ -217,6 +349,7 @@ export function FollowingScreen() {
 
 const styles = StyleSheet.create({
   content: { paddingBottom: 20 },
+  activeCard: { borderColor: colors.blue, borderWidth: 1.5 },
   section: { marginTop: 4 },
   flex: { flex: 1 },
   tabSwitcher: {
@@ -245,6 +378,8 @@ const styles = StyleSheet.create({
   tabTextActive: {
     color: colors.blue,
   },
+  selectAllButton: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, marginRight: 8 },
+  selectAllText: { color: colors.blue, fontSize: 13, fontWeight: '900' },
   lawyerCard: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
@@ -364,6 +499,64 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     width: 30,
   },
+  sortRow: {
+    flexDirection: 'row-reverse',
+    gap: 8,
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  sortChip: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: colors.tint,
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    gap: 5,
+  },
+  sortChipActive: {
+    backgroundColor: colors.navy,
+  },
+  sortChipText: {
+    color: colors.navy,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  sortChipTextActive: {
+    color: '#fff',
+  },
+  enterSelect: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+  },
+  enterSelectActive: {
+    opacity: 0.8,
+  },
+  enterSelectText: {
+    color: colors.blue,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  enterSelectTextActive: {
+    color: colors.red,
+  },
+  bulkBar: {
+    alignItems: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: 12,
+    flexDirection: 'row-reverse',
+    gap: 8,
+    marginBottom: 16,
+    padding: 10,
+    marginHorizontal: 16
+  },
+  bulkButton: { backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 8, paddingHorizontal: 14, paddingVertical: 8 },
+  bulkButtonText: { color: '#fff', fontSize: 13, fontWeight: '900' },
+  bulkText: { color: '#fff', flex: 1, fontSize: 13, fontWeight: '900', textAlign: 'right' },
+  selectDot: { borderColor: colors.line, borderRadius: 999, borderWidth: 2, height: 18, width: 18, position: 'absolute', top: 14, left: 14, zIndex: 1 },
+  selectDotActive: { backgroundColor: colors.blue, borderColor: colors.blue },
   mutedTextSmall: {
     color: colors.muted,
     fontSize: 11,

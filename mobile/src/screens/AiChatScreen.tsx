@@ -1,7 +1,8 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import {
   ActivityIndicator,
+  Animated,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -12,7 +13,8 @@ import {
   View,
 } from 'react-native';
 import { apiClient } from '../api/client';
-import { EmptyState, Screen } from '../components/ui';
+import { Card, EmptyState, Pill, Screen } from '../components/ui';
+import { HeroSection } from '../components/ui/HeroSection';
 import { colors } from '../theme/colors';
 
 type Tone = 'formal' | 'simple' | 'friendly';
@@ -152,16 +154,68 @@ const fallbackReply = (query: string) => {
   return 'هذا توجيه أولي. أضف تفاصيل القضية أو ألصق النص محل المراجعة للحصول على تحليل أدق ومراجع أقرب للموضوع.';
 };
 
+function TypingIndicator({ iconPulse }: { iconPulse: Animated.Value }) {
+  const dot1 = useRef(new Animated.Value(0.3)).current;
+  const dot2 = useRef(new Animated.Value(0.3)).current;
+  const dot3 = useRef(new Animated.Value(0.3)).current;
+
+  useEffect(() => {
+    const animate = (dot: Animated.Value, delay: number) => {
+      Animated.loop(
+        Animated.sequence([
+          Animated.delay(delay),
+          Animated.timing(dot, { toValue: 1, duration: 500, useNativeDriver: true }),
+          Animated.timing(dot, { toValue: 0.3, duration: 500, useNativeDriver: true }),
+        ])
+      ).start();
+    };
+
+    animate(dot1, 0);
+    animate(dot2, 250);
+    animate(dot3, 500);
+  }, []);
+
+  const dotStyle = (dot: Animated.Value) => ({
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: colors.gold,
+    marginHorizontal: 1.5,
+    opacity: dot
+  });
+
+  return (
+    <View style={styles.typingRow}>
+      <Animated.View style={[styles.assistantAvatar, {
+        transform: [{ scale: iconPulse.interpolate({ inputRange: [0, 1], outputRange: [1, 1.15] }) }],
+        opacity: iconPulse.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] })
+      }]}>
+        <Ionicons name="sparkles" size={15} color={colors.gold} />
+      </Animated.View>
+      <View style={styles.typingBubble}>
+        <View style={styles.dotContainer}>
+          <Animated.View style={dotStyle(dot1)} />
+          <Animated.View style={dotStyle(dot2)} />
+          <Animated.View style={dotStyle(dot3)} />
+        </View>
+        <Text style={styles.typingText}>المساعد يفكر...</Text>
+      </View>
+    </View>
+  );
+}
+
 export function AiChatScreen() {
   const [sessions, setSessions] = useState<ChatSession[]>(INITIAL_SESSIONS);
   const [activeSessionId, setActiveSessionId] = useState(INITIAL_SESSIONS[0].id);
   const [tone, setTone] = useState<Tone>('simple');
+  const [inputQuery, setInputQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [localOnlyMode, setLocalOnlyMode] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [intelligence, setIntelligence] = useState<any>(null);
+  const iconPulse = useRef(new Animated.Value(0)).current;
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
@@ -182,6 +236,23 @@ export function AiChatScreen() {
   );
 
   const starterPrompts = personalPrompts.length > 0 ? personalPrompts : QUICK_PROMPTS.slice(0, 3);
+
+  useEffect(() => {
+    if (loading) {
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(iconPulse, { toValue: 1, duration: 1000, useNativeDriver: true }),
+          Animated.timing(iconPulse, { toValue: 0, duration: 1000, useNativeDriver: true }),
+        ])
+      ).start();
+    } else {
+      iconPulse.setValue(0);
+    }
+  }, [loading]);
+
+  useEffect(() => {
+    setInputQuery(activeSession.query);
+  }, [activeSession.id]);
 
   const updateSession = (sessionId: string, updater: Partial<ChatSession> | ((session: ChatSession) => ChatSession)) => {
     setSessions((current) =>
@@ -222,26 +293,17 @@ export function AiChatScreen() {
     setSessions((current) => [next, ...current]);
     setActiveSessionId(next.id);
     setErrorMessage(null);
+    setInputQuery('');
   };
 
   const closeSession = (sessionId: string) => {
-    if (sessions.length === 1) {
-      setSessions(INITIAL_SESSIONS);
-      setActiveSessionId(INITIAL_SESSIONS[0].id);
-      return;
-    }
-
     const nextSessions = sessions.filter((session) => session.id !== sessionId);
     setSessions(nextSessions);
-    if (activeSessionId === sessionId) setActiveSessionId(nextSessions[0]?.id ?? INITIAL_SESSIONS[0].id);
+    if (activeSessionId === sessionId) setActiveSessionId(nextSessions[0]?.id ?? 'general');
   };
 
   const setActiveWorkspaceTab = (workspaceTab: WorkspaceTab) => {
     updateSession(activeSession.id, { workspaceTab });
-  };
-
-  const setQuery = (query: string) => {
-    updateSession(activeSession.id, { query });
   };
 
   const shareText = async (title: string, text: string) => {
@@ -264,7 +326,7 @@ export function AiChatScreen() {
     await shareText(`lexiai-chat-${new Date().toISOString().slice(0, 10)}.txt`, text);
   };
 
-  const sendChat = async (text = activeSession.query) => {
+  const sendChat = async (text = inputQuery) => {
     const trimmed = text.trim();
     if (!trimmed || loading) return;
 
@@ -273,6 +335,7 @@ export function AiChatScreen() {
     const userMessage = createMessage('user', trimmed, tone);
 
     setErrorMessage(null);
+    setInputQuery('');
     updateSession(sessionId, (session) => ({
       ...session,
       messages: [...session.messages, userMessage],
@@ -319,38 +382,34 @@ export function AiChatScreen() {
       void sendChat(prompt);
       return;
     }
-    updateSession(activeSession.id, { query: prompt, workspaceTab: 'chat' });
+    setInputQuery(prompt);
+    setActiveWorkspaceTab('chat');
   };
 
-  const renderHeader = () => (
-    <View style={styles.header}>
-      <View style={styles.headerActions}>
-        <Pressable onPress={createNewSession} style={styles.headerButton}>
-          <Ionicons name="add" size={19} color={colors.navy} />
-        </Pressable>
-        <Pressable onPress={shareConversation} style={styles.headerButton}>
-          <Ionicons name="share-social-outline" size={18} color={colors.navy} />
-        </Pressable>
-        <Pressable onPress={exportConversation} style={styles.headerButton}>
-          <Ionicons name="download-outline" size={18} color={colors.navy} />
-        </Pressable>
-      </View>
-
-      <View style={styles.headerText}>
-        <View style={styles.statusLine}>
-          <Text style={styles.statusText}>{loading ? 'جاري التحليل' : 'متصل'}</Text>
-          <View style={[styles.statusDot, loading && styles.statusDotBusy]} />
+  const renderHero = () => (
+    <HeroSection
+      icon="sparkles-outline"
+      title="المساعد الذكي"
+      subtitle={`${activeSession.name} · ${activeSession.messages.length} رسالة · ${activeSession.sources.length} مرجع`}
+      refreshing={loading}
+      rightElement={
+        <View style={styles.headerActions}>
+          <Pressable onPress={createNewSession} style={styles.headerButton}>
+            <Ionicons name="add" size={19} color={colors.navy} />
+          </Pressable>
+          <Pressable onPress={shareConversation} style={styles.headerButton}>
+            <Ionicons name="share-social-outline" size={18} color={colors.navy} />
+          </Pressable>
+          <Pressable onPress={exportConversation} style={styles.headerButton}>
+            <Ionicons name="download-outline" size={18} color={colors.navy} />
+          </Pressable>
         </View>
-        <Text style={styles.title}>المساعد الذكي</Text>
-        <Text style={styles.subtitle} numberOfLines={1}>
-          {activeSession.name} · {activeSession.messages.length} رسالة · {activeSession.sources.length} مرجع
-        </Text>
-      </View>
-    </View>
+      }
+    />
   );
 
   const renderSessions = () => (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sessions}>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sessions} style={styles.sessionScroll}>
       {sessions.map((session) => {
         const selected = session.id === activeSession.id;
         return (
@@ -359,9 +418,13 @@ export function AiChatScreen() {
               <Text style={[styles.sessionChipTitle, selected && styles.sessionChipTitleActive]} numberOfLines={1}>
                 {session.name}
               </Text>
-              <Text style={[styles.sessionChipMeta, selected && styles.sessionChipMetaActive]}>
-                {session.messages.length} / {session.sources.length}
-              </Text>
+              <View style={styles.sessionMetaRow}>
+                <Text style={[styles.sessionChipMeta, selected && styles.sessionChipMetaActive]}>
+                  {session.messages.length} رسالة
+                </Text>
+                {session.sources.length > 0 && <View style={[styles.metaDot, selected && styles.metaDotActive]} />}
+                {session.sources.length > 0 && <Text style={[styles.sessionChipMeta, selected && styles.sessionChipMetaActive]}>{session.sources.length} مرجع</Text>}
+              </View>
             </View>
             {selected ? (
               <Pressable onPress={() => closeSession(session.id)} style={styles.sessionClose}>
@@ -449,17 +512,7 @@ export function AiChatScreen() {
         />
       ))}
 
-      {loading ? (
-        <View style={styles.typingRow}>
-          <View style={styles.assistantAvatar}>
-            <Ionicons name="sparkles-outline" size={17} color={colors.gold} />
-          </View>
-          <View style={styles.typingBubble}>
-            <ActivityIndicator color={colors.gold} />
-            <Text style={styles.typingText}>المساعد يكتب</Text>
-          </View>
-        </View>
-      ) : null}
+      {loading ? <TypingIndicator /> : null}
     </View>
   );
 
@@ -522,10 +575,10 @@ export function AiChatScreen() {
         <OverviewTile label="الحالة" value={getSessionStatus(activeSession)} />
       </View>
 
-      <View style={styles.summaryCard}>
+      <Card style={styles.summaryCard}>
         <Text style={styles.summaryTitle}>إجمالي العمل</Text>
         <Text style={styles.summaryText}>{sessions.length} جلسات · {totals.messages} رسائل · {totals.sources} مراجع</Text>
-      </View>
+      </Card>
 
       {sessions.map((session) => (
         <Pressable key={session.id} onPress={() => setActiveSessionId(session.id)} style={styles.sessionRow}>
@@ -556,7 +609,7 @@ export function AiChatScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadIntelligence} tintColor={colors.navy} />}
         contentContainerStyle={styles.content}
       >
-        {renderHeader()}
+        {renderHero()}
         {renderSessions()}
         {renderTabs()}
         {renderActivePanel()}
@@ -566,15 +619,15 @@ export function AiChatScreen() {
         {renderTonePicker()}
         <View style={styles.composer}>
           <TextInput
-            value={activeSession.query}
-            onChangeText={setQuery}
-            placeholder="اكتب سؤالاً أو الصق نصاً للمراجعة..."
+            value={inputQuery}
+            onChangeText={setInputQuery}
+            placeholder={loading ? "جاري المعالجة..." : "اكتب سؤالاً أو الصق نصاً..."}
             placeholderTextColor={colors.subtle}
             multiline
             style={styles.input}
             textAlign="right"
           />
-          <Pressable disabled={!activeSession.query.trim() || loading} onPress={() => sendChat()} style={[styles.sendButton, (!activeSession.query.trim() || loading) && styles.sendButtonDisabled]}>
+          <Pressable disabled={!inputQuery.trim() || loading} onPress={() => sendChat()} style={[styles.sendButton, (!inputQuery.trim() || loading) && styles.sendButtonDisabled]}>
             {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="paper-plane" size={19} color="#fff" />}
           </Pressable>
         </View>
@@ -586,16 +639,14 @@ export function AiChatScreen() {
 
 function Badge({ label }: { label: string }) {
   return (
-    <View style={styles.badge}>
-      <Text style={styles.badgeText}>{label}</Text>
-    </View>
+    <Pill label={label} tone="blue" />
   );
 }
 
 function PanelHeader({ title, note, count }: { title: string; note?: string; count?: string }) {
   return (
     <View style={styles.panelHeader}>
-      {count ? <Badge label={count} /> : <View />}
+      {count ? <Pill label={count} tone="blue" /> : <View />}
       <View style={styles.panelTitleWrap}>
         <Text style={styles.panelTitle}>{title}</Text>
         {note ? <Text style={styles.panelNote}>{note}</Text> : null}
@@ -604,8 +655,48 @@ function PanelHeader({ title, note, count }: { title: string; note?: string; cou
   );
 }
 
-function MessageBubble({ message, copied, onCopy, onSources }: { message: Message; copied: boolean; onCopy: () => void; onSources: () => void }) {
+const MessageBubble = React.memo(({ message, copied, onCopy, onSources }: { message: Message; copied: boolean; onCopy: () => void; onSources: () => void }) => {
   const isUser = message.role === 'user';
+
+  const renderMarkdownContent = (content: string, isUser: boolean) => {
+    const elements: React.ReactNode[] = [];
+    const lines = content.split('\n');
+
+    lines.forEach((line, index) => {
+      const key = `line-${index}`;
+      // Handle list items
+      if (line.startsWith('- ') || line.startsWith('* ')) {
+        const listItemText = line.substring(2).trim();
+        elements.push(
+          <View key={key} style={styles.listItemContainer}>
+            <Text style={[styles.messageText, isUser && styles.userMessageText, styles.listItemBullet]}>•</Text>
+            <Text style={[styles.messageText, isUser && styles.userMessageText, styles.listItemText]}>{listItemText}</Text>
+          </View>
+        );
+      } else {
+        // Handle bold text within a regular line
+        const boldRegex = /(\*\*([^*]+)\*\*|__([^_]+)__)/g;
+        let lastIndex = 0;
+        let match;
+        const lineParts: React.ReactNode[] = [];
+
+        while ((match = boldRegex.exec(line)) !== null) {
+          if (match.index > lastIndex) {
+            lineParts.push(<Text key={`text-${index}-${lastIndex}`}>{line.substring(lastIndex, match.index)}</Text>);
+          }
+          const boldText = match[2] || match[3];
+          lineParts.push(<Text key={`bold-${index}-${match.index}`} style={styles.boldText}>{boldText}</Text>);
+          lastIndex = boldRegex.lastIndex;
+        }
+
+        if (lastIndex < line.length) {
+          lineParts.push(<Text key={`text-end-${index}-${lastIndex}`}>{line.substring(lastIndex)}</Text>);
+        }
+        elements.push(<Text key={key} style={[styles.messageText, isUser && styles.userMessageText]}>{lineParts}</Text>);
+      }
+    });
+    return elements;
+  };
 
   return (
     <View style={[styles.messageRow, isUser && styles.messageRowUser]}>
@@ -617,8 +708,8 @@ function MessageBubble({ message, copied, onCopy, onSources }: { message: Messag
 
       <View style={[styles.messageWrap, isUser && styles.messageWrapUser]}>
         <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-          <Text style={[styles.messageText, isUser && styles.userMessageText]}>{message.content}</Text>
-          {!isUser && message.sources?.length ? (
+          {renderMarkdownContent(message.content, isUser)}
+          {!isUser && (message.sources?.length ?? 0) > 0 ? (
             <Pressable onPress={onSources} style={styles.sourcesButton}>
               <Ionicons name="book-outline" size={14} color={colors.navy} />
               <Text style={styles.sourcesButtonText}>عرض {message.sources.length} مراجع</Text>
@@ -637,17 +728,19 @@ function MessageBubble({ message, copied, onCopy, onSources }: { message: Messag
       </View>
     </View>
   );
-}
+});
 
 function PromptButton({ title, note, highlighted, onPress }: { title: string; note?: string; highlighted?: boolean; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.promptButton, highlighted && styles.promptButtonHighlighted]}>
-      <Ionicons name="chevron-back-outline" size={17} color={highlighted ? colors.gold : colors.navy} />
-      <View style={styles.promptTextWrap}>
-        <Text style={styles.promptTitle}>{title}</Text>
-        {note ? <Text style={styles.promptNote}>{note}</Text> : null}
-      </View>
-    </Pressable>
+    <Card style={[styles.promptButton, highlighted && styles.promptButtonHighlighted]}>
+      <Pressable onPress={onPress} style={styles.promptButtonPressable}>
+        <Ionicons name="chevron-back-outline" size={17} color={highlighted ? colors.gold : colors.navy} />
+        <View style={styles.promptTextWrap}>
+          <Text style={styles.promptTitle}>{title}</Text>
+          {note ? <Text style={styles.promptNote}>{note}</Text> : null}
+        </View>
+      </Pressable>
+    </Card>
   );
 }
 
@@ -664,13 +757,6 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 14,
   },
-  header: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
   headerActions: {
     flexDirection: 'row',
     gap: 8,
@@ -679,64 +765,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    height: 38,
+    height: 40,
     justifyContent: 'center',
-    width: 38,
-  },
-  headerText: {
-    alignItems: 'flex-end',
-    flex: 1,
-  },
-  statusLine: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  statusText: {
-    color: colors.green,
-    fontSize: 11,
-    fontWeight: '900',
-  },
-  statusDot: {
-    backgroundColor: colors.green,
-    borderRadius: 999,
-    height: 7,
-    width: 7,
-  },
-  statusDotBusy: {
-    backgroundColor: colors.gold,
-  },
-  title: {
-    color: colors.ink,
-    fontSize: 25,
-    fontWeight: '900',
-    marginTop: 2,
-    textAlign: 'right',
-  },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 12,
-    fontWeight: '800',
-    marginTop: 3,
-    textAlign: 'right',
+    width: 40,
   },
   sessions: {
     gap: 8,
-    paddingBottom: 2,
+    paddingBottom: 4,
+  },
+  sessionScroll: {
+    marginTop: 12,
   },
   sessionChip: {
     alignItems: 'center',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     gap: 8,
-    minWidth: 132,
-    paddingHorizontal: 11,
-    paddingVertical: 9,
+    minWidth: 130,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.5,
+    shadowRadius: 4,
   },
   sessionChipActive: {
     backgroundColor: colors.navy,
@@ -755,14 +811,28 @@ const styles = StyleSheet.create({
   sessionChipTitleActive: {
     color: '#fff',
   },
+  sessionMetaRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 3,
+  },
   sessionChipMeta: {
     color: colors.muted,
     fontSize: 10,
     fontWeight: '800',
-    marginTop: 3,
   },
   sessionChipMetaActive: {
     color: 'rgba(255,255,255,0.72)',
+  },
+  metaDot: {
+    width: 3,
+    height: 3,
+    borderRadius: 99,
+    backgroundColor: colors.subtle,
+  },
+  metaDotActive: {
+    backgroundColor: 'rgba(255,255,255,0.4)',
   },
   sessionClose: {
     alignItems: 'center',
@@ -774,20 +844,20 @@ const styles = StyleSheet.create({
   },
   tabs: {
     backgroundColor: colors.tint,
-    borderRadius: 8,
+    borderRadius: 14,
     flexDirection: 'row-reverse',
     gap: 4,
-    marginTop: 12,
+    marginTop: 14,
     padding: 4,
   },
   tab: {
     alignItems: 'center',
-    borderRadius: 7,
+    borderRadius: 10,
     flex: 1,
     flexDirection: 'row-reverse',
     gap: 4,
     justifyContent: 'center',
-    minHeight: 38,
+    minHeight: 40,
   },
   tabActive: {
     backgroundColor: colors.navy,
@@ -822,11 +892,15 @@ const styles = StyleSheet.create({
   promptPill: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
-    minHeight: 62,
-    padding: 11,
+    minHeight: 64,
+    padding: 12,
     width: 190,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
   },
   promptPillText: {
     color: colors.ink,
@@ -898,18 +972,31 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
   },
   messageBubble: {
-    borderRadius: 8,
+    borderRadius: 20,
     maxWidth: '92%',
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 5,
   },
   assistantBubble: {
     backgroundColor: colors.paper,
-    borderColor: colors.line,
+    borderColor: colors.goldTint,
     borderWidth: 1,
+    borderBottomRightRadius: 4,
   },
   userBubble: {
     backgroundColor: colors.navy,
+    borderBottomLeftRadius: 4,
+    shadowColor: colors.navy,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
   },
   messageText: {
     color: colors.ink,
@@ -982,6 +1069,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '800',
   },
+  dotContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
   panelHeader: {
     alignItems: 'flex-start',
     flexDirection: 'row',
@@ -1020,10 +1113,14 @@ const styles = StyleSheet.create({
   sourceCard: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
-    marginBottom: 10,
-    padding: 13,
+    marginBottom: 12,
+    padding: 14,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
   },
   sourceTop: {
     alignItems: 'flex-start',
@@ -1070,19 +1167,19 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   promptButton: {
+    marginBottom: 12,
+    padding: 0,
+    overflow: 'hidden',
+  },
+  promptButtonPressable: {
+    padding: 14,
     alignItems: 'center',
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
     flexDirection: 'row',
     gap: 10,
-    marginBottom: 8,
-    padding: 13,
   },
   promptButtonHighlighted: {
-    backgroundColor: '#fffbeb',
-    borderColor: '#f6d084',
+    backgroundColor: colors.goldTint,
+    borderColor: colors.gold,
   },
   promptTextWrap: {
     alignItems: 'flex-end',
@@ -1109,7 +1206,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     flex: 1,
     padding: 12,
@@ -1128,12 +1225,8 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   summaryCard: {
-    backgroundColor: colors.surface,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
     marginTop: 10,
-    padding: 13,
+    backgroundColor: colors.surface,
   },
   summaryTitle: {
     color: colors.ink,
@@ -1217,11 +1310,15 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     gap: 9,
     padding: 8,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: -4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
   },
   input: {
     color: colors.ink,
@@ -1249,5 +1346,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginTop: 6,
     textAlign: 'center',
+  },
+  boldText: {
+    fontWeight: '900', // Use '900' for extra bold in Arabic fonts if available, otherwise 'bold'
+  },
+  listItemContainer: {
+    flexDirection: 'row-reverse', // For RTL list items
+    alignItems: 'flex-start',
+    marginVertical: 2,
+  },
+  listItemBullet: {
+    marginRight: 5, // Space between bullet and text
+  },
+  listItemText: {
+    flex: 1, // Allow text to wrap
   },
 });
