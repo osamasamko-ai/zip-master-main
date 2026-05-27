@@ -21,10 +21,10 @@ export function SectionTitle({ title, action }: { title: string; action?: string
 
 export function EmptyState({ title, note }: { title: string; note?: string }) {
   return (
-    <Card>
+    <View style={styles.emptyCard}>
       <Text style={styles.emptyTitle}>{title}</Text>
       {note ? <Text style={styles.emptyNote}>{note}</Text> : null}
-    </Card>
+    </View>
   );
 }
 
@@ -116,15 +116,18 @@ export const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: colors.canvas,
-    padding: 18,
+    paddingHorizontal: 16,
+    paddingTop: 14,
+    paddingBottom: 10,
   },
   heading: {
-    marginBottom: 16,
+    marginBottom: 14,
   },
   title: {
     color: colors.ink,
-    fontSize: 28,
-    fontWeight: '800',
+    fontSize: 25,
+    fontWeight: '900',
+    lineHeight: 34,
     textAlign: 'right',
   },
   subtitle: {
@@ -139,8 +142,8 @@ export const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
-    marginBottom: 12,
-    padding: 14,
+    marginBottom: 10,
+    padding: 13,
   },
   sectionTitle: {
     alignItems: 'center',
@@ -166,6 +169,16 @@ export const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'right',
   },
+  emptyCard: {
+    alignItems: 'flex-end',
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    marginBottom: 10,
+    padding: 16,
+  },
   emptyNote: {
     color: colors.muted,
     lineHeight: 22,
@@ -179,19 +192,19 @@ export const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   pillNeutral: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
   },
   pillGold: {
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
   },
   pillGreen: {
-    backgroundColor: '#e9f8ef',
+    backgroundColor: colors.greenTint,
   },
   pillRed: {
-    backgroundColor: '#fff1f0',
+    backgroundColor: colors.redTint,
   },
   pillBlue: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
   },
   pillText: {
     color: colors.muted,
@@ -227,12 +240,12 @@ export const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.navy,
     borderRadius: 8,
-    minHeight: 48,
+    minHeight: 50,
     justifyContent: 'center',
     paddingHorizontal: 16,
   },
   secondaryButton: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
   },
   buttonText: {
     color: '#fff',
@@ -248,9 +261,9 @@ export const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     color: colors.ink,
-    fontSize: 16,
-    minHeight: 50,
-    marginBottom: 10,
+    fontSize: 15,
+    minHeight: 52,
+    marginBottom: 9,
     paddingHorizontal: 14,
     textAlign: 'right',
   },

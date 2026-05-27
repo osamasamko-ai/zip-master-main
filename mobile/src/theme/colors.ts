@@ -1,6 +1,7 @@
 export const colors = {
   ink: '#101828',
   muted: '#667085',
+  subtle: '#98a2b3',
   line: '#e4e7ec',
   paper: '#ffffff',
   canvas: '#f6f7f9',
@@ -9,5 +10,9 @@ export const colors = {
   green: '#157f3b',
   red: '#b42318',
   blue: '#175cd3',
+  tint: '#eef2f6',
+  goldTint: '#fff6df',
+  greenTint: '#e9f8ef',
+  redTint: '#fff1f0',
+  blueTint: '#eff6ff',
 };
-

@@ -109,7 +109,9 @@ function Shell() {
           const isActive = activeRoute === tab.key;
           return (
             <Pressable key={tab.key} onPress={() => setActiveRoute(tab.key)} style={styles.tab}>
-              <Ionicons name={tab.icon} size={22} color={isActive ? colors.gold : colors.muted} />
+              <View style={[styles.tabIconWrap, isActive && styles.activeTabIconWrap]}>
+                <Ionicons name={tab.icon} size={20} color={isActive ? colors.navy : colors.muted} />
+              </View>
               <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]}>{tab.label}</Text>
             </Pressable>
           );
@@ -206,21 +208,34 @@ const styles = StyleSheet.create({
     borderTopColor: colors.line,
     borderTopWidth: 1,
     flexDirection: 'row-reverse',
-    paddingBottom: 6,
-    paddingTop: 8,
+    paddingBottom: 8,
+    paddingHorizontal: 6,
+    paddingTop: 7,
   },
   tab: {
     alignItems: 'center',
     flex: 1,
-    gap: 3,
+    gap: 2,
+    minHeight: 52,
+  },
+  tabIconWrap: {
+    alignItems: 'center',
+    borderRadius: 999,
+    height: 30,
+    justifyContent: 'center',
+    width: 42,
+  },
+  activeTabIconWrap: {
+    backgroundColor: colors.goldTint,
   },
   tabLabel: {
     color: colors.muted,
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
   },
   activeTabLabel: {
-    color: colors.gold,
+    color: colors.navy,
+    fontWeight: '900',
   },
   topBar: {
     alignItems: 'center',
@@ -229,13 +244,18 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    minHeight: 50,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
   },
   backButton: {
     alignItems: 'center',
+    backgroundColor: colors.tint,
+    borderRadius: 8,
     flexDirection: 'row-reverse',
     gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
   },
   backText: {
     color: colors.navy,
