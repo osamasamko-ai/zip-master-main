@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { Button, EmptyState, Screen, SkeletonCard, Toast } from '../components/ui';
+import { HeroSection } from '../components/ui/HeroSection';
 import { colors } from '../theme/colors';
 
 type AdminTab = 'overview' | 'users' | 'cases' | 'resources' | 'roles' | 'financials' | 'contracts' | 'kyc' | 'support' | 'settings' | 'compliance' | 'system';
@@ -281,15 +282,13 @@ export function AdminScreen() {
   return (
     <Screen>
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(false)} />} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <View style={styles.heroTop}>
-            <View style={styles.heroIcon}><Ionicons name="server-outline" size={22} color="#fff" /></View>
-            <View style={styles.flex}>
-              <Text style={styles.kicker}>Admin Command Center</Text>
-              <Text style={styles.title}>مركز الإدارة التشغيلي</Text>
-              <Text style={styles.subtitle}>اعتمادات، مستخدمون، قضايا، محتوى، أموال، امتثال، وصحة النظام بتجربة مناسبة للجوال.</Text>
-            </View>
-          </View>
+        <HeroSection
+          icon="scale-outline"
+          kicker="Admin Command Center"
+          title="مركز الإدارة التشغيلي"
+          subtitle="اعتمادات، مستخدمون، قضايا، محتوى، أموال، امتثال، وصحة النظام بتجربة مناسبة للجوال."
+        // refreshing={refreshing}
+        >
           <View style={styles.commandGrid}>
             <QuickAction icon="id-card-outline" label="KYC" count={pendingKyc.length} onPress={() => openTab('kyc', 'pending')} />
             <QuickAction icon="headset-outline" label="تصعيد" count={escalatedTickets.length} onPress={() => openTab('support', 'escalated')} />
@@ -297,7 +296,7 @@ export function AdminScreen() {
             <QuickAction icon="sync-outline" label="مزامنة" count={0} onPress={() => load(false)} />
           </View>
           <Text style={styles.lastUpdated}>آخر تحديث {lastUpdated.toLocaleTimeString('ar-IQ', { hour: '2-digit', minute: '2-digit' })}</Text>
-        </View>
+        </HeroSection>
 
         <Toast message={status} tone={status.includes('تعذر') || status.includes('أدخل') || status.includes('لا يوجد') ? 'error' : status.includes('تم') ? 'success' : 'info'} />
 
@@ -410,16 +409,16 @@ export function AdminScreen() {
         ) : null}
         {filteredUsers.slice(0, 40).map((item) => (
           <Pressable key={item.id} onPress={() => setSelectedUserId(item.id)}>
-          <Card title={item.name || 'مستخدم'} note={`${item.email || ''} · ${item.location || item.specialty || 'بدون موقع'}`}>
-            <View style={styles.rowWrap}>
-              <Status label={item.role || 'user'} tone={item.role === 'admin' ? 'red' : item.role === 'pro' ? 'blue' : 'green'} />
-              {item.blocked ? <Status label="محظور" tone="red" /> : <Status label="نشط" tone="green" />}
-            </View>
-            <View style={styles.actions}>
-              <Button title="تغيير الدور" variant="secondary" loading={busy === `role-${item.id}`} onPress={() => run(`role-${item.id}`, () => apiClient.updateAdminUserRole(item.id, nextRole(item.role)), 'تم تغيير الدور.')} />
-              <Button title={item.blocked ? 'إلغاء الحظر' : 'حظر'} variant="secondary" loading={busy === `block-${item.id}`} onPress={() => run(`block-${item.id}`, () => apiClient.toggleAdminUserBlock(item.id), 'تم تحديث حالة الوصول.')} />
-            </View>
-          </Card>
+            <Card title={item.name || 'مستخدم'} note={`${item.email || ''} · ${item.location || item.specialty || 'بدون موقع'}`}>
+              <View style={styles.rowWrap}>
+                <Status label={item.role || 'user'} tone={item.role === 'admin' ? 'red' : item.role === 'pro' ? 'blue' : 'green'} />
+                {item.blocked ? <Status label="محظور" tone="red" /> : <Status label="نشط" tone="green" />}
+              </View>
+              <View style={styles.actions}>
+                <Button title="تغيير الدور" variant="secondary" loading={busy === `role-${item.id}`} onPress={() => run(`role-${item.id}`, () => apiClient.updateAdminUserRole(item.id, nextRole(item.role)), 'تم تغيير الدور.')} />
+                <Button title={item.blocked ? 'إلغاء الحظر' : 'حظر'} variant="secondary" loading={busy === `block-${item.id}`} onPress={() => run(`block-${item.id}`, () => apiClient.toggleAdminUserBlock(item.id), 'تم تحديث حالة الوصول.')} />
+              </View>
+            </Card>
           </Pressable>
         ))}
         {filteredUsers.length === 0 ? <EmptyState title="لا يوجد مستخدمون مطابقون" /> : null}
@@ -841,9 +840,6 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   formBlock: { backgroundColor: colors.surface, borderRadius: 8, marginTop: 10, padding: 10 },
   formCard: { backgroundColor: colors.paper, borderColor: colors.blue, borderRadius: 8, borderWidth: 1, marginBottom: 12, padding: 13 },
-  hero: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 8, borderWidth: 1, elevation: 2, marginBottom: 12, padding: 14, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 20 },
-  heroIcon: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 8, height: 44, justifyContent: 'center', width: 44 },
-  heroTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 11 },
   infoIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 36, justifyContent: 'center', width: 36 },
   infoNote: { color: colors.muted, fontSize: 11, fontWeight: '700', lineHeight: 18, marginTop: 3, textAlign: 'right' },
   infoRow: { alignItems: 'center', flexDirection: 'row-reverse', gap: 10, paddingVertical: 9 },

@@ -3,6 +3,7 @@ import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, Vie
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { BottomSheet, Button, Card, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
+import { HeroSection } from '../components/ui/HeroSection';
 import { colors } from '../theme/colors';
 
 type SortMode = 'best' | 'rating' | 'response';
@@ -200,18 +201,31 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
   return (
     <Screen>
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={load} />} showsVerticalScrollIndicator={false}>
-        <View style={styles.heroPanel}>
-          <View style={styles.heroTopRow}>
-            <View style={styles.flex}>
-              <Text style={styles.heroTitle}>المحامون</Text>
-              <Text style={styles.mutedText}>{filteredLawyers.length.toLocaleString('ar-IQ')} نتيجة · {onlineCount.toLocaleString('ar-IQ')} متاح الآن · {verifiedCount.toLocaleString('ar-IQ')} موثق</Text>
-            </View>
-            <Pressable onPress={() => setFiltersOpen((current) => !current)} style={[styles.filterButton, activeFilterCount > 0 && styles.filterButtonActive]}>
-              <Ionicons name="options-outline" size={18} color={activeFilterCount > 0 ? '#fff' : colors.navy} />
+        <HeroSection
+          icon="scale-outline"
+          title="المحامون"
+          subtitle={
+            <Text style={styles.mutedText}>
+              {filteredLawyers.length.toLocaleString('ar-IQ')} نتيجة ·{' '}
+              {onlineCount.toLocaleString('ar-IQ')} متاح الآن ·{' '}
+              {verifiedCount.toLocaleString('ar-IQ')} موثق
+            </Text>
+          }
+          refreshing={refreshing}
+          rightElement={
+            <Pressable
+              onPress={() => setFiltersOpen((current) => !current)}
+              style={[styles.filterButton, activeFilterCount > 0 && styles.filterButtonActive]}
+            >
+              <Ionicons
+                name="options-outline"
+                size={18}
+                color={activeFilterCount > 0 ? '#fff' : colors.navy}
+              />
               {activeFilterCount > 0 ? <Text style={styles.filterButtonBadge}>{activeFilterCount}</Text> : null}
             </Pressable>
-          </View>
-
+          }
+        >
           <View style={styles.searchShell}>
             {query ? (
               <Pressable onPress={() => setQuery('')} style={styles.searchClear}>
@@ -243,7 +257,7 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
               <Text style={[styles.quickFilterText, sortMode === 'rating' && styles.quickFilterTextActive]}>الأعلى تقييماً</Text>
             </Pressable>
           </View>
-        </View>
+        </HeroSection>
 
         {recommendedLawyer ? (
           <Pressable onPress={() => setSelectedLawyerId(recommendedLawyer.id)} style={styles.matchBar}>
@@ -256,27 +270,27 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
         ) : null}
 
         {filtersOpen ? (
-        <Card>
-          <Text style={styles.controlLabel}>التخصص</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {specialties.map((item) => (
-              <FilterChip key={item} label={item} active={specialty === item} onPress={() => setSpecialty(item)} />
-            ))}
-          </ScrollView>
+          <Card>
+            <Text style={styles.controlLabel}>التخصص</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {specialties.map((item) => (
+                <FilterChip key={item} label={item} active={specialty === item} onPress={() => setSpecialty(item)} />
+              ))}
+            </ScrollView>
 
-          <Text style={styles.controlLabel}>ترتيب النتائج</Text>
-          <View style={styles.gridThree}>
-            <FilterChip label="أفضل تطابق" active={sortMode === 'best'} onPress={() => setSortMode('best')} />
-            <FilterChip label="الأعلى تقييماً" active={sortMode === 'rating'} onPress={() => setSortMode('rating')} />
-            <FilterChip label="الأسرع تفاعلاً" active={sortMode === 'response'} onPress={() => setSortMode('response')} />
-          </View>
+            <Text style={styles.controlLabel}>ترتيب النتائج</Text>
+            <View style={styles.gridThree}>
+              <FilterChip label="أفضل تطابق" active={sortMode === 'best'} onPress={() => setSortMode('best')} />
+              <FilterChip label="الأعلى تقييماً" active={sortMode === 'rating'} onPress={() => setSortMode('rating')} />
+              <FilterChip label="الأسرع تفاعلاً" active={sortMode === 'response'} onPress={() => setSortMode('response')} />
+            </View>
 
-          <View style={styles.gridTwo}>
-            <ToggleChip label="الموثقون فقط" active={verifiedOnly} onPress={() => setVerifiedOnly((current) => !current)} />
-            <ToggleChip label="المتاحون الآن" active={onlineOnly} onPress={() => setOnlineOnly((current) => !current)} />
-          </View>
-          <Button title="مسح الفلاتر" onPress={resetFilters} variant="secondary" />
-        </Card>
+            <View style={styles.gridTwo}>
+              <ToggleChip label="الموثقون فقط" active={verifiedOnly} onPress={() => setVerifiedOnly((current) => !current)} />
+              <ToggleChip label="المتاحون الآن" active={onlineOnly} onPress={() => setOnlineOnly((current) => !current)} />
+            </View>
+            <Button title="مسح الفلاتر" onPress={resetFilters} variant="secondary" />
+          </Card>
         ) : null}
 
         {activeFilters.length > 0 ? (
@@ -295,12 +309,13 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
 
         <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
         {loadError ? <EmptyState title="تعذر تحميل المحامين" note={loadError} /> : null}
-        {refreshing && lawyers.length === 0 ? (
-          <>
+        {(refreshing || lawyers.length === 0) && !loadError ? (
+          <View style={styles.skeletonContainer}>
             <SkeletonCard />
             <SkeletonCard />
             <SkeletonCard />
-          </>
+            <SkeletonCard />
+          </View>
         ) : null}
 
         {filteredLawyers.length === 0 && !refreshing ? (
@@ -389,6 +404,7 @@ function LawyerCard({
             <View style={styles.flex}>
               <View style={styles.lawyerTitleRow}>
                 {best ? <View style={styles.bestDot} /> : null}
+                {lawyer.verified ? <Ionicons name="shield-checkmark" size={16} color={colors.blue} /> : null}
                 <Text style={styles.lawyerName} numberOfLines={1}>{lawyer.name}</Text>
               </View>
               <Text style={styles.specialtyLine} numberOfLines={1}>{lawyer.specialty} · {lawyer.location}</Text>
@@ -539,59 +555,59 @@ function ConsultationModal({
 }) {
   return (
     <BottomSheet visible={Boolean(lawyer)} onClose={onCancel}>
-          <ScrollView showsVerticalScrollIndicator={false}>
-            <View style={styles.headerRow}>
-              <Pressable onPress={onCancel} style={styles.closeButton}>
-                <Ionicons name="close" size={18} color={colors.muted} />
-              </Pressable>
-              <View style={styles.flex}>
-                <Text style={styles.kicker}>Consultation Checkout</Text>
-                <Text style={styles.heroTitle}>ابدأ الاستشارة خلال أقل من دقيقة</Text>
-                <Text style={styles.mutedText}>اختر طريقة الدفع، ثم يتم إنشاء المحادثة وتحويلك مباشرة إلى الرسائل.</Text>
-              </View>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        <View style={styles.headerRow}>
+          <Pressable onPress={onCancel} style={styles.closeButton}>
+            <Ionicons name="close" size={18} color={colors.muted} />
+          </Pressable>
+          <View style={styles.flex}>
+            <Text style={styles.kicker}>Consultation Checkout</Text>
+            <Text style={styles.heroTitle}>ابدأ الاستشارة خلال أقل من دقيقة</Text>
+            <Text style={styles.mutedText}>اختر طريقة الدفع، ثم يتم إنشاء المحادثة وتحويلك مباشرة إلى الرسائل.</Text>
+          </View>
+        </View>
+
+        {lawyer ? (
+          <Card>
+            <Text style={styles.cardTitle}>{lawyer.name}</Text>
+            <Text style={styles.mutedText}>{lawyer.specialty}</Text>
+            <Text style={styles.balance}>{lawyer.consultationFee}</Text>
+            <Info label="التأكيد" value="فوري" />
+            <Info label="قناة التواصل" value="محادثة خاصة" />
+            <Info label="اسم الملف" value="استشارة" />
+          </Card>
+        ) : null}
+
+        <Text style={styles.controlLabel}>اختر طريقة الدفع</Text>
+        {paymentMethods.map((method) => (
+          <Pressable key={method.id} onPress={() => onChangePayment(method.id)} style={[styles.paymentOption, paymentMethod === method.id && styles.paymentOptionActive]}>
+            <Ionicons name={method.icon} size={22} color={colors.navy} />
+            <View style={styles.flex}>
+              <Text style={styles.cardTitle}>{method.label}</Text>
+              <Text style={styles.mutedText}>{method.subtitle}</Text>
             </View>
+            {method.recommended ? <Pill label="موصى به" tone="gold" /> : null}
+          </Pressable>
+        ))}
 
-            {lawyer ? (
-              <Card>
-                <Text style={styles.cardTitle}>{lawyer.name}</Text>
-                <Text style={styles.mutedText}>{lawyer.specialty}</Text>
-                <Text style={styles.balance}>{lawyer.consultationFee}</Text>
-                <Info label="التأكيد" value="فوري" />
-                <Info label="قناة التواصل" value="محادثة خاصة" />
-                <Info label="اسم الملف" value="استشارة" />
-              </Card>
-            ) : null}
+        <Text style={styles.controlLabel}>رسالة البدء للمحامي</Text>
+        <TextInput
+          multiline
+          onChangeText={onChangeNote}
+          placeholder="مثال: أحتاج استشارة عاجلة حول عقد إيجار تجاري..."
+          placeholderTextColor={colors.subtle}
+          style={styles.noteInput}
+          value={note}
+        />
 
-            <Text style={styles.controlLabel}>اختر طريقة الدفع</Text>
-            {paymentMethods.map((method) => (
-              <Pressable key={method.id} onPress={() => onChangePayment(method.id)} style={[styles.paymentOption, paymentMethod === method.id && styles.paymentOptionActive]}>
-                <Ionicons name={method.icon} size={22} color={colors.navy} />
-                <View style={styles.flex}>
-                  <Text style={styles.cardTitle}>{method.label}</Text>
-                  <Text style={styles.mutedText}>{method.subtitle}</Text>
-                </View>
-                {method.recommended ? <Pill label="موصى به" tone="gold" /> : null}
-              </Pressable>
-            ))}
+        {error ? <Text style={[styles.status, styles.error]}>{error}</Text> : null}
+        {success ? <Text style={[styles.status, styles.success]}>{success}</Text> : null}
 
-            <Text style={styles.controlLabel}>رسالة البدء للمحامي</Text>
-            <TextInput
-              multiline
-              onChangeText={onChangeNote}
-              placeholder="مثال: أحتاج استشارة عاجلة حول عقد إيجار تجاري..."
-              placeholderTextColor={colors.subtle}
-              style={styles.noteInput}
-              value={note}
-            />
-
-            {error ? <Text style={[styles.status, styles.error]}>{error}</Text> : null}
-            {success ? <Text style={[styles.status, styles.success]}>{success}</Text> : null}
-
-            <View style={styles.actionRow}>
-              <Button title="إلغاء" onPress={onCancel} variant="secondary" />
-              <Button title={loading ? 'جارٍ تأكيد الدفع...' : 'ادفع وابدأ المحادثة'} onPress={onConfirm} loading={loading} />
-            </View>
-          </ScrollView>
+        <View style={styles.actionRow}>
+          <Button title="إلغاء" onPress={onCancel} variant="secondary" />
+          <Button title={loading ? 'جارٍ تأكيد الدفع...' : 'ادفع وابدأ المحادثة'} onPress={onConfirm} loading={loading} />
+        </View>
+      </ScrollView>
     </BottomSheet>
   );
 }
@@ -934,29 +950,10 @@ const styles = StyleSheet.create({
     lineHeight: 31,
     textAlign: 'right',
   },
-  heroIcon: {
-    alignItems: 'center',
-    backgroundColor: colors.goldTint,
-    borderRadius: 8,
-    height: 46,
-    justifyContent: 'center',
-    width: 46,
-  },
-  heroPanel: {
-    backgroundColor: colors.paper,
-    borderRadius: 22,
-    marginBottom: 12,
-    padding: 14,
-  },
   heroStatsRow: {
     flexDirection: 'row-reverse',
     gap: 8,
     marginTop: 12,
-  },
-  heroTopRow: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: 12,
   },
   info: {
     backgroundColor: colors.surface,
@@ -1001,16 +998,23 @@ const styles = StyleSheet.create({
   },
   lawyerCard: {
     backgroundColor: colors.paper,
-    borderRadius: 20,
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
     marginBottom: 10,
     padding: 14,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
   },
   lawyerCardSelected: {
     backgroundColor: '#f7fbff',
+    borderColor: colors.blue,
     shadowColor: colors.navy,
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 10 },
   },
   lawyerName: {
     color: colors.ink,
@@ -1198,7 +1202,7 @@ const styles = StyleSheet.create({
   matchBar: {
     alignItems: 'center',
     backgroundColor: colors.goldTint,
-    borderRadius: 18,
+    borderRadius: 16,
     flexDirection: 'row-reverse',
     gap: 10,
     marginBottom: 12,
@@ -1302,11 +1306,16 @@ const styles = StyleSheet.create({
   searchShell: {
     alignItems: 'center',
     backgroundColor: colors.tint,
-    borderRadius: 999,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: 1,
     flexDirection: 'row',
     gap: 8,
     marginTop: 14,
     paddingHorizontal: 12,
+  },
+  skeletonContainer: {
+    gap: 10,
   },
   smallText: {
     color: colors.muted,

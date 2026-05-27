@@ -3,6 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Linking, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { Button, EmptyState, Screen, SkeletonCard, Toast } from '../components/ui';
+import { HeroSection } from '../components/ui/HeroSection';
 import { colors } from '../theme/colors';
 
 type Tab = 'overview' | 'cases' | 'messages' | 'documents' | 'earnings' | 'operations' | 'account';
@@ -437,22 +438,21 @@ export function ProWorkspaceScreen() {
   return (
     <Screen>
       <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(false)} />} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <View style={styles.heroTop}>
-            <View style={styles.heroAvatar}><Ionicons name="briefcase-outline" size={22} color="#fff" /></View>
-            <View style={styles.flex}>
-              <Text style={styles.kicker}>Professional Workspace</Text>
-              <Text style={styles.title}>مساحة المحامي</Text>
-              <Text style={styles.subtitle}>أهم أعمال اليوم في مكان واحد، مع أوامر سريعة وقوائم مختصرة للجوال.</Text>
-            </View>
-          </View>
+        <HeroSection
+          icon="briefcase-outline"
+          iconColor="#fff"
+          kicker="Professional Workspace"
+          title="مساحة المحامي"
+          subtitle="أهم أعمال اليوم في مكان واحد، مع أوامر سريعة وقوائم مختصرة للجوال."
+        // refreshing={refreshing}
+        >
           <View style={styles.commandGrid}>
             <QuickAction icon="add-circle-outline" label="قضية" onPress={() => { setActiveTab('cases'); setComposer(composer === 'case' ? null : 'case'); }} active={composer === 'case'} />
             <QuickAction icon="calendar-outline" label="موعد" onPress={() => { setActiveTab('operations'); setComposer(composer === 'appointment' ? null : 'appointment'); }} active={composer === 'appointment'} />
             <QuickAction icon="document-attach-outline" label="مستند" onPress={() => { setActiveTab('documents'); setComposer('vault'); uploadVault(); }} active={busy === 'vault'} />
             <QuickAction icon="chatbubble-ellipses-outline" label="رد" onPress={() => { setActiveTab('messages'); setComposer(composer === 'reply' ? null : 'reply'); }} active={composer === 'reply'} />
           </View>
-        </View>
+        </HeroSection>
 
         <Toast message={status} tone={status.includes('تعذر') || status.includes('أدخل') ? 'error' : status.includes('تم') ? 'success' : 'info'} />
 
@@ -491,9 +491,9 @@ export function ProWorkspaceScreen() {
     return (
       <>
         {selectedCase ? (
-        <Card title="الإجراء التالي" note="أعلى ملف يحتاج انتباهك الآن." action="فتح">
-          <CaseCard item={urgentCases[0] || selectedCase} selected={false} timerCaseId={timerCaseId} timerRunning={timerRunning} timerSeconds={timerSeconds} onOpen={() => { setSelectedCaseId((urgentCases[0] || selectedCase).id); setActiveTab('cases'); }} onSelect={() => undefined} onTimer={() => toggleTimer((urgentCases[0] || selectedCase).id)} />
-        </Card>
+          <Card title="الإجراء التالي" note="أعلى ملف يحتاج انتباهك الآن." action="فتح">
+            <CaseCard item={urgentCases[0] || selectedCase} selected={false} timerCaseId={timerCaseId} timerRunning={timerRunning} timerSeconds={timerSeconds} onOpen={() => { setSelectedCaseId((urgentCases[0] || selectedCase).id); setActiveTab('cases'); }} onSelect={() => undefined} onTimer={() => toggleTimer((urgentCases[0] || selectedCase).id)} />
+          </Card>
         ) : <EmptyState title="لا توجد قضايا بعد" note="أنشئ أول قضية من تبويب القضايا." />}
         <Card title="المواعيد القريبة" note={`${appointments.length.toLocaleString('ar-IQ')} موعد`}>
           {appointments.slice(0, 4).map((item: any) => <InfoRow key={item.id} icon="calendar-outline" title={item.title} note={`${item.client} · ${item.time}`} />)}
@@ -919,9 +919,6 @@ const styles = StyleSheet.create({
   filterTextActive: { color: '#fff' },
   flex: { flex: 1 },
   formBlock: { backgroundColor: colors.surface, borderRadius: 8, marginTop: 10, padding: 10 },
-  hero: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 8, borderWidth: 1, elevation: 2, marginBottom: 12, padding: 14, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 20 },
-  heroAvatar: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 8, height: 44, justifyContent: 'center', width: 44 },
-  heroTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 11 },
   iconButton: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   infoIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 36, justifyContent: 'center', width: 36 },
   infoNote: { color: colors.muted, fontSize: 11, fontWeight: '700', lineHeight: 18, marginTop: 3, textAlign: 'right' },
