@@ -73,6 +73,10 @@ class ApiClient {
     return this.request<any[]>(`/api/app/lawyers${query}`);
   }
 
+  getLawyerProfile(id: string) {
+    return this.request<any>(`/api/app/lawyers/${id}`);
+  }
+
   getWorkspaceCases() {
     return this.request<any[]>('/api/app/workspace/cases');
   }

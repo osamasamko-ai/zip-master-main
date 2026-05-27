@@ -152,7 +152,7 @@ function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKe
     case 'admin':
       return <AdminScreen />;
     case 'profile':
-      return <ProfileScreen />;
+      return <ProfileScreen onOpen={setRoute} />;
     case 'home':
     default:
       return <HomeScreen onOpen={setRoute} />;
