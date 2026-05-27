@@ -77,13 +77,13 @@ applyDefaultFont(TextInput);
 type TabKey = 'home' | 'lawyers' | 'cases' | 'ai' | 'messages' | 'more';
 type RouteKey = TabKey | MoreRoute | 'profile';
 
-const tabs: Array<{ key: TabKey; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
-  { key: 'home', label: 'الرئيسية', icon: 'home-outline' },
-  { key: 'lawyers', label: 'المحامين', icon: 'people-outline' },
-  { key: 'cases', label: 'القضايا', icon: 'briefcase-outline' },
-  { key: 'ai', label: 'الذكاء', icon: 'sparkles-outline' },
-  { key: 'messages', label: 'الرسائل', icon: 'chatbubbles-outline' },
-  { key: 'more', label: 'المزيد', icon: 'grid-outline' },
+const tabs: Array<{ key: TabKey; label: string; icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap }> = [
+  { key: 'home', label: 'الرئيسية', icon: 'home-outline', activeIcon: 'home' },
+  { key: 'lawyers', label: 'المحامين', icon: 'people-outline', activeIcon: 'people' },
+  { key: 'cases', label: 'القضايا', icon: 'briefcase-outline', activeIcon: 'briefcase' },
+  { key: 'ai', label: 'الذكاء', icon: 'sparkles-outline', activeIcon: 'sparkles' },
+  { key: 'messages', label: 'الرسائل', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles' },
+  { key: 'more', label: 'المزيد', icon: 'grid-outline', activeIcon: 'grid' },
 ];
 
 function Shell() {
@@ -108,9 +108,16 @@ function Shell() {
         {tabs.map((tab) => {
           const isActive = activeRoute === tab.key;
           return (
-            <Pressable key={tab.key} onPress={() => setActiveRoute(tab.key)} style={styles.tab}>
+            <Pressable
+              key={tab.key}
+              accessibilityRole="tab"
+              accessibilityState={{ selected: isActive }}
+              hitSlop={6}
+              onPress={() => setActiveRoute(tab.key)}
+              style={({ pressed }) => [styles.tab, isActive && styles.activeTab, pressed && styles.pressedTab]}
+            >
               <View style={[styles.tabIconWrap, isActive && styles.activeTabIconWrap]}>
-                <Ionicons name={tab.icon} size={20} color={isActive ? colors.navy : colors.muted} />
+                <Ionicons name={isActive ? tab.activeIcon : tab.icon} size={isActive ? 21 : 20} color={isActive ? colors.navy : colors.muted} />
               </View>
               <Text style={[styles.tabLabel, isActive && styles.activeTabLabel]}>{tab.label}</Text>
             </Pressable>
@@ -204,34 +211,60 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabBar: {
-    backgroundColor: colors.paper,
-    borderTopColor: colors.line,
+    backgroundColor: 'rgba(255,255,255,0.98)',
+    borderColor: colors.line,
     borderTopWidth: 1,
+    elevation: 14,
     flexDirection: 'row-reverse',
-    paddingBottom: 8,
-    paddingHorizontal: 6,
-    paddingTop: 7,
+    gap: 3,
+    paddingBottom: 9,
+    paddingHorizontal: 8,
+    paddingTop: 8,
+    shadowColor: colors.navy,
+    shadowOffset: { width: 0, height: -8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 18,
   },
   tab: {
     alignItems: 'center',
+    borderRadius: 12,
     flex: 1,
-    gap: 2,
-    minHeight: 52,
+    gap: 3,
+    justifyContent: 'center',
+    minHeight: 56,
+    paddingHorizontal: 2,
+    paddingTop: 2,
+  },
+  activeTab: {
+    backgroundColor: colors.canvas,
+  },
+  pressedTab: {
+    opacity: 0.72,
+    transform: [{ scale: 0.98 }],
   },
   tabIconWrap: {
     alignItems: 'center',
     borderRadius: 999,
-    height: 30,
+    height: 31,
     justifyContent: 'center',
-    width: 42,
+    width: 44,
   },
   activeTabIconWrap: {
+    borderColor: 'rgba(184,137,46,0.2)',
+    borderWidth: 1,
     backgroundColor: colors.goldTint,
+    shadowColor: colors.gold,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
   },
   tabLabel: {
     color: colors.muted,
-    fontSize: 10,
+    fontSize: 10.5,
     fontWeight: '800',
+    lineHeight: 14,
+    maxWidth: 58,
+    textAlign: 'center',
   },
   activeTabLabel: {
     color: colors.navy,
