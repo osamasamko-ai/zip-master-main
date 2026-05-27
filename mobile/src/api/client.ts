@@ -420,6 +420,20 @@ class ApiClient {
     });
   }
 
+  bulkUpdateProCaseStatus(caseIds: string[], status: string) {
+    return this.request<any>('/api/app/pro/workspace/cases/status', {
+      method: 'POST',
+      body: JSON.stringify({ caseIds, status }),
+    });
+  }
+
+  bulkDeleteProCases(caseIds: string[]) {
+    return this.request<any>('/api/app/pro/workspace/cases/delete', {
+      method: 'POST',
+      body: JSON.stringify({ caseIds }),
+    });
+  }
+
   getAdminMetrics() {
     return this.request<any>('/api/admin/metrics');
   }
