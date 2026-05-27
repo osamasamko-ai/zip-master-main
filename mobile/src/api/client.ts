@@ -434,6 +434,27 @@ class ApiClient {
     });
   }
 
+  updateWorkspaceCaseProgress(caseId: string, progress: number) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/progress`, {
+      method: 'PATCH',
+      body: JSON.stringify({ progress }),
+    });
+  }
+
+  updateWorkspaceCasePrivateNote(caseId: string, note: string) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/private-note`, {
+      method: 'PATCH',
+      body: JSON.stringify({ note }),
+    });
+  }
+
+  reviewWorkspaceDocument(caseId: string, documentId: string, status: string, note?: string) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/documents/${documentId}/review`, {
+      method: 'POST',
+      body: JSON.stringify({ status, note }),
+    });
+  }
+
   getAdminMetrics() {
     return this.request<any>('/api/admin/metrics');
   }

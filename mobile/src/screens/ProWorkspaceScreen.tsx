@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Linking, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { Button, EmptyState, Screen, SkeletonCard, Toast } from '../components/ui';
 import { colors } from '../theme/colors';
@@ -10,7 +10,7 @@ type CaseFilter = 'all' | 'urgent' | 'pinned' | 'billing';
 type InboxFilter = 'all' | 'unread' | 'urgent' | 'waiting';
 type VaultFilter = 'all' | 'needs-review' | 'signed' | 'confidential';
 type SavedView = 'today-work' | 'urgent-today' | 'awaiting-reply' | 'needs-review';
-type Composer = 'case' | 'appointment' | 'vault' | 'reply' | null;
+type Composer = 'case' | 'appointment' | 'vault' | 'reply' | 'note' | 'doc-note' | 'workbench' | null;
 
 const tabs: Array<{ id: Tab; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { id: 'overview', label: 'اليوم', icon: 'grid-outline' },
@@ -48,6 +48,9 @@ export function ProWorkspaceScreen() {
   const [timerRunning, setTimerRunning] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [replyDraft, setReplyDraft] = useState('');
+  const [workbenchReply, setWorkbenchReply] = useState('');
+  const [caseNote, setCaseNote] = useState('');
+  const [docReviewNote, setDocReviewNote] = useState('');
   const [aiPrompt, setAiPrompt] = useState(aiSuggestions[0]);
   const [aiResponse, setAiResponse] = useState('اختر أمراً ذكياً لتظهر هنا خلاصة تنفيذية مختصرة.');
   const [newCaseTitle, setNewCaseTitle] = useState('');
@@ -112,6 +115,10 @@ export function ProWorkspaceScreen() {
   const docsReview = docs.filter((item: any) => item.status === 'Needs Review');
   const signedDocs = docs.filter((item: any) => item.status === 'Signed');
   const confidentialDocs = docs.filter((item: any) => item.confidential);
+  const selectedCaseMessages = messages.filter((item: any) => item.caseId === selectedCase?.id || item.caseTitle === selectedCase?.title);
+  const selectedCaseDocs = docs.filter((item: any) => item.caseTitle === selectedCase?.title || item.caseId === selectedCase?.id);
+  const selectedCaseTimeline = timeline.filter((item: any) => !item.caseId || item.caseId === selectedCase?.id || item.caseTitle === selectedCase?.title);
+  const selectedCaseDeadlines = deadlines.filter((item: any) => item.caseId === selectedCase?.id || item.caseTitle === selectedCase?.title);
 
   const filteredCases = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -291,6 +298,127 @@ export function ProWorkspaceScreen() {
     setTimerRunning(true);
   };
 
+  const updateCaseProgress = async (caseId: string, progress: number) => {
+    const normalized = Math.min(100, Math.max(0, progress));
+    setBusy(`progress-${caseId}`);
+    try {
+      await apiClient.updateWorkspaceCaseProgress(caseId, normalized);
+      setWorkspace((current: any) => ({ ...current, cases: cases.map((item: any) => item.id === caseId ? { ...item, progress: normalized } : item) }));
+      setStatus(`تم حفظ نسبة الإنجاز ${normalized}%.`);
+    } catch {
+      setStatus('تعذر حفظ نسبة الإنجاز.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const updateCaseStatus = async (caseId: string, nextStatus: string) => {
+    setBusy(`status-${caseId}`);
+    try {
+      const response = await apiClient.bulkUpdateProCaseStatus([caseId], nextStatus);
+      if (response.data) setWorkspace(response.data);
+      else setWorkspace((current: any) => ({ ...current, cases: cases.map((item: any) => item.id === caseId ? { ...item, status: nextStatus } : item) }));
+      setStatus('تم تحديث حالة القضية.');
+    } catch {
+      setStatus('تعذر تحديث حالة القضية.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const savePrivateNote = async () => {
+    if (!selectedCase) return;
+    setBusy('private-note');
+    try {
+      await apiClient.updateWorkspaceCasePrivateNote(selectedCase.id, caseNote);
+      setWorkspace((current: any) => ({ ...current, cases: cases.map((item: any) => item.id === selectedCase.id ? { ...item, privateNote: caseNote } : item) }));
+      setComposer(null);
+      setStatus('تم حفظ الملاحظة الخاصة.');
+    } catch {
+      setStatus('تعذر حفظ الملاحظة الخاصة.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const sendWorkbenchMessage = async () => {
+    if (!workbenchReply.trim() || !selectedCase) return;
+    setBusy('workbench-reply');
+    try {
+      await apiClient.addCaseMessage(selectedCase.id, workbenchReply.trim(), 'lawyer');
+      setWorkbenchReply('');
+      await load(false);
+      setStatus('تم إرسال التحديث داخل القضية.');
+    } catch {
+      setStatus('تعذر إرسال تحديث القضية.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const reviewDocument = async (doc: any, nextStatus: 'Reviewed' | 'Needs Review') => {
+    const targetCase = cases.find((item: any) => item.id === doc.caseId || item.title === doc.caseTitle) || selectedCase;
+    if (!targetCase) return;
+    setBusy(`doc-review-${doc.id}`);
+    try {
+      await apiClient.reviewWorkspaceDocument(targetCase.id, doc.id, nextStatus, docReviewNote || undefined);
+      setWorkspace((current: any) => ({ ...current, vaultDocs: docs.map((item: any) => item.id === doc.id ? { ...item, status: nextStatus, actionRequired: docReviewNote || null } : item) }));
+      setDocReviewNote('');
+      setComposer(null);
+      setStatus(nextStatus === 'Reviewed' ? 'تمت مراجعة المستند.' : 'تم طلب مراجعة للمستند.');
+    } catch {
+      setStatus('تعذر تحديث حالة المستند.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const openDocument = (doc: any) => {
+    const targetUrl = doc.previewUrl || doc.fileUrl || doc.url;
+    if (targetUrl) Linking.openURL(targetUrl);
+    else setStatus('لا توجد معاينة لهذا المستند.');
+  };
+
+  const shareCaseReport = async () => {
+    if (!selectedCase) return;
+    const report = [
+      `تقرير القضية: ${selectedCase.title}`,
+      `العميل: ${selectedCase.client}`,
+      `الموضوع: ${selectedCase.matter}`,
+      `الحالة: ${selectedCase.status}`,
+      `التقدم: ${selectedCase.progress || 0}%`,
+      `المخاطر: ${selectedCase.riskScore || 0}%`,
+      `الفوترة: ${selectedCase.outstandingInvoice || 0}`,
+    ].join('\n');
+    await Share.share({ title: selectedCase.title, message: report });
+    setStatus('تم تجهيز تقرير القضية للمشاركة.');
+  };
+
+  const requestWithdrawal = () => {
+    if ((summary.availableToWithdraw || 0) <= 0) {
+      setStatus('لا يوجد رصيد متاح للسحب حالياً.');
+      return;
+    }
+    setActiveTab('earnings');
+    setStatus(`طلب السحب جاهز بقيمة ${(summary.availableToWithdraw || 0).toLocaleString('ar-IQ')}.`);
+  };
+
+  const accountAction = (action: 'subscription' | 'payout' | 'profile' | 'invoices') => {
+    if (action === 'payout') {
+      setActiveTab('earnings');
+      setStatus('راجع وسيلة السحب ثم أكد الطلب.');
+      return;
+    }
+    if (action === 'subscription') setStatus('إدارة الاشتراك متاحة من قسم الفوترة في التطبيق/الموقع.');
+    if (action === 'profile') setStatus('انتقل إلى الملف الشخصي لتحسين الظهور العام.');
+    if (action === 'invoices') setStatus('سجل الفواتير يظهر ضمن الأرباح والمعاملات.');
+  };
+
+  const openDeadlineMap = (deadline: any) => {
+    const query = encodeURIComponent(`${deadline.court || ''} ${deadline.governorate || ''}`.trim());
+    if (query) Linking.openURL(`https://www.google.com/maps/search/${query}`);
+  };
+
   const runAi = () => {
     const caseTitle = selectedCase?.title || 'آخر قضية';
     setAiResponse(`خلاصة ذكية: راجع ${caseTitle}، ابدأ بالرسائل المنتظرة (${waitingMessages.length})، ثم وثائق المراجعة (${docsReview.length}). الإجراء المقترح: جدولة متابعة وإرسال رد مختصر للعميل.`);
@@ -375,6 +503,19 @@ export function ProWorkspaceScreen() {
           {timeline.slice(0, 4).map((item: any) => <InfoRow key={item.id} icon="time-outline" title={item.title} note={`${item.date} · ${item.detail}`} />)}
           {timeline.length === 0 ? <EmptyState title="لا يوجد نشاط حديث" /> : null}
         </Card>
+        {selectedCase ? (
+          <Card title="ملف مفتوح سريع" note={`${selectedCase.client} · ${selectedCase.matter}`}>
+            <View style={styles.statsGrid}>
+              <Metric label="رسائل" value={selectedCaseMessages.length} tone="blue" onPress={() => setActiveTab('messages')} />
+              <Metric label="وثائق" value={selectedCaseDocs.length} tone="gold" onPress={() => setActiveTab('documents')} />
+              <Metric label="فوترة" value={selectedCase.outstandingInvoice || 0} tone="green" onPress={() => setActiveTab('earnings')} />
+            </View>
+            <View style={styles.inlineActions}>
+              <Button title="فتح العمل" variant="secondary" onPress={() => { setActiveTab('cases'); setComposer('workbench'); }} />
+              <Button title="تقرير" variant="secondary" onPress={shareCaseReport} />
+            </View>
+          </Card>
+        ) : null}
       </>
     );
   }
@@ -418,17 +559,62 @@ export function ProWorkspaceScreen() {
           </View>
         ) : null}
         {filteredCases.map((item: any) => (
-          <CaseCard
-            key={item.id}
-            item={item}
-            selected={selectedCaseIds.includes(item.id)}
-            timerCaseId={timerCaseId}
-            timerRunning={timerRunning}
-            timerSeconds={timerSeconds}
-            onOpen={() => setSelectedCaseId(item.id)}
-            onSelect={() => setSelectedCaseIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
-            onTimer={() => toggleTimer(item.id)}
-          />
+          <View key={item.id}>
+            <CaseCard
+              item={item}
+              selected={selectedCaseIds.includes(item.id)}
+              timerCaseId={timerCaseId}
+              timerRunning={timerRunning}
+              timerSeconds={timerSeconds}
+              onOpen={() => { setSelectedCaseId(item.id); setCaseNote(item.privateNote || ''); }}
+              onSelect={() => setSelectedCaseIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])}
+              onTimer={() => toggleTimer(item.id)}
+            />
+            {selectedCase?.id === item.id ? (
+              <Card title="مساحة عمل القضية" note="التحكم التفصيلي بدون مغادرة القائمة.">
+                <View style={styles.rowWrap}>
+                  {['Open', 'In Review', 'At Risk', 'Closed'].map((next) => <SmallChip key={next} label={next} active={item.status === next} onPress={() => updateCaseStatus(item.id, next)} />)}
+                </View>
+                <View style={styles.progressPanel}>
+                  <Text style={styles.infoTitle}>التقدم {item.progress || 0}%</Text>
+                  <View style={styles.stepperRow}>
+                    <Button title="-10" variant="secondary" loading={busy === `progress-${item.id}`} onPress={() => updateCaseProgress(item.id, (item.progress || 0) - 10)} />
+                    <Button title="+10" variant="secondary" loading={busy === `progress-${item.id}`} onPress={() => updateCaseProgress(item.id, (item.progress || 0) + 10)} />
+                  </View>
+                </View>
+                <View style={styles.statsGrid}>
+                  <Metric label="مخاطر" value={`${item.riskScore || 0}%`} tone={(item.riskScore || 0) > 70 ? 'red' : 'gold'} />
+                  <Metric label="ساعات" value={item.billableHours || 0} tone="blue" />
+                  <Metric label="مستحق" value={item.outstandingInvoice || 0} tone="green" />
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  <SmallChip label="رد داخل القضية" active={composer === 'workbench'} onPress={() => setComposer(composer === 'workbench' ? null : 'workbench')} />
+                  <SmallChip label="ملاحظة خاصة" active={composer === 'note'} onPress={() => { setCaseNote(item.privateNote || caseNote); setComposer(composer === 'note' ? null : 'note'); }} />
+                  <SmallChip label="مستندات القضية" active={false} onPress={() => setActiveTab('documents')} />
+                  <SmallChip label="الفوترة" active={false} onPress={() => setActiveTab('earnings')} />
+                </ScrollView>
+                {composer === 'workbench' ? (
+                  <View style={styles.formBlock}>
+                    <Field value={workbenchReply} onChangeText={setWorkbenchReply} placeholder="اكتب تحديثاً للعميل داخل القضية" multiline />
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                      {['تمت مراجعة الملف وسأرسل الخطوة التالية.', 'نحتاج مستنداً إضافياً لإكمال الإجراء.', 'تم تحديد موعد المتابعة.'].map((text) => <SmallChip key={text} label={text} active={false} onPress={() => setWorkbenchReply(text)} />)}
+                    </ScrollView>
+                    <Button title="إرسال داخل القضية" loading={busy === 'workbench-reply'} onPress={sendWorkbenchMessage} />
+                  </View>
+                ) : null}
+                {composer === 'note' ? (
+                  <View style={styles.formBlock}>
+                    <Field value={caseNote} onChangeText={setCaseNote} placeholder="ملاحظة داخلية لا تظهر للعميل" multiline />
+                    <Button title="حفظ الملاحظة" loading={busy === 'private-note'} onPress={savePrivateNote} />
+                  </View>
+                ) : null}
+                <Card title="سجل القضية" note={`${selectedCaseTimeline.length.toLocaleString('ar-IQ')} حدث`}>
+                  {selectedCaseTimeline.slice(0, 4).map((entry: any) => <InfoRow key={entry.id} icon={entry.type === 'hearing' ? 'business-outline' : entry.type === 'client' ? 'chatbubbles-outline' : 'document-text-outline'} title={entry.title} note={`${entry.date} · ${entry.detail}`} />)}
+                  {selectedCaseTimeline.length === 0 ? <EmptyState title="لا يوجد سجل مرتبط" /> : null}
+                </Card>
+              </Card>
+            ) : null}
+          </View>
         ))}
         {filteredCases.length === 0 ? <EmptyState title="لا توجد قضايا مطابقة" /> : null}
       </>
@@ -504,6 +690,21 @@ export function ProWorkspaceScreen() {
             </View>
             <Text style={styles.mutedText}>{doc.caseTitle} · {doc.owner} · {doc.size}</Text>
             {doc.confidential ? <Text style={styles.confidential}>سري</Text> : null}
+            {selectedDoc?.id === doc.id ? (
+              <View style={styles.docActions}>
+                <View style={styles.inlineActions}>
+                  <Button title="فتح" variant="secondary" onPress={() => openDocument(doc)} />
+                  <Button title="تمت المراجعة" variant="secondary" loading={busy === `doc-review-${doc.id}`} onPress={() => reviewDocument(doc, 'Reviewed')} />
+                  <Button title="يحتاج تعديل" variant="secondary" loading={busy === `doc-review-${doc.id}`} onPress={() => setComposer(composer === 'doc-note' ? null : 'doc-note')} />
+                </View>
+                {composer === 'doc-note' ? (
+                  <View style={styles.formBlock}>
+                    <Field value={docReviewNote} onChangeText={setDocReviewNote} placeholder="ملاحظة المراجعة" multiline />
+                    <Button title="حفظ طلب التعديل" loading={busy === `doc-review-${doc.id}`} onPress={() => reviewDocument(doc, 'Needs Review')} />
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
           </Pressable>
         ))}
         {filteredDocs.length === 0 ? <EmptyState title="لا توجد وثائق مطابقة" /> : null}
@@ -521,8 +722,12 @@ export function ProWorkspaceScreen() {
           <Metric label="الشهر" value={summary.monthlyEarnings || 0} tone="blue" />
         </View>
         <Card title="وسائل السحب" note="اختيار وسيلة التحويل المفضلة.">
-          {(summary.payoutMethods || []).map((item: any) => <InfoRow key={item.id} icon="wallet-outline" title={item.label} note={item.value} />)}
-          <Button title="طلب سحب" onPress={() => setStatus('طلب السحب جاهز للمراجعة.')} />
+          {(summary.payoutMethods || []).map((item: any) => <InfoRow key={item.id} icon={item.recommended ? 'checkmark-circle-outline' : 'wallet-outline'} title={item.label} note={`${item.value}${item.recommended ? ' · مفضل' : ''}`} />)}
+          <Button title="طلب سحب" onPress={requestWithdrawal} />
+          <View style={styles.inlineActions}>
+            <Button title="قضايا مالية" variant="secondary" onPress={() => { setActiveTab('cases'); setCaseFilter('billing'); }} />
+            <Button title="الحساب" variant="secondary" onPress={() => setActiveTab('account')} />
+          </View>
         </Card>
         <Card title="آخر العمليات" note="الإيرادات والسحوبات.">
           {transactions.map((item: any) => <InfoRow key={item.id} icon={item.type === 'credit' ? 'arrow-down-outline' : 'arrow-up-outline'} title={item.label} note={`${item.amount} · ${item.status} · ${item.date}`} />)}
@@ -557,7 +762,12 @@ export function ProWorkspaceScreen() {
           {tasks.length === 0 ? <EmptyState title="لا توجد مهام فريق" /> : null}
         </Card>
         <Card title="المواعيد والمهل" note={`${deadlines.length.toLocaleString('ar-IQ')} تذكير`}>
-          {deadlines.map((item: any) => <InfoRow key={item.id} icon="alarm-outline" title={item.title} note={`${item.dueDate} · ${item.urgency} · ${item.court}`} />)}
+          {deadlines.map((item: any) => (
+            <View key={item.id} style={styles.deadlineRow}>
+              <InfoRow icon="alarm-outline" title={item.title} note={`${item.dueDate} · ${item.urgency} · ${item.court}`} />
+              <Button title="الخريطة" variant="secondary" onPress={() => openDeadlineMap(item)} />
+            </View>
+          ))}
         </Card>
       </>
     );
@@ -572,6 +782,12 @@ export function ProWorkspaceScreen() {
           <InfoRow icon="people-outline" title="المتابعون" note={`${summary.followers || 0} · ${summary.newFollowersThisWeek || 0} هذا الأسبوع`} />
           <InfoRow icon="briefcase-outline" title="استخدام القضايا" note={`${usage.activeCases || cases.length} / ${usage.caseLimit || '10'}`} />
           <InfoRow icon="sparkles-outline" title="استخدام AI" note={`${usage.aiAssists || 0} / ${usage.aiLimit || '50'}`} />
+          <View style={styles.inlineActions}>
+            <Button title="الاشتراك" variant="secondary" onPress={() => accountAction('subscription')} />
+            <Button title="وسيلة السحب" variant="secondary" onPress={() => accountAction('payout')} />
+            <Button title="الملف العام" variant="secondary" onPress={() => accountAction('profile')} />
+            <Button title="الفواتير" variant="secondary" onPress={() => accountAction('invoices')} />
+          </View>
         </Card>
         <Card title="العملاء" note={`${clients.length.toLocaleString('ar-IQ')} عميل`}>
           {clients.map((client: any) => <InfoRow key={client.id} icon="person-outline" title={client.name} note={`${client.company} · ${client.openCases} ملفات · ${client.status}`} />)}
@@ -691,7 +907,9 @@ const styles = StyleSheet.create({
   commandGrid: { flexDirection: 'row-reverse', gap: 8, marginTop: 14 },
   confidential: { alignSelf: 'flex-end', backgroundColor: colors.redTint, borderRadius: 999, color: colors.red, fontSize: 11, fontWeight: '900', marginTop: 8, overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 },
   content: { paddingBottom: 20 },
+  deadlineRow: { borderBottomColor: colors.line, borderBottomWidth: 1, paddingBottom: 8 },
   docCard: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 8, borderWidth: 1, marginBottom: 10, padding: 12 },
+  docActions: { marginTop: 10 },
   documentSummary: { flexDirection: 'row-reverse', gap: 8, marginBottom: 10 },
   filterChip: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 999, borderWidth: 1, flexDirection: 'row-reverse', gap: 6, minHeight: 36, paddingHorizontal: 11 },
   filterChipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
@@ -700,6 +918,7 @@ const styles = StyleSheet.create({
   filterText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   filterTextActive: { color: '#fff' },
   flex: { flex: 1 },
+  formBlock: { backgroundColor: colors.surface, borderRadius: 8, marginTop: 10, padding: 10 },
   hero: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 8, borderWidth: 1, elevation: 2, marginBottom: 12, padding: 14, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 10 }, shadowOpacity: 1, shadowRadius: 20 },
   heroAvatar: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 8, height: 44, justifyContent: 'center', width: 44 },
   heroTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 11 },
@@ -725,12 +944,14 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 92, paddingTop: 12, textAlignVertical: 'top' },
   mutedText: { color: colors.muted, fontSize: 12, fontWeight: '700', lineHeight: 19, marginTop: 5, textAlign: 'right' },
   progressFill: { backgroundColor: colors.blue, borderRadius: 999, height: '100%' },
+  progressPanel: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 8, borderWidth: 1, marginTop: 10, padding: 10 },
   progressTrack: { backgroundColor: colors.tint, borderRadius: 999, height: 7, marginVertical: 10, overflow: 'hidden' },
   quickAction: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 8, borderWidth: 1, flex: 1, minHeight: 58, justifyContent: 'center', paddingHorizontal: 6 },
   quickActionActive: { backgroundColor: colors.blue, borderColor: colors.blue },
   quickActionText: { color: colors.ink, fontSize: 11, fontWeight: '900', marginTop: 4 },
   quickActionTextActive: { color: '#fff' },
   rowBetween: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+  rowWrap: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 7, marginTop: 8 },
   savedChip: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 8, borderWidth: 1, minWidth: 116, padding: 10 },
   savedChipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
   savedCount: { color: colors.muted, fontSize: 16, fontWeight: '900', marginTop: 3, textAlign: 'right' },
@@ -750,6 +971,7 @@ const styles = StyleSheet.create({
   smallChipText: { color: colors.ink, fontSize: 12, fontWeight: '900' },
   smallChipTextActive: { color: '#fff' },
   statsGrid: { flexDirection: 'row-reverse', gap: 8, marginBottom: 12 },
+  stepperRow: { flexDirection: 'row-reverse', gap: 8, marginTop: 8 },
   statusBadge: { borderRadius: 999, fontSize: 11, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 5 },
   statusBlue: { backgroundColor: colors.blueTint, color: colors.blue },
   statusGold: { backgroundColor: colors.goldTint, color: colors.gold },
