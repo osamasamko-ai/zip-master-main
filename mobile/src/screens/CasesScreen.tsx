@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
-import { Button, EmptyState, Pill, Screen } from '../components/ui';
+import { Button, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
 import { colors } from '../theme/colors';
 
 type WorkspaceTab = 'summary' | 'documents' | 'chat' | 'financials' | 'resolution';
@@ -439,8 +439,14 @@ export function CasesScreen() {
           ))}
         </ScrollView>
 
-        {status ? <Text style={styles.status}>{status}</Text> : null}
-        {refreshing && cases.length === 0 ? <ActivityIndicator color={colors.gold} /> : null}
+        <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
+        {refreshing && cases.length === 0 ? (
+          <>
+            <SkeletonCard />
+            <SkeletonCard lines={2} />
+            <SkeletonCard media />
+          </>
+        ) : null}
 
         {selectedCase ? (
           <>

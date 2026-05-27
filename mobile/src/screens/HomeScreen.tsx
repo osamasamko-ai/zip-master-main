@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
-import { Card, EmptyState, Pill, Screen } from '../components/ui';
+import { Card, EmptyState, Pill, Screen, SkeletonCard } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -426,9 +426,11 @@ export function HomeScreen({ onOpen }: HomeScreenProps) {
         />
 
         {isInitialLoading ? (
-          <Card>
-            <ActivityIndicator color={colors.gold} />
-          </Card>
+          <>
+            <SkeletonCard lines={2} />
+            <SkeletonCard media />
+            <SkeletonCard />
+          </>
         ) : activeTab === 'overview' ? (
           renderOverview()
         ) : activeTab === 'cases' ? (

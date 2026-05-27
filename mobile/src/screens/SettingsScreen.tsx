@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { apiClient } from '../api/client';
-import { Button, Screen } from '../components/ui';
+import { Button, Screen, Toast } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -105,7 +105,7 @@ export function SettingsScreen() {
           ))}
         </View>
 
-        {status ? <Text style={[styles.status, status.includes('تم') && styles.statusSuccess]}>{status}</Text> : null}
+        <Toast message={status} tone={status.includes('تم') ? 'success' : 'error'} />
 
         {activeSection === 'profile' ? (
           <View style={styles.card}>

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
-import { Button, Card, EmptyState, Pill, Screen } from '../components/ui';
+import { BottomSheet, Button, Card, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
 import { colors } from '../theme/colors';
 
 type SortMode = 'best' | 'rating' | 'response';
@@ -293,12 +293,14 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
           </ScrollView>
         ) : null}
 
-        {status ? <Text style={styles.status}>{status}</Text> : null}
+        <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
         {loadError ? <EmptyState title="تعذر تحميل المحامين" note={loadError} /> : null}
         {refreshing && lawyers.length === 0 ? (
-          <Card>
-            <ActivityIndicator color={colors.gold} />
-          </Card>
+          <>
+            <SkeletonCard />
+            <SkeletonCard />
+            <SkeletonCard />
+          </>
         ) : null}
 
         {filteredLawyers.length === 0 && !refreshing ? (
@@ -536,9 +538,7 @@ function ConsultationModal({
   onConfirm: () => void;
 }) {
   return (
-    <Modal animationType="slide" transparent visible={Boolean(lawyer)} onRequestClose={onCancel}>
-      <View style={styles.modalBackdrop}>
-        <View style={styles.modalPanel}>
+    <BottomSheet visible={Boolean(lawyer)} onClose={onCancel}>
           <ScrollView showsVerticalScrollIndicator={false}>
             <View style={styles.headerRow}>
               <Pressable onPress={onCancel} style={styles.closeButton}>
@@ -592,9 +592,7 @@ function ConsultationModal({
               <Button title={loading ? 'جارٍ تأكيد الدفع...' : 'ادفع وابدأ المحادثة'} onPress={onConfirm} loading={loading} />
             </View>
           </ScrollView>
-        </View>
-      </View>
-    </Modal>
+    </BottomSheet>
   );
 }
 

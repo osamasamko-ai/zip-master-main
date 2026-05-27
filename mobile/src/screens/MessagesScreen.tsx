@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
-import { Button, Card, EmptyState, Pill, Screen } from '../components/ui';
+import { Button, Card, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -312,7 +312,11 @@ export function MessagesScreen() {
           ) : null}
 
           {initialLoading ? (
-            <Card><ActivityIndicator color={colors.gold} /></Card>
+            <>
+              <SkeletonCard />
+              <SkeletonCard />
+              <SkeletonCard />
+            </>
           ) : filteredConversations.length === 0 ? (
             <EmptyState title="لا توجد نتائج تطابق بحثك" note="جرّب تغيير الفلتر أو البحث باسم آخر." />
           ) : (
@@ -526,12 +530,7 @@ export function MessagesScreen() {
                   />
                   {draft ? <Text style={styles.draftCount}>{draft.length.toLocaleString('ar-IQ')}</Text> : null}
                 </View>
-                {status ? (
-                  <View style={styles.statusPill}>
-                    <Ionicons name={status.includes('تعذر') ? 'alert-circle-outline' : 'checkmark-circle-outline'} size={14} color={status.includes('تعذر') ? colors.red : colors.green} />
-                    <Text style={[styles.status, status.includes('تعذر') && styles.statusError]}>{status}</Text>
-                  </View>
-                ) : null}
+                <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
               </View>
             </>
           ) : (

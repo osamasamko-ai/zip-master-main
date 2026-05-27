@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { apiClient } from '../api/client';
-import { EmptyState, Screen } from '../components/ui';
+import { EmptyState, Screen, SkeletonCard } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -221,10 +221,9 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
   if (loading && !profile) {
     return (
       <Screen>
-        <View style={styles.loadingState}>
-          <ActivityIndicator color={colors.gold} />
-          <Text style={styles.loadingText}>جاري تحميل الملف...</Text>
-        </View>
+        <SkeletonCard media />
+        <SkeletonCard />
+        <SkeletonCard lines={2} />
       </Screen>
     );
   }

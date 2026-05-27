@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
-import { Button, EmptyState, Pill, Screen } from '../components/ui';
+import { BottomSheet, Button, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -317,7 +317,7 @@ export function FeedScreen() {
           </View>
         </View>
 
-        {status ? <Text style={styles.status}>{status}</Text> : null}
+        <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
 
         {canCreate ? (
           <View style={styles.composer}>
@@ -405,7 +405,13 @@ export function FeedScreen() {
           </ScrollView>
         ) : null}
 
-        {refreshing && posts.length === 0 ? <ActivityIndicator color={colors.gold} /> : null}
+        {refreshing && posts.length === 0 ? (
+          <>
+            <SkeletonCard media />
+            <SkeletonCard />
+            <SkeletonCard media />
+          </>
+        ) : null}
         {!refreshing && sortedPosts.length === 0 ? <EmptyState title="لا توجد منشورات حالياً" note="جرّب فلتر آخر أو عد لاحقاً لمتابعة محتوى قانوني موثوق." /> : null}
 
         {sortedPosts.map((post, index) => (
@@ -593,13 +599,10 @@ function CommentModal({ postId, comment, loading, onChange, onClose, onSubmit }:
 
 function EditModal({ post, content, loading, onChange, onClose, onSubmit }: any) {
   return (
-    <Modal transparent animationType="slide" visible={Boolean(post)} onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}><View style={styles.modalPanel}>
-        <Text style={styles.modalTitle}>تعديل المنشور</Text>
+    <BottomSheet visible={Boolean(post)} title="تعديل المنشور" onClose={onClose}>
         <TextInput multiline value={content} onChangeText={onChange} placeholder="نص المنشور" placeholderTextColor="#98a2b3" style={styles.modalInput} />
         <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="حفظ" loading={loading} onPress={onSubmit} /></View>
-      </View></View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
@@ -613,15 +616,12 @@ function StoryModal({ story, onClose }: { story: any | null; onClose: () => void
 
 function ConsultationModal({ post, note, paymentMethod, loading, onChangeNote, onChangePayment, onClose, onSubmit }: any) {
   return (
-    <Modal transparent animationType="slide" visible={Boolean(post)} onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}><View style={styles.modalPanel}>
-        <Text style={styles.modalTitle}>بدء استشارة من المنشور</Text>
+    <BottomSheet visible={Boolean(post)} title="بدء استشارة من المنشور" onClose={onClose}>
         <Text style={styles.mutedText}>{post?.author?.name} · {post?.author?.consultationFee || 'سعر غير محدد'}</Text>
         {paymentMethods.map((method) => <Pressable key={method.id} onPress={() => onChangePayment(method.id)} style={[styles.paymentItem, paymentMethod === method.id && styles.paymentItemActive]}><Ionicons name={method.icon} size={20} color={colors.navy} /><View style={styles.flex}><Text style={styles.cardTitle}>{method.label}</Text><Text style={styles.mutedText}>{method.subtitle}</Text></View></Pressable>)}
         <TextInput multiline value={note} onChangeText={onChangeNote} placeholder="ملاحظة للمحامي" placeholderTextColor="#98a2b3" style={styles.modalInput} />
         <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="ابدأ الاستشارة" loading={loading} onPress={onSubmit} /></View>
-      </View></View>
-    </Modal>
+    </BottomSheet>
   );
 }
 
