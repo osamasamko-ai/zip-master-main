@@ -19,12 +19,25 @@ type ApiEnvelope<T> = {
 };
 
 const fallbackApiUrl = 'http://127.0.0.1:3000';
+const defaultCacheTtlMs = 20_000;
+const staleCacheTtlMs = 5 * 60_000;
+
+type CacheEntry = {
+  payload: ApiEnvelope<any>;
+  timestamp: number;
+};
 
 class ApiClient {
   private token: string | null = null;
   private baseUrl = process.env.EXPO_PUBLIC_API_URL || fallbackApiUrl;
+  private cache = new Map<string, CacheEntry>();
+  private inflight = new Map<string, Promise<ApiEnvelope<any>>>();
 
   setToken(token: string | null) {
+    if (this.token !== token) {
+      this.cache.clear();
+      this.inflight.clear();
+    }
     this.token = token;
   }
 
@@ -33,22 +46,62 @@ class ApiClient {
   }
 
   private async request<T>(path: string, options: RequestInit = {}): Promise<ApiEnvelope<T>> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
+    const method = (options.method || 'GET').toUpperCase();
+    const cacheKey = `${this.token || 'guest'}:${method}:${path}`;
+    const cached = this.cache.get(cacheKey);
+    const now = Date.now();
+    const canCache = method === 'GET';
+
+    if (canCache && cached && now - cached.timestamp < defaultCacheTtlMs) {
+      return cached.payload as ApiEnvelope<T>;
+    }
+
+    if (canCache) {
+      const pending = this.inflight.get(cacheKey);
+      if (pending) return pending as Promise<ApiEnvelope<T>>;
+    }
+
+    const requestPromise = fetch(`${this.baseUrl}${path}`, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
         ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
         ...(options.headers || {}),
       },
-    });
+    })
+      .then(async (response) => {
+        const payload = await response.json().catch(() => ({}));
 
-    const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(payload?.error || payload?.message || 'Request failed');
+        }
 
-    if (!response.ok) {
-      throw new Error(payload?.error || payload?.message || 'Request failed');
-    }
+        if (canCache) {
+          this.cache.set(cacheKey, { payload, timestamp: Date.now() });
+        } else {
+          this.invalidateAppCache();
+        }
 
-    return payload;
+        return payload as ApiEnvelope<T>;
+      })
+      .catch((error) => {
+        if (canCache && cached && now - cached.timestamp < staleCacheTtlMs) {
+          return cached.payload as ApiEnvelope<T>;
+        }
+        throw error;
+      })
+      .finally(() => {
+        if (canCache) this.inflight.delete(cacheKey);
+      });
+
+    if (canCache) this.inflight.set(cacheKey, requestPromise);
+
+    return requestPromise;
+  }
+
+  private invalidateAppCache() {
+    this.cache.clear();
+    this.inflight.clear();
   }
 
   login(email: string, password: string) {
@@ -105,6 +158,10 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify({ currentPassword, newPassword }),
     });
+  }
+
+  revokeSession(id: string) {
+    return this.request<any>(`/api/app/settings/sessions/${id}`, { method: 'DELETE' });
   }
 
   addCreditBalance(data: { amount: number; paymentMethod: string; note?: string }) {

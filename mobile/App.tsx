@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
@@ -10,7 +10,7 @@ import {
   IBMPlexSansArabic_700Bold,
   useFonts,
 } from '@expo-google-fonts/ibm-plex-sans-arabic';
-import { AuthUser } from './src/api/client';
+import { apiClient, AuthUser } from './src/api/client';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { AdminScreen } from './src/screens/AdminScreen';
 import { AiChatScreen } from './src/screens/AiChatScreen';
@@ -86,25 +86,93 @@ const tabs: Array<{ key: TabKey; label: string; icon: keyof typeof Ionicons.glyp
   { key: 'more', label: 'المزيد', icon: 'grid-outline', activeIcon: 'grid' },
 ];
 
+const chromeHideThreshold = 18;
+
 function Shell() {
   const { user } = useAuth();
   const [activeRoute, setActiveRoute] = useState<RouteKey>('home');
+  const [chromeHidden, setChromeHidden] = useState(false);
+  const touchStartY = useRef(0);
+  const chromeProgress = useRef(new Animated.Value(0)).current;
+  const hasTopBar = !tabs.some((tab) => tab.key === activeRoute);
+
+  const setChromeVisibility = (hidden: boolean) => {
+    setChromeHidden((current) => {
+      if (current === hidden) return current;
+      Animated.timing(chromeProgress, {
+        duration: 210,
+        toValue: hidden ? 1 : 0,
+        useNativeDriver: true,
+      }).start();
+      return hidden;
+    });
+  };
+
+  useEffect(() => {
+    if (!user) return undefined;
+    const timer = setTimeout(() => {
+      void Promise.allSettled([
+        apiClient.getDashboard(),
+        apiClient.getWorkspaceCases(),
+        apiClient.getLawyers(),
+        apiClient.getFeedPosts('all', { limit: 8, offset: 0 }),
+        apiClient.getFeedStories('all'),
+        apiClient.getIntelligence(),
+      ]);
+    }, 450);
+
+    return () => clearTimeout(timer);
+  }, [user?.id]);
+
+  useEffect(() => {
+    setChromeVisibility(false);
+  }, [activeRoute]);
 
   if (!user) return <AuthScreen />;
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      {!tabs.some((tab) => tab.key === activeRoute) ? (
-        <View style={styles.topBar}>
+      {hasTopBar ? (
+        <Animated.View
+          pointerEvents={chromeHidden ? 'none' : 'auto'}
+          style={[
+            styles.topBar,
+            {
+              opacity: chromeProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+              transform: [{ translateY: chromeProgress.interpolate({ inputRange: [0, 1], outputRange: [0, -62] }) }],
+            },
+          ]}
+        >
           <Pressable onPress={() => setActiveRoute('more')} style={styles.backButton}>
             <Ionicons name="chevron-forward" size={20} color={colors.navy} />
             <Text style={styles.backText}>رجوع</Text>
           </Pressable>
           <Text style={styles.topTitle}>القسطاس الذكي</Text>
-        </View>
+        </Animated.View>
       ) : null}
-      <View style={styles.content}>{renderScreen(activeRoute, user, setActiveRoute)}</View>
-      <View style={styles.tabBar}>
+      <View
+        onTouchMove={(event) => {
+          const dy = event.nativeEvent.pageY - touchStartY.current;
+          if (dy < -chromeHideThreshold) setChromeVisibility(true);
+          if (dy > chromeHideThreshold) setChromeVisibility(false);
+        }}
+        onTouchStart={(event) => {
+          touchStartY.current = event.nativeEvent.pageY;
+        }}
+        style={[styles.content, hasTopBar && !chromeHidden && styles.contentWithTopBar, !chromeHidden && styles.contentWithTabBar]}
+      >
+        {renderScreen(activeRoute, user, setActiveRoute)}
+      </View>
+      <Animated.View
+        pointerEvents={chromeHidden ? 'none' : 'auto'}
+        style={[
+          styles.tabBar,
+          {
+            opacity: chromeProgress.interpolate({ inputRange: [0, 1], outputRange: [1, 0] }),
+            transform: [{ translateY: chromeProgress.interpolate({ inputRange: [0, 1], outputRange: [0, 96] }) }],
+          },
+        ]}
+      >
         {tabs.map((tab) => {
           const isActive = activeRoute === tab.key;
           return (
@@ -123,7 +191,7 @@ function Shell() {
             </Pressable>
           );
         })}
-      </View>
+      </Animated.View>
     </SafeAreaView>
   );
 }
@@ -210,6 +278,12 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
+  contentWithTabBar: {
+    paddingBottom: 76,
+  },
+  contentWithTopBar: {
+    paddingTop: 54,
+  },
   tabBar: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
@@ -220,6 +294,10 @@ const styles = StyleSheet.create({
     paddingBottom: 9,
     paddingHorizontal: 8,
     paddingTop: 8,
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
     shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.08,
@@ -275,11 +353,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
+    elevation: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
+    left: 0,
     minHeight: 50,
     paddingHorizontal: 16,
     paddingVertical: 8,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    zIndex: 20,
   },
   backButton: {
     alignItems: 'center',
