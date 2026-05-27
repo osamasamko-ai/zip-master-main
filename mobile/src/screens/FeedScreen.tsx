@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { Button, EmptyState, Pill, Screen } from '../components/ui';
@@ -8,6 +8,7 @@ import { colors } from '../theme/colors';
 
 type FeedFilter = 'all' | 'videos' | 'articles' | 'admins' | 'popular';
 type SortMode = 'smart' | 'latest';
+type StoryMode = 'new' | 'seen' | 'archive';
 
 const filters: Array<{ id: FeedFilter; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { id: 'all', label: 'الكل', icon: 'layers-outline' },
@@ -23,13 +24,21 @@ const paymentMethods = [
   { id: 'wallet-balance', label: 'رصيد المنصة', subtitle: 'خصم مباشر', icon: 'wallet-outline' as const },
 ];
 
+const storyModes: Array<{ id: StoryMode; label: string }> = [
+  { id: 'new', label: 'جديد' },
+  { id: 'seen', label: 'شوهد' },
+  { id: 'archive', label: 'الأرشيف' },
+];
+
 export function FeedScreen() {
   const { user } = useAuth();
   const [posts, setPosts] = useState<any[]>([]);
   const [stories, setStories] = useState<any[]>([]);
   const [lawyers, setLawyers] = useState<any[]>([]);
+  const [intelligence, setIntelligence] = useState<any>(null);
   const [activeFilter, setActiveFilter] = useState<FeedFilter>('all');
   const [sortMode, setSortMode] = useState<SortMode>('smart');
+  const [storyMode, setStoryMode] = useState<StoryMode>('new');
   const [nextOffset, setNextOffset] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -52,25 +61,46 @@ export function FeedScreen() {
   const [composerOpen, setComposerOpen] = useState(false);
   const [storyComposerOpen, setStoryComposerOpen] = useState(false);
 
-  const canCreate = user?.role === 'admin' || user?.role === 'pro';
+  const canCreate = user?.role === 'admin' || (user?.role === 'pro' && (user?.verified || user?.licenseStatus === 'verified'));
   const categories = useMemo(() => ['عام', ...Array.from(new Set(posts.map((post) => String(post.category || '')).filter(Boolean)))].slice(0, 8), [posts]);
   const topics = useMemo(() => Array.from(new Set(posts.map((post) => post.category).filter(Boolean))).slice(0, 8), [posts]);
   const featuredPosts = useMemo(() => posts.filter((post) => post.featured || post.pinned).slice(0, 3), [posts]);
+  const interestTerms = useMemo(() => {
+    const categories = (intelligence?.topCategories || []).map((item: any) => item.label);
+    const searches = (intelligence?.topSearches || []).map((item: any) => item.label);
+    return [...categories, ...searches].map((item) => String(item).toLowerCase()).filter(Boolean);
+  }, [intelligence]);
+  const authorAffinity = useMemo(() => {
+    const entries = (intelligence?.topAuthors || []) as Array<{ id: string; count: number }>;
+    const maxCount = Math.max(1, ...entries.map((item) => item.count || 0));
+    return new Map(entries.map((item) => [item.id, (item.count || 0) / maxCount]));
+  }, [intelligence]);
+  const storyCounts = useMemo(() => ({
+    new: stories.filter((story) => !story.isArchived && !story.seenByMe).length,
+    seen: stories.filter((story) => !story.isArchived && story.seenByMe).length,
+    archive: stories.filter((story) => story.isArchived).length,
+  }), [stories]);
+  const visibleStories = useMemo(() => {
+    const filtered = stories.filter((story) =>
+      storyMode === 'archive' ? story.isArchived : storyMode === 'seen' ? !story.isArchived && story.seenByMe : !story.isArchived && !story.seenByMe
+    );
+    return filtered.length > 0 || storyMode === 'new' ? filtered : stories.filter((story) => !story.isArchived).slice(0, 8);
+  }, [stories, storyMode]);
 
   const sortedPosts = useMemo(() => {
     if (sortMode === 'latest') return posts;
     return [...posts].sort((left, right) => {
-      const leftScore = engagementScore(left);
-      const rightScore = engagementScore(right);
+      const leftScore = scorePost(left, interestTerms, authorAffinity);
+      const rightScore = scorePost(right, interestTerms, authorAffinity);
       if (right.pinned !== left.pinned) return Number(right.pinned) - Number(left.pinned);
       if (right.featured !== left.featured) return Number(right.featured) - Number(left.featured);
       if (rightScore !== leftScore) return rightScore - leftScore;
       return new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime();
     });
-  }, [posts, sortMode]);
+  }, [authorAffinity, interestTerms, posts, sortMode]);
 
-  const smartStories = useMemo(() => [...stories].sort((left, right) => Number(left.seenByMe) - Number(right.seenByMe) || new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime()), [stories]);
-  const suggestedLawyers = useMemo(() => lawyers.slice(0, 5), [lawyers]);
+  const smartStories = useMemo(() => [...visibleStories].sort((left, right) => scoreStory(right, interestTerms, authorAffinity) - scoreStory(left, interestTerms, authorAffinity)), [authorAffinity, interestTerms, visibleStories]);
+  const suggestedLawyers = useMemo(() => [...lawyers].sort((left, right) => scoreLawyer(right, interestTerms, authorAffinity) - scoreLawyer(left, interestTerms, authorAffinity)).slice(0, 5), [authorAffinity, interestTerms, lawyers]);
 
   const loadPosts = async (filter = activeFilter, offset = 0, append = false) => {
     if (append) setLoadingMore(true);
@@ -92,12 +122,14 @@ export function FeedScreen() {
   };
 
   const loadSideData = async () => {
-    const [storyResponse, lawyerResponse] = await Promise.all([
+    const [storyResponse, lawyerResponse, intelligenceResponse] = await Promise.all([
       apiClient.getFeedStories('all').catch(() => ({ data: [] })),
       apiClient.getLawyers().catch(() => ({ data: [] })),
+      apiClient.getIntelligence().catch(() => ({ data: null })),
     ]);
     setStories(storyResponse.data || []);
     setLawyers(lawyerResponse.data || []);
+    setIntelligence(intelligenceResponse.data);
   };
 
   useEffect(() => {
@@ -305,12 +337,28 @@ export function FeedScreen() {
               </>
             ) : null}
           </View>
-        ) : null}
+        ) : (
+          <View style={styles.viewerNotice}>
+            <View style={styles.noticeIcon}><Ionicons name="eye-outline" size={18} color={colors.blue} /></View>
+            <View style={styles.flex}>
+              <Text style={styles.noticeTitle}>تابع، علّق، واحفظ المحتوى المهم</Text>
+              <Text style={styles.mutedText}>النشر متاح للمحامين الموثقين وإدارة المنصة.</Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.storyPanel}>
           <View style={styles.rowBetween}>
             {canCreate ? <Pressable onPress={() => setStoryComposerOpen((current) => !current)} style={styles.storyCreate}><Ionicons name="add" size={17} color="#fff" /><Text style={styles.storyCreateText}>قصة</Text></Pressable> : <View />}
             <Text style={styles.sectionTitle}>القصص</Text>
+          </View>
+          <View style={styles.storyTabs}>
+            {storyModes.map((mode) => (
+              <Pressable key={mode.id} onPress={() => setStoryMode(mode.id)} style={[styles.storyTab, storyMode === mode.id && styles.storyTabActive]}>
+                <Text style={[styles.storyTabText, storyMode === mode.id && styles.storyTabTextActive]}>{mode.label}</Text>
+                <Text style={[styles.storyTabCount, storyMode === mode.id && styles.storyTabCountActive]}>{storyCounts[mode.id]}</Text>
+              </Pressable>
+            ))}
           </View>
           {canCreate && storyComposerOpen ? (
             <View style={styles.storyComposer}>
@@ -321,9 +369,20 @@ export function FeedScreen() {
             </View>
           ) : null}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
-            {smartStories.length === 0 ? <Text style={styles.mutedText}>لا توجد قصص حالياً.</Text> : null}
+            {smartStories.length === 0 ? <Text style={styles.mutedText}>{storyMode === 'archive' ? 'لا توجد قصص مؤرشفة حالياً.' : storyMode === 'seen' ? 'لم تشاهد أي قصة بعد.' : 'لا توجد قصص جديدة حالياً.'}</Text> : null}
             {smartStories.map((story) => <StoryBubble key={story.id} story={story} onPress={() => viewStory(story)} />)}
           </ScrollView>
+        </View>
+
+        <View style={styles.sortPanel}>
+          <View style={styles.flex}>
+            <Text style={styles.cardTitle}>ترتيب المنشورات</Text>
+            <Text style={styles.mutedText}>{sortMode === 'smart' ? 'الأقرب لاهتماماتك وتفاعلاتك أولاً.' : 'أحدث المنشورات حسب وقت النشر.'}</Text>
+          </View>
+          <View style={styles.sortToggle}>
+            <Pressable onPress={() => setSortMode('smart')} style={[styles.sortOption, sortMode === 'smart' && styles.sortOptionActive]}><Text style={[styles.sortText, sortMode === 'smart' && styles.sortTextActive]}>اقتراحات</Text></Pressable>
+            <Pressable onPress={() => setSortMode('latest')} style={[styles.sortOption, sortMode === 'latest' && styles.sortOptionActive]}><Text style={[styles.sortText, sortMode === 'latest' && styles.sortTextActive]}>الأحدث</Text></Pressable>
+          </View>
         </View>
 
         <View style={styles.feedControls}>
@@ -360,6 +419,10 @@ export function FeedScreen() {
               onSave={() => react(post.id, 'save')}
               onShare={() => react(post.id, 'share')}
               onComment={() => setCommentPostId(commentPostId === post.id ? '' : post.id)}
+              commentOpen={commentPostId === post.id}
+              comment={comment}
+              onChangeComment={setComment}
+              onSubmitComment={() => submitComment(post.id)}
               onConsult={() => openConsultation(post)}
               onFollow={() => followLawyer(post.author.id)}
               onEdit={() => { setEditingPost(post); setEditContent(post.content); }}
@@ -386,7 +449,6 @@ export function FeedScreen() {
         ) : posts.length > 0 ? <Text style={styles.endText}>وصلت إلى نهاية المنشورات</Text> : null}
       </ScrollView>
 
-      <CommentModal postId={commentPostId} comment={comment} loading={busyId === `comment-${commentPostId}`} onChange={setComment} onClose={() => setCommentPostId('')} onSubmit={() => submitComment(commentPostId)} />
       <EditModal post={editingPost} content={editContent} loading={busyId === `edit-${editingPost?.id}`} onChange={setEditContent} onClose={() => setEditingPost(null)} onSubmit={saveEdit} />
       <StoryModal story={activeStory} onClose={() => setActiveStory(null)} />
       <ConsultationModal post={consultationPost} note={consultationNote} paymentMethod={paymentMethod} loading={busyId === 'consult'} onChangeNote={setConsultationNote} onChangePayment={setPaymentMethod} onClose={() => setConsultationPost(null)} onSubmit={startConsultation} />
@@ -394,7 +456,7 @@ export function FeedScreen() {
   );
 }
 
-function PostCard({ post, userId, userRole, busyId, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide }: any) {
+function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide }: any) {
   const [expanded, setExpanded] = useState(false);
   const canManage = userRole === 'admin' || userId === post.author?.id;
   const isLong = String(post.content || '').length > 260;
@@ -413,10 +475,11 @@ function PostCard({ post, userId, userRole, busyId, onLike, onSave, onShare, onC
           </View>
         ) : null}
         <View style={styles.authorInfo}>
-          <View style={styles.avatar}><Text style={styles.avatarText}>{String(post.author?.name || 'م').charAt(0)}</Text></View>
+          <Avatar source={post.author?.avatar || post.author?.img} name={post.author?.name || 'م'} />
           <View style={styles.flex}>
             <View style={styles.authorLine}>
               {post.featured ? <Pill label="مميز" tone="gold" /> : null}
+              {post.author?.role === 'admin' ? <Pill label="إدارة" tone="blue" /> : <Pill label="محامي" tone="neutral" /> }
               <Text style={styles.authorName} numberOfLines={1}>{post.author?.name || post.authorName || 'عضو المنصة'}</Text>
             </View>
             <Text style={styles.mutedText}>{post.author?.specialty || post.author?.roleLabel || post.category} · {formatDate(post.createdAt)}</Text>
@@ -426,7 +489,18 @@ function PostCard({ post, userId, userRole, busyId, onLike, onSave, onShare, onC
       <Text style={styles.postText}>{text}</Text>
       {isLong ? <Pressable onPress={() => setExpanded((value) => !value)}><Text style={styles.readMore}>{expanded ? 'عرض أقل' : 'قراءة المزيد'}</Text></Pressable> : null}
       <View style={styles.tagRow}><Text style={styles.tag}>#{post.category || 'عام'}</Text><Text style={styles.tag}>{post.readingTime || 1} دقيقة قراءة</Text></View>
-      {post.mediaUrl ? <View style={styles.mediaBox}><Ionicons name={post.mediaType === 'video' ? 'play-circle-outline' : 'image-outline'} size={28} color={colors.blue} /><Text style={styles.mutedText}>{post.mediaType === 'video' ? 'فيديو مرفق' : 'صورة مرفقة'}</Text></View> : null}
+      {post.mediaUrl ? (
+        <View style={[styles.mediaBox, post.mediaType === 'image' && styles.imageMediaBox]}>
+          {post.mediaType === 'image' ? (
+            <Image source={{ uri: post.mediaUrl }} style={styles.postImage} resizeMode="cover" />
+          ) : (
+            <>
+              <Ionicons name="play-circle-outline" size={34} color={colors.blue} />
+              <Text style={styles.mutedText}>فيديو مرفق · افتحه من نسخة الويب للمشاهدة الكاملة</Text>
+            </>
+          )}
+        </View>
+      ) : null}
       <View style={styles.countRow}><Text style={styles.countText}>{(post.likesCount || 0).toLocaleString('ar-IQ')} إعجاب</Text><Text style={styles.countText}>{post.commentsCount || 0} تعليق · {post.shareCount || 0} مشاركة · {post.savesCount || 0} حفظ</Text></View>
       <View style={styles.actionRow}>
         <Action icon="thumbs-up-outline" label="إعجاب" active={post.likedByMe} loading={busyId === `like-${post.id}`} onPress={onLike} />
@@ -434,13 +508,27 @@ function PostCard({ post, userId, userRole, busyId, onLike, onSave, onShare, onC
         <Action icon="share-social-outline" label="مشاركة" loading={busyId === `share-${post.id}`} onPress={onShare} />
         <Action icon="bookmark-outline" label="حفظ" active={post.savedByMe} loading={busyId === `save-${post.id}`} onPress={onSave} />
       </View>
+      {commentOpen ? (
+        <View style={styles.inlineComment}>
+          <TextInput
+            value={comment}
+            onChangeText={onChangeComment}
+            placeholder="اكتب تعليقاً مهنياً..."
+            placeholderTextColor="#98a2b3"
+            style={styles.inlineCommentInput}
+          />
+          <Pressable disabled={!String(comment || '').trim() || busyId === `comment-${post.id}`} onPress={onSubmitComment} style={[styles.inlineCommentSend, (!String(comment || '').trim() || busyId === `comment-${post.id}`) && styles.disabled]}>
+            {busyId === `comment-${post.id}` ? <ActivityIndicator color="#fff" /> : <Ionicons name="send" size={16} color="#fff" />}
+          </Pressable>
+        </View>
+      ) : null}
       {post.author?.role === 'lawyer' && post.author?.id !== userId ? (
         <View style={styles.lawyerActions}>
           <Pressable onPress={onConsult} style={styles.consultButton}><Ionicons name="card-outline" size={16} color="#fff" /><Text style={styles.consultText}>استشارة</Text></Pressable>
           <Pressable onPress={onFollow} style={styles.followButton}><Ionicons name="add-circle-outline" size={16} color={colors.blue} /><Text style={styles.followText}>متابعة</Text></Pressable>
         </View>
       ) : null}
-      {(post.comments || []).slice(-2).map((item: any) => <View key={item.id} style={styles.commentBubble}><Text style={styles.commentAuthor}>{item.author?.name}</Text><Text style={styles.commentText}>{item.content}</Text></View>)}
+      {(post.comments || []).slice(-3).map((item: any) => <View key={item.id} style={styles.commentBubble}><Text style={styles.commentAuthor}>{item.author?.name}</Text><Text style={styles.commentText}>{item.content}</Text></View>)}
     </View>
   );
 }
@@ -448,7 +536,10 @@ function PostCard({ post, userId, userRole, busyId, onLike, onSave, onShare, onC
 function StoryBubble({ story, onPress }: { story: any; onPress: () => void }) {
   return (
     <Pressable onPress={onPress} style={[styles.storyBubble, !story.seenByMe && styles.storyUnseen]}>
-      <View style={styles.storyAvatar}><Text style={styles.avatarText}>{String(story.author?.name || 'م').charAt(0)}</Text></View>
+      {story.mediaUrl && story.mediaType === 'image' ? <Image source={{ uri: story.mediaUrl }} style={styles.storyCoverImage} /> : null}
+      <Avatar source={story.author?.avatar || story.author?.img} name={story.author?.name || 'م'} small />
+      {!story.seenByMe && !story.isArchived ? <Text style={styles.newStoryBadge}>جديد</Text> : null}
+      {story.isArchived ? <Text style={styles.archiveStoryBadge}>أرشيف</Text> : null}
       <Text style={styles.storyName} numberOfLines={1}>{story.author?.name || 'قصة'}</Text>
       <Text style={styles.storyText} numberOfLines={2}>{story.text}</Text>
     </Pressable>
@@ -480,6 +571,12 @@ function Action({ icon, label, active, loading, onPress }: { icon: keyof typeof 
 
 function IconButton({ icon, onPress, danger }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void; danger?: boolean }) {
   return <Pressable onPress={onPress} style={[styles.iconButton, danger && styles.dangerButton]}><Ionicons name={icon} size={16} color={danger ? colors.red : colors.muted} /></Pressable>;
+}
+
+function Avatar({ source, name, small }: { source?: string | null; name: string; small?: boolean }) {
+  const sizeStyle = small ? styles.avatarSmall : styles.avatar;
+  if (source) return <Image source={{ uri: source }} style={sizeStyle} />;
+  return <View style={sizeStyle}><Text style={styles.avatarText}>{String(name || 'م').charAt(0)}</Text></View>;
 }
 
 function CommentModal({ postId, comment, loading, onChange, onClose, onSubmit }: any) {
@@ -528,8 +625,40 @@ function ConsultationModal({ post, note, paymentMethod, loading, onChangeNote, o
   );
 }
 
-function engagementScore(post: any) {
-  return (post.likesCount || 0) + (post.commentsCount || 0) * 2 + (post.savesCount || 0) * 2 + (post.shareCount || 0) + (post.featured ? 20 : 0) + (post.pinned ? 15 : 0);
+function scoreText(terms: string[], ...parts: Array<string | undefined | null>) {
+  const text = parts.join(' ').toLowerCase();
+  if (!terms.length) return 0;
+  return terms.reduce((score, term) => score + (text.includes(term) ? 1 : 0), 0);
+}
+
+function scorePost(post: any, terms: string[], affinity: Map<string, number>) {
+  const ageHours = Math.max(0, (Date.now() - new Date(post.createdAt || 0).getTime()) / 36e5);
+  const recencyScore = Math.max(0, 1.2 - ageHours / 72);
+  const engagement = Math.log1p((post.likesCount || 0) + (post.commentsCount || 0) * 2 + (post.savesCount || 0) * 2 + (post.shareCount || 0)) / 4;
+  const mediaScore = post.mediaType === 'video' ? 0.25 : post.mediaType === 'image' ? 0.15 : 0;
+  return scoreText(terms, post.category, post.content, post.author?.specialty, post.author?.name) * 1.6 +
+    (affinity.get(post.author?.id) || 0) * 1.4 +
+    engagement +
+    recencyScore +
+    mediaScore +
+    (post.featured ? 1.5 : 0) +
+    (post.pinned ? 1 : 0) +
+    (post.savedByMe ? 0.5 : 0) +
+    (post.likedByMe ? 0.25 : 0);
+}
+
+function scoreStory(story: any, terms: string[], affinity: Map<string, number>) {
+  const ageHours = Math.max(0, (Date.now() - new Date(story.createdAt || 0).getTime()) / 36e5);
+  return scoreText(terms, story.text, story.author?.specialty, story.author?.name) +
+    (affinity.get(story.author?.id) || 0) * 1.2 +
+    (!story.seenByMe ? 1 : 0) +
+    Math.max(0, 1 - ageHours / 24);
+}
+
+function scoreLawyer(lawyer: any, terms: string[], affinity: Map<string, number>) {
+  return scoreText(terms, lawyer.specialty, lawyer.lawyerProfile?.specialty, lawyer.name) * 1.5 +
+    (affinity.get(lawyer.id) || 0) * 1.8 +
+    Math.min(1, (lawyer.followers || 0) / 1000);
 }
 
 function formatDate(value?: string) {
@@ -540,10 +669,12 @@ function formatDate(value?: string) {
 const styles = StyleSheet.create({
   actionRow: { borderTopColor: colors.line, borderTopWidth: 1, flexDirection: 'row-reverse', gap: 2, marginTop: 10, paddingTop: 4 },
   activeText: { color: colors.blue },
+  archiveStoryBadge: { backgroundColor: 'rgba(16,24,40,0.72)', borderRadius: 999, color: '#fff', fontSize: 9, fontWeight: '900', left: 8, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 3, position: 'absolute', top: 8 },
   authorInfo: { alignItems: 'center', flex: 1, flexDirection: 'row-reverse', gap: 10 },
   authorLine: { alignItems: 'center', flexDirection: 'row-reverse', gap: 6 },
   authorName: { color: colors.ink, fontSize: 14, fontWeight: '900', textAlign: 'right' },
   avatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 42, justifyContent: 'center', width: 42 },
+  avatarSmall: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   avatarText: { color: '#fff', fontSize: 15, fontWeight: '900' },
   cardTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', textAlign: 'right' },
   chip: { backgroundColor: '#eef2f6', borderRadius: 999, minHeight: 34, justifyContent: 'center', paddingHorizontal: 11 },
@@ -585,6 +716,10 @@ const styles = StyleSheet.create({
   heroIcon: { alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 999, height: 44, justifyContent: 'center', width: 44 },
   heroTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 12 },
   iconButton: { alignItems: 'center', backgroundColor: '#f2f4f7', borderRadius: 999, height: 34, justifyContent: 'center', width: 34 },
+  imageMediaBox: { backgroundColor: '#101828', padding: 0 },
+  inlineComment: { alignItems: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 10 },
+  inlineCommentInput: { backgroundColor: '#f2f4f7', borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 14, textAlign: 'right' },
+  inlineCommentSend: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 42, justifyContent: 'center', width: 42 },
   lawyerActions: { flexDirection: 'row-reverse', gap: 8, marginTop: 10 },
   inlineLawyers: { backgroundColor: '#fff', borderRadius: 18, marginBottom: 12, padding: 12 },
   lawyerCard: { alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 18, padding: 12, width: 138 },
@@ -600,6 +735,9 @@ const styles = StyleSheet.create({
   modalPanel: { backgroundColor: '#fff', borderRadius: 22, maxHeight: '88%', padding: 16, width: '94%' },
   modalTitle: { color: colors.ink, fontSize: 18, fontWeight: '900', marginBottom: 10, textAlign: 'right' },
   mutedText: { color: colors.muted, fontSize: 11, fontWeight: '800', lineHeight: 18, marginTop: 4, textAlign: 'right' },
+  newStoryBadge: { backgroundColor: colors.blue, borderRadius: 999, color: '#fff', fontSize: 9, fontWeight: '900', left: 8, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 3, position: 'absolute', top: 8 },
+  noticeIcon: { alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
+  noticeTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', textAlign: 'right' },
   paymentItem: { alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 10 },
   paymentItemActive: { backgroundColor: '#eff6ff' },
   pinnedPost: { borderColor: '#bfdbfe', borderWidth: 1 },
@@ -608,6 +746,7 @@ const styles = StyleSheet.create({
   postActionText: { color: colors.muted, fontSize: 10, fontWeight: '900' },
   postCard: { backgroundColor: '#fff', borderRadius: 0, marginHorizontal: -18, marginBottom: 8, overflow: 'hidden', paddingHorizontal: 18, paddingVertical: 12 },
   postHeader: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
+  postImage: { aspectRatio: 1, width: '100%' },
   postRibbon: { alignItems: 'center', backgroundColor: '#f8fafc', flexDirection: 'row-reverse', gap: 6, marginHorizontal: -12, marginTop: -12, marginBottom: 12, padding: 9 },
   postRibbonText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
   postText: { color: colors.ink, fontSize: 14, fontWeight: '700', lineHeight: 24, marginTop: 12, textAlign: 'right' },
@@ -624,6 +763,7 @@ const styles = StyleSheet.create({
   storyAvatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   storyBubble: { backgroundColor: '#fff', borderRadius: 16, minHeight: 138, padding: 10, width: 104 },
   storyComposer: { alignItems: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
+  storyCoverImage: { borderRadius: 12, height: 70, marginBottom: 8, width: '100%' },
   storyCreate: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, flexDirection: 'row-reverse', gap: 5, minHeight: 34, paddingHorizontal: 10 },
   storyCreateText: { color: '#fff', fontSize: 12, fontWeight: '900' },
   storyInput: { backgroundColor: '#f2f4f7', borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 12, textAlign: 'right' },
@@ -637,6 +777,13 @@ const styles = StyleSheet.create({
   storyPublish: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   storyRow: { flexDirection: 'row-reverse', gap: 10, paddingTop: 10 },
   storyText: { color: colors.muted, fontSize: 10, fontWeight: '800', lineHeight: 15, marginTop: 5, textAlign: 'right' },
+  storyTab: { alignItems: 'center', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 5, justifyContent: 'center', minHeight: 34 },
+  storyTabActive: { backgroundColor: '#fff' },
+  storyTabCount: { backgroundColor: '#fff', borderRadius: 999, color: colors.subtle, fontSize: 9, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 2 },
+  storyTabCountActive: { backgroundColor: '#eff6ff', color: colors.blue },
+  storyTabs: { backgroundColor: '#eef2f6', borderRadius: 999, flexDirection: 'row-reverse', gap: 4, marginTop: 10, padding: 4 },
+  storyTabText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
+  storyTabTextActive: { color: colors.blue },
   storyUnseen: { borderColor: colors.blue, borderWidth: 2 },
   subtitle: { color: colors.muted, fontSize: 13, fontWeight: '800', marginTop: 4, textAlign: 'right' },
   tag: { backgroundColor: '#eff6ff', borderRadius: 999, color: colors.blue, fontSize: 11, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 },
@@ -644,4 +791,5 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 24, fontWeight: '900', textAlign: 'right' },
   topicPill: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   topicText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
+  viewerNotice: { alignItems: 'center', backgroundColor: '#fff', borderBottomColor: colors.line, borderBottomWidth: 1, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, marginHorizontal: -18, paddingHorizontal: 18, paddingVertical: 12 },
 });

@@ -6,6 +6,7 @@ export type AuthUser = {
   name: string;
   role: Role;
   verified?: boolean;
+  licenseStatus?: string;
   avatar?: string;
   img?: string;
   accountBalance?: number;
