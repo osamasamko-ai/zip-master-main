@@ -329,7 +329,7 @@ export function FeedScreen() {
             </View>
             {composerOpen ? (
               <>
-                <TextInput multiline value={content} onChangeText={setContent} placeholder="شارك سؤالاً أو تحديثاً قانونياً" placeholderTextColor="#98a2b3" style={styles.composerInput} />
+                <TextInput multiline value={content} onChangeText={setContent} placeholder="شارك سؤالاً أو تحديثاً قانونياً" placeholderTextColor={colors.subtle} style={styles.composerInput} />
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                   {categories.map((item) => <Chip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}
                 </ScrollView>
@@ -362,7 +362,7 @@ export function FeedScreen() {
           </View>
           {canCreate && storyComposerOpen ? (
             <View style={styles.storyComposer}>
-              <TextInput value={storyText} onChangeText={setStoryText} placeholder="نص قصة قصيرة..." placeholderTextColor="#98a2b3" style={styles.storyInput} />
+              <TextInput value={storyText} onChangeText={setStoryText} placeholder="نص قصة قصيرة..." placeholderTextColor={colors.subtle} style={styles.storyInput} />
               <Pressable disabled={!storyText.trim() || storyPosting} onPress={publishStory} style={[styles.storyPublish, (!storyText.trim() || storyPosting) && styles.disabled]}>
                 <Ionicons name="send" size={15} color="#fff" />
               </Pressable>
@@ -520,7 +520,7 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
             value={comment}
             onChangeText={onChangeComment}
             placeholder="اكتب تعليقاً مهنياً..."
-            placeholderTextColor="#98a2b3"
+            placeholderTextColor={colors.subtle}
             style={styles.inlineCommentInput}
           />
           <Pressable disabled={!String(comment || '').trim() || busyId === `comment-${post.id}`} onPress={onSubmitComment} style={[styles.inlineCommentSend, (!String(comment || '').trim() || busyId === `comment-${post.id}`) && styles.disabled]}>
@@ -590,7 +590,7 @@ function CommentModal({ postId, comment, loading, onChange, onClose, onSubmit }:
     <Modal transparent animationType="slide" visible={Boolean(postId)} onRequestClose={onClose}>
       <View style={styles.modalBackdrop}><View style={styles.modalPanel}>
         <Text style={styles.modalTitle}>إضافة تعليق</Text>
-        <TextInput multiline value={comment} onChangeText={onChange} placeholder="اكتب تعليقاً مهنياً..." placeholderTextColor="#98a2b3" style={styles.modalInput} />
+        <TextInput multiline value={comment} onChangeText={onChange} placeholder="اكتب تعليقاً مهنياً..." placeholderTextColor={colors.subtle} style={styles.modalInput} />
         <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="إرسال" loading={loading} onPress={onSubmit} /></View>
       </View></View>
     </Modal>
@@ -600,7 +600,7 @@ function CommentModal({ postId, comment, loading, onChange, onClose, onSubmit }:
 function EditModal({ post, content, loading, onChange, onClose, onSubmit }: any) {
   return (
     <BottomSheet visible={Boolean(post)} title="تعديل المنشور" onClose={onClose}>
-        <TextInput multiline value={content} onChangeText={onChange} placeholder="نص المنشور" placeholderTextColor="#98a2b3" style={styles.modalInput} />
+        <TextInput multiline value={content} onChangeText={onChange} placeholder="نص المنشور" placeholderTextColor={colors.subtle} style={styles.modalInput} />
         <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="حفظ" loading={loading} onPress={onSubmit} /></View>
     </BottomSheet>
   );
@@ -619,7 +619,7 @@ function ConsultationModal({ post, note, paymentMethod, loading, onChangeNote, o
     <BottomSheet visible={Boolean(post)} title="بدء استشارة من المنشور" onClose={onClose}>
         <Text style={styles.mutedText}>{post?.author?.name} · {post?.author?.consultationFee || 'سعر غير محدد'}</Text>
         {paymentMethods.map((method) => <Pressable key={method.id} onPress={() => onChangePayment(method.id)} style={[styles.paymentItem, paymentMethod === method.id && styles.paymentItemActive]}><Ionicons name={method.icon} size={20} color={colors.navy} /><View style={styles.flex}><Text style={styles.cardTitle}>{method.label}</Text><Text style={styles.mutedText}>{method.subtitle}</Text></View></Pressable>)}
-        <TextInput multiline value={note} onChangeText={onChangeNote} placeholder="ملاحظة للمحامي" placeholderTextColor="#98a2b3" style={styles.modalInput} />
+        <TextInput multiline value={note} onChangeText={onChangeNote} placeholder="ملاحظة للمحامي" placeholderTextColor={colors.subtle} style={styles.modalInput} />
         <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="ابدأ الاستشارة" loading={loading} onPress={onSubmit} /></View>
     </BottomSheet>
   );
@@ -677,24 +677,24 @@ const styles = StyleSheet.create({
   avatarSmall: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   avatarText: { color: '#fff', fontSize: 15, fontWeight: '900' },
   cardTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', textAlign: 'right' },
-  chip: { backgroundColor: '#eef2f6', borderRadius: 999, minHeight: 34, justifyContent: 'center', paddingHorizontal: 11 },
+  chip: { backgroundColor: colors.tint, borderRadius: 999, minHeight: 34, justifyContent: 'center', paddingHorizontal: 11 },
   chipActive: { backgroundColor: colors.navy },
   chipRow: { flexDirection: 'row-reverse', gap: 8, paddingBottom: 10 },
   chipText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   chipTextActive: { color: '#fff' },
   commentAuthor: { color: colors.ink, fontSize: 11, fontWeight: '900', textAlign: 'right' },
-  commentBubble: { alignSelf: 'flex-end', backgroundColor: '#f2f4f7', borderRadius: 16, marginTop: 8, maxWidth: '92%', padding: 9 },
+  commentBubble: { alignSelf: 'flex-end', backgroundColor: colors.tint, borderRadius: 16, marginTop: 8, maxWidth: '92%', padding: 9 },
   commentText: { color: colors.ink, fontSize: 12, fontWeight: '700', lineHeight: 19, marginTop: 3, textAlign: 'right' },
   composer: { backgroundColor: '#fff', borderBottomColor: colors.line, borderBottomWidth: 1, marginHorizontal: -18, marginBottom: 8, paddingHorizontal: 18, paddingVertical: 10 },
-  composerInput: { backgroundColor: '#f2f4f7', borderRadius: 18, color: colors.ink, marginTop: 10, minHeight: 76, padding: 12, textAlign: 'right', textAlignVertical: 'top' },
-  composerPrompt: { backgroundColor: '#f2f4f7', borderRadius: 999, flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
+  composerInput: { backgroundColor: colors.tint, borderRadius: 18, color: colors.ink, marginTop: 10, minHeight: 76, padding: 12, textAlign: 'right', textAlignVertical: 'top' },
+  composerPrompt: { backgroundColor: colors.tint, borderRadius: 999, flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
   composerPromptText: { color: colors.muted, fontSize: 13, fontWeight: '800', textAlign: 'right' },
   composerTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 10 },
   consultButton: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 6, justifyContent: 'center', minHeight: 38 },
   consultText: { color: '#fff', fontSize: 12, fontWeight: '900' },
   countRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginTop: 12 },
   countText: { color: colors.muted, fontSize: 11, fontWeight: '800' },
-  dangerButton: { backgroundColor: '#fff1f0' },
+  dangerButton: { backgroundColor: colors.redTint },
   disabled: { opacity: 0.45 },
   endText: { color: colors.muted, fontSize: 12, fontWeight: '900', marginVertical: 14, textAlign: 'center' },
   featuredItem: { backgroundColor: '#fff', borderRadius: 16, padding: 11, width: 210 },
@@ -709,45 +709,45 @@ const styles = StyleSheet.create({
   filterText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   filterTextActive: { color: '#fff' },
   flex: { flex: 1 },
-  followButton: { alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 6, justifyContent: 'center', minHeight: 38 },
+  followButton: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 6, justifyContent: 'center', minHeight: 38 },
   followText: { color: colors.blue, fontSize: 12, fontWeight: '900' },
-  headerIcon: { alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 999, height: 40, justifyContent: 'center', width: 40 },
+  headerIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 40, justifyContent: 'center', width: 40 },
   hero: { backgroundColor: '#fff', borderRadius: 22, marginBottom: 12, padding: 14 },
-  heroIcon: { alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 999, height: 44, justifyContent: 'center', width: 44 },
+  heroIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 44, justifyContent: 'center', width: 44 },
   heroTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 12 },
-  iconButton: { alignItems: 'center', backgroundColor: '#f2f4f7', borderRadius: 999, height: 34, justifyContent: 'center', width: 34 },
+  iconButton: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 999, height: 34, justifyContent: 'center', width: 34 },
   imageMediaBox: { backgroundColor: '#101828', padding: 0 },
   inlineComment: { alignItems: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 10 },
-  inlineCommentInput: { backgroundColor: '#f2f4f7', borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 14, textAlign: 'right' },
+  inlineCommentInput: { backgroundColor: colors.tint, borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 14, textAlign: 'right' },
   inlineCommentSend: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 42, justifyContent: 'center', width: 42 },
   lawyerActions: { flexDirection: 'row-reverse', gap: 8, marginTop: 10 },
   inlineLawyers: { backgroundColor: '#fff', borderRadius: 18, marginBottom: 12, padding: 12 },
-  lawyerCard: { alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 18, padding: 12, width: 138 },
+  lawyerCard: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 18, padding: 12, width: 138 },
   lawyerRow: { flexDirection: 'row-reverse', gap: 10, paddingTop: 8 },
-  lawyersPanel: { backgroundColor: '#f8fafc', borderRadius: 18, marginBottom: 12, padding: 12 },
+  lawyersPanel: { backgroundColor: colors.surface, borderRadius: 18, marginBottom: 12, padding: 12 },
   loadMore: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 999, justifyContent: 'center', marginVertical: 12, minHeight: 44 },
   loadMoreText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
   manageRow: { flexDirection: 'row', gap: 5 },
-  mediaBox: { alignItems: 'center', backgroundColor: '#eef2f6', borderRadius: 16, gap: 4, marginTop: 12, padding: 18 },
+  mediaBox: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 16, gap: 4, marginTop: 12, padding: 18 },
   modalActions: { gap: 9, marginTop: 12 },
   modalBackdrop: { alignItems: 'center', backgroundColor: 'rgba(16,24,40,0.45)', flex: 1, justifyContent: 'center', padding: 16 },
-  modalInput: { backgroundColor: '#f2f4f7', borderRadius: 16, color: colors.ink, minHeight: 96, padding: 12, textAlign: 'right', textAlignVertical: 'top' },
+  modalInput: { backgroundColor: colors.tint, borderRadius: 16, color: colors.ink, minHeight: 96, padding: 12, textAlign: 'right', textAlignVertical: 'top' },
   modalPanel: { backgroundColor: '#fff', borderRadius: 22, maxHeight: '88%', padding: 16, width: '94%' },
   modalTitle: { color: colors.ink, fontSize: 18, fontWeight: '900', marginBottom: 10, textAlign: 'right' },
   mutedText: { color: colors.muted, fontSize: 11, fontWeight: '800', lineHeight: 18, marginTop: 4, textAlign: 'right' },
   newStoryBadge: { backgroundColor: colors.blue, borderRadius: 999, color: '#fff', fontSize: 9, fontWeight: '900', left: 8, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 3, position: 'absolute', top: 8 },
-  noticeIcon: { alignItems: 'center', backgroundColor: '#eff6ff', borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
+  noticeIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   noticeTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', textAlign: 'right' },
-  paymentItem: { alignItems: 'center', backgroundColor: '#f8fafc', borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 10 },
-  paymentItemActive: { backgroundColor: '#eff6ff' },
+  paymentItem: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 10 },
+  paymentItemActive: { backgroundColor: colors.blueTint },
   pinnedPost: { borderColor: '#bfdbfe', borderWidth: 1 },
   postAction: { alignItems: 'center', borderRadius: 10, flex: 1, gap: 3, justifyContent: 'center', minHeight: 42 },
-  postActionActive: { backgroundColor: '#eff6ff' },
+  postActionActive: { backgroundColor: colors.blueTint },
   postActionText: { color: colors.muted, fontSize: 10, fontWeight: '900' },
   postCard: { backgroundColor: '#fff', borderRadius: 0, marginHorizontal: -18, marginBottom: 8, overflow: 'hidden', paddingHorizontal: 18, paddingVertical: 12 },
   postHeader: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   postImage: { aspectRatio: 1, width: '100%' },
-  postRibbon: { alignItems: 'center', backgroundColor: '#f8fafc', flexDirection: 'row-reverse', gap: 6, marginHorizontal: -12, marginTop: -12, marginBottom: 12, padding: 9 },
+  postRibbon: { alignItems: 'center', backgroundColor: colors.surface, flexDirection: 'row-reverse', gap: 6, marginHorizontal: -12, marginTop: -12, marginBottom: 12, padding: 9 },
   postRibbonText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
   postText: { color: colors.ink, fontSize: 14, fontWeight: '700', lineHeight: 24, marginTop: 12, textAlign: 'right' },
   readMore: { color: colors.blue, fontSize: 12, fontWeight: '900', marginTop: 6, textAlign: 'right' },
@@ -758,7 +758,7 @@ const styles = StyleSheet.create({
   sortPanel: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 18, flexDirection: 'row-reverse', gap: 12, marginBottom: 12, padding: 12 },
   sortText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
   sortTextActive: { color: colors.blue },
-  sortToggle: { backgroundColor: '#f2f4f7', borderRadius: 999, flexDirection: 'row-reverse', padding: 3 },
+  sortToggle: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', padding: 3 },
   status: { color: colors.navy, fontSize: 12, fontWeight: '900', marginBottom: 10, textAlign: 'center' },
   storyAvatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   storyBubble: { backgroundColor: '#fff', borderRadius: 16, minHeight: 138, padding: 10, width: 104 },
@@ -766,27 +766,27 @@ const styles = StyleSheet.create({
   storyCoverImage: { borderRadius: 12, height: 70, marginBottom: 8, width: '100%' },
   storyCreate: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, flexDirection: 'row-reverse', gap: 5, minHeight: 34, paddingHorizontal: 10 },
   storyCreateText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  storyInput: { backgroundColor: '#f2f4f7', borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 12, textAlign: 'right' },
+  storyInput: { backgroundColor: colors.tint, borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 12, textAlign: 'right' },
   storyModalAuthor: { color: '#fff', fontSize: 18, fontWeight: '900', textAlign: 'center' },
   storyModalBackdrop: { alignItems: 'center', backgroundColor: 'rgba(15,23,42,0.92)', flex: 1, justifyContent: 'center', padding: 20 },
   storyModalCard: { alignItems: 'center', borderColor: 'rgba(255,255,255,0.18)', borderRadius: 24, borderWidth: 1, justifyContent: 'center', minHeight: 320, padding: 22, width: '92%' },
   storyModalClose: { position: 'absolute', right: 18, top: 48, zIndex: 2 },
   storyModalText: { color: '#fff', fontSize: 20, fontWeight: '800', lineHeight: 34, marginTop: 18, textAlign: 'center' },
   storyName: { color: colors.ink, fontSize: 11, fontWeight: '900', marginTop: 7, textAlign: 'right' },
-  storyPanel: { backgroundColor: '#f8fafc', borderBottomColor: colors.line, borderBottomWidth: 1, marginHorizontal: -18, marginBottom: 8, paddingHorizontal: 18, paddingVertical: 12 },
+  storyPanel: { backgroundColor: colors.surface, borderBottomColor: colors.line, borderBottomWidth: 1, marginHorizontal: -18, marginBottom: 8, paddingHorizontal: 18, paddingVertical: 12 },
   storyPublish: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
   storyRow: { flexDirection: 'row-reverse', gap: 10, paddingTop: 10 },
   storyText: { color: colors.muted, fontSize: 10, fontWeight: '800', lineHeight: 15, marginTop: 5, textAlign: 'right' },
   storyTab: { alignItems: 'center', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 5, justifyContent: 'center', minHeight: 34 },
   storyTabActive: { backgroundColor: '#fff' },
   storyTabCount: { backgroundColor: '#fff', borderRadius: 999, color: colors.subtle, fontSize: 9, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 2 },
-  storyTabCountActive: { backgroundColor: '#eff6ff', color: colors.blue },
-  storyTabs: { backgroundColor: '#eef2f6', borderRadius: 999, flexDirection: 'row-reverse', gap: 4, marginTop: 10, padding: 4 },
+  storyTabCountActive: { backgroundColor: colors.blueTint, color: colors.blue },
+  storyTabs: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', gap: 4, marginTop: 10, padding: 4 },
   storyTabText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
   storyTabTextActive: { color: colors.blue },
   storyUnseen: { borderColor: colors.blue, borderWidth: 2 },
   subtitle: { color: colors.muted, fontSize: 13, fontWeight: '800', marginTop: 4, textAlign: 'right' },
-  tag: { backgroundColor: '#eff6ff', borderRadius: 999, color: colors.blue, fontSize: 11, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 },
+  tag: { backgroundColor: colors.blueTint, borderRadius: 999, color: colors.blue, fontSize: 11, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 },
   tagRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 12 },
   title: { color: colors.ink, fontSize: 24, fontWeight: '900', textAlign: 'right' },
   topicPill: { backgroundColor: '#fff', borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },

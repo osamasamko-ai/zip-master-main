@@ -731,7 +731,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green,
   },
   onlineDotMuted: {
-    backgroundColor: '#98a2b3',
+    backgroundColor: colors.subtle,
   },
   storyPlay: {
     alignItems: 'center',
@@ -757,16 +757,16 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   badge: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     paddingHorizontal: 9,
     paddingVertical: 5,
   },
   badgeBlue: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
   },
   badgeGold: {
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
   },
   badgeText: {
     color: colors.ink,
@@ -819,7 +819,7 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     flex: 1,
     flexDirection: 'row-reverse',
@@ -841,7 +841,7 @@ const styles = StyleSheet.create({
   },
   notifyButton: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     height: 44,
     justifyContent: 'center',
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
   },
   statCard: {
     alignItems: 'flex-end',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     flexBasis: '48%',
     flexGrow: 1,
@@ -924,7 +924,7 @@ const styles = StyleSheet.create({
   },
   smallIconButton: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     height: 32,
     justifyContent: 'center',
@@ -949,7 +949,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tabs: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     flexDirection: 'row-reverse',
     gap: 4,
@@ -982,7 +982,7 @@ const styles = StyleSheet.create({
   },
   notice: {
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
     borderColor: '#bfdbfe',
     borderRadius: 8,
     borderWidth: 1,
@@ -1056,7 +1056,7 @@ const styles = StyleSheet.create({
   },
   infoChip: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 999,
     borderWidth: 1,
@@ -1077,7 +1077,7 @@ const styles = StyleSheet.create({
   },
   credential: {
     alignItems: 'flex-end',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     flexBasis: '48%',
     flexGrow: 1,
@@ -1103,7 +1103,7 @@ const styles = StyleSheet.create({
   },
   trustRow: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1125,7 +1125,7 @@ const styles = StyleSheet.create({
   },
   dayCard: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -1157,7 +1157,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   slot: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -1169,7 +1169,7 @@ const styles = StyleSheet.create({
   },
   relatedRow: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     flexDirection: 'row-reverse',
     gap: 10,
@@ -1203,7 +1203,7 @@ const styles = StyleSheet.create({
   },
   secondaryButton: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     marginTop: 10,
     minHeight: 42,
@@ -1263,7 +1263,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   reviewCard: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     marginBottom: 10,
     padding: 12,
@@ -1299,7 +1299,7 @@ const styles = StyleSheet.create({
   },
   activityRow: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     flexDirection: 'row',
     gap: 10,
@@ -1349,8 +1349,8 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     alignItems: 'center',
-    backgroundColor: '#fff1f0',
-    borderColor: '#fecdca',
+    backgroundColor: colors.redTint,
+    borderColor: '#f7b4af',
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row-reverse',

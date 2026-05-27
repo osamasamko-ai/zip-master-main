@@ -792,7 +792,7 @@ function CommandPalette({
                 autoCapitalize="none"
                 onChangeText={onQueryChange}
                 placeholder="ابحث عن ملف، موعد، أو إجراء..."
-                placeholderTextColor="#98a2b3"
+                placeholderTextColor={colors.subtle}
                 style={localStyles.commandInput}
                 value={query}
               />
@@ -1127,7 +1127,7 @@ const localStyles = StyleSheet.create({
   },
   heroIconButton: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 40,
     justifyContent: 'center',
@@ -1258,7 +1258,7 @@ const localStyles = StyleSheet.create({
   },
   milestoneDot: {
     alignItems: 'center',
-    backgroundColor: '#d0d5dd',
+    backgroundColor: colors.line,
     borderRadius: 8,
     height: 32,
     justifyContent: 'center',
@@ -1289,8 +1289,8 @@ const localStyles = StyleSheet.create({
     padding: 12,
   },
   miniStatRed: {
-    backgroundColor: '#fff1f0',
-    borderColor: '#fecdca',
+    backgroundColor: colors.redTint,
+    borderColor: '#f7b4af',
   },
   modeCard: {
     backgroundColor: colors.paper,
@@ -1331,7 +1331,7 @@ const localStyles = StyleSheet.create({
   },
   nextActionCard: {
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
     borderRadius: 18,
     flexDirection: 'row-reverse',
     gap: 12,
@@ -1417,7 +1417,7 @@ const localStyles = StyleSheet.create({
   },
   quickRailItem: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     flex: 1,
     gap: 5,
@@ -1439,7 +1439,7 @@ const localStyles = StyleSheet.create({
   },
   secondaryAction: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 8,
@@ -1455,7 +1455,7 @@ const localStyles = StyleSheet.create({
   },
   searchButton: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     flexDirection: 'row-reverse',
     gap: 6,
@@ -1523,7 +1523,7 @@ const localStyles = StyleSheet.create({
   },
   sparkIcon: {
     alignItems: 'center',
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
     borderRadius: 8,
     height: 38,
     justifyContent: 'center',
@@ -1569,7 +1569,7 @@ const localStyles = StyleSheet.create({
   },
   timelineIcon: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     height: 42,
     justifyContent: 'center',
@@ -1581,8 +1581,8 @@ const localStyles = StyleSheet.create({
     gap: 12,
   },
   warningBox: {
-    backgroundColor: '#fff6df',
-    borderColor: '#fedf89',
+    backgroundColor: colors.goldTint,
+    borderColor: '#f6d084',
     borderRadius: 8,
     borderWidth: 1,
     marginTop: 14,

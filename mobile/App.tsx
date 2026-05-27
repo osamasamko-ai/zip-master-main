@@ -211,7 +211,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tabBar: {
-    backgroundColor: 'rgba(255,255,255,0.98)',
+    backgroundColor: colors.paper,
     borderColor: colors.line,
     borderTopWidth: 1,
     elevation: 14,
@@ -220,7 +220,7 @@ const styles = StyleSheet.create({
     paddingBottom: 9,
     paddingHorizontal: 8,
     paddingTop: 8,
-    shadowColor: colors.navy,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -8 },
     shadowOpacity: 0.08,
     shadowRadius: 18,
@@ -236,7 +236,7 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   activeTab: {
-    backgroundColor: colors.canvas,
+    backgroundColor: colors.blueTint,
   },
   pressedTab: {
     opacity: 0.72,
@@ -250,10 +250,10 @@ const styles = StyleSheet.create({
     width: 44,
   },
   activeTabIconWrap: {
-    borderColor: 'rgba(184,137,46,0.2)',
+    borderColor: colors.line,
     borderWidth: 1,
-    backgroundColor: colors.goldTint,
-    shadowColor: colors.gold,
+    backgroundColor: colors.paper,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.12,
     shadowRadius: 8,

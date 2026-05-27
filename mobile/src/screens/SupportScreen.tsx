@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   topicTextActive: { color: '#fff' },
   formCard: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 8, borderWidth: 1, padding: 13 },
   fieldBlock: { marginBottom: 10 },
-  input: { backgroundColor: '#f8fafc', borderColor: colors.line, borderRadius: 8, borderWidth: 1, color: colors.ink, fontSize: 14, minHeight: 50, paddingHorizontal: 12 },
+  input: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 8, borderWidth: 1, color: colors.ink, fontSize: 14, minHeight: 50, paddingHorizontal: 12 },
   textArea: { minHeight: 118, paddingTop: 12, textAlignVertical: 'top' },
   status: { color: colors.red, fontSize: 12, fontWeight: '900', lineHeight: 20, marginBottom: 10, textAlign: 'center' },
   statusSuccess: { color: colors.green },

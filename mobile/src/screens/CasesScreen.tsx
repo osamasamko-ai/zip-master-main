@@ -396,7 +396,7 @@ export function CasesScreen() {
           </View>
           <View style={styles.searchBox}>
             {caseSearch ? <Pressable onPress={() => setCaseSearch('')}><Ionicons name="close" size={17} color={colors.muted} /></Pressable> : null}
-            <TextInput value={caseSearch} onChangeText={setCaseSearch} placeholder="ابحث باسم القضية أو المحامي" placeholderTextColor="#98a2b3" style={styles.searchInput} />
+            <TextInput value={caseSearch} onChangeText={setCaseSearch} placeholder="ابحث باسم القضية أو المحامي" placeholderTextColor={colors.subtle} style={styles.searchInput} />
             <Ionicons name="search-outline" size={18} color={colors.navy} />
           </View>
         </View>
@@ -538,7 +538,7 @@ export function CasesScreen() {
         </View>
 
         <View style={styles.searchBox}>
-          <TextInput value={docSearch} onChangeText={setDocSearch} placeholder="ابحث في الوثائق" placeholderTextColor="#98a2b3" style={styles.searchInput} />
+          <TextInput value={docSearch} onChangeText={setDocSearch} placeholder="ابحث في الوثائق" placeholderTextColor={colors.subtle} style={styles.searchInput} />
           <Ionicons name="search-outline" size={18} color={colors.navy} />
         </View>
 
@@ -581,7 +581,7 @@ export function CasesScreen() {
           <Pressable disabled={!message.trim()} onPress={() => sendMessage()} style={[styles.sendButton, !message.trim() && styles.disabled]}>
             <Ionicons name="send" size={17} color="#fff" />
           </Pressable>
-          <TextInput multiline value={message} onChangeText={setMessage} placeholder="رسالة داخل القضية" placeholderTextColor="#98a2b3" style={styles.messageInput} />
+          <TextInput multiline value={message} onChangeText={setMessage} placeholder="رسالة داخل القضية" placeholderTextColor={colors.subtle} style={styles.messageInput} />
         </View>
       </>
     );
@@ -809,7 +809,7 @@ function Input({ label, value, onChangeText, placeholder, keyboardType }: { labe
   return (
     <View>
       <Text style={styles.inputLabel}>{label}</Text>
-      <TextInput value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor="#98a2b3" keyboardType={keyboardType || 'default'} style={styles.input} />
+      <TextInput value={value} onChangeText={onChangeText} placeholder={placeholder} placeholderTextColor={colors.subtle} keyboardType={keyboardType || 'default'} style={styles.input} />
     </View>
   );
 }
@@ -849,7 +849,7 @@ const styles = StyleSheet.create({
   },
   attentionItem: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     flexDirection: 'row',
     gap: 8,
@@ -871,7 +871,7 @@ const styles = StyleSheet.create({
   },
   bulkBar: {
     alignItems: 'center',
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
     borderRadius: 16,
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
@@ -891,7 +891,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   caseBadge: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     color: colors.navy,
     fontSize: 10,
@@ -1000,7 +1000,7 @@ const styles = StyleSheet.create({
     padding: 14,
   },
   dangerSoft: {
-    backgroundColor: '#fff1f0',
+    backgroundColor: colors.redTint,
   },
   disabled: {
     opacity: 0.45,
@@ -1012,7 +1012,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   docCardSelected: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
   },
   documentToolbar: {
     flexDirection: 'row-reverse',
@@ -1049,7 +1049,7 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 36,
     justifyContent: 'center',
@@ -1075,7 +1075,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   input: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 14,
     color: colors.ink,
     minHeight: 46,
@@ -1092,7 +1092,7 @@ const styles = StyleSheet.create({
   },
   insightCard: {
     alignItems: 'flex-end',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     flex: 1,
     padding: 10,
@@ -1122,7 +1122,7 @@ const styles = StyleSheet.create({
     padding: 11,
   },
   messageInput: {
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 18,
     color: colors.ink,
     flex: 1,
@@ -1209,7 +1209,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   progressTrack: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 8,
     marginTop: 12,
@@ -1228,7 +1228,7 @@ const styles = StyleSheet.create({
   },
   searchBox: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row',
     gap: 8,
@@ -1243,7 +1243,7 @@ const styles = StyleSheet.create({
   },
   secondaryTiny: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 5,
@@ -1256,13 +1256,13 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   section: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 18,
     marginBottom: 12,
     padding: 12,
   },
   sectionAction: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     paddingHorizontal: 11,
     paddingVertical: 6,
@@ -1287,16 +1287,16 @@ const styles = StyleSheet.create({
     width: 38,
   },
   stat: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
     borderRadius: 16,
     flex: 1,
     padding: 10,
   },
   statGold: {
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
   },
   statGreen: {
-    backgroundColor: '#e9f8ef',
+    backgroundColor: colors.greenTint,
   },
   statLabel: {
     color: colors.muted,
@@ -1306,7 +1306,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   statNeutral: {
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
   },
   statsRail: {
     flexDirection: 'row-reverse',
@@ -1361,7 +1361,7 @@ const styles = StyleSheet.create({
   },
   timelineDot: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 34,
     justifyContent: 'center',

@@ -222,7 +222,7 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
               autoCapitalize="none"
               onChangeText={setQuery}
               placeholder="ابحث باسم، تخصص، أو مدينة"
-              placeholderTextColor="#98a2b3"
+              placeholderTextColor={colors.subtle}
               style={styles.searchInput}
               value={query}
             />
@@ -579,7 +579,7 @@ function ConsultationModal({
               multiline
               onChangeText={onChangeNote}
               placeholder="مثال: أحتاج استشارة عاجلة حول عقد إيجار تجاري..."
-              placeholderTextColor="#98a2b3"
+              placeholderTextColor={colors.subtle}
               style={styles.noteInput}
               value={note}
             />
@@ -648,7 +648,7 @@ function sortModeLabel(sortMode: SortMode) {
 
 const styles = StyleSheet.create({
   activeFilterPill: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     justifyContent: 'center',
     minHeight: 36,
@@ -728,7 +728,7 @@ const styles = StyleSheet.create({
   },
   cardAction: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flex: 1,
     flexDirection: 'row-reverse',
@@ -738,7 +738,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   cardActionActive: {
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
   },
   cardActionText: {
     color: colors.navy,
@@ -797,8 +797,8 @@ const styles = StyleSheet.create({
   },
   clearFilterPill: {
     alignItems: 'center',
-    backgroundColor: '#fff1f0',
-    borderColor: '#fecdca',
+    backgroundColor: colors.redTint,
+    borderColor: '#f7b4af',
     borderRadius: 999,
     borderWidth: 0,
     flexDirection: 'row-reverse',
@@ -834,7 +834,7 @@ const styles = StyleSheet.create({
   },
   factItem: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 16,
     borderWidth: 0,
@@ -860,7 +860,7 @@ const styles = StyleSheet.create({
   },
   feeBox: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -874,7 +874,7 @@ const styles = StyleSheet.create({
   },
   filterButton: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 6,
@@ -936,7 +936,7 @@ const styles = StyleSheet.create({
   },
   heroIcon: {
     alignItems: 'center',
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
     borderRadius: 8,
     height: 46,
     justifyContent: 'center',
@@ -959,7 +959,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   info: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     padding: 10,
   },
@@ -1029,7 +1029,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   metric: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -1051,7 +1051,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   miniStat: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 16,
     flexBasis: '30%',
     flexGrow: 1,
@@ -1103,7 +1103,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green,
   },
   onlineDotIdle: {
-    backgroundColor: '#98a2b3',
+    backgroundColor: colors.subtle,
   },
   paymentOption: {
     alignItems: 'center',
@@ -1118,11 +1118,11 @@ const styles = StyleSheet.create({
   },
   paymentOptionActive: {
     borderColor: colors.navy,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
   },
   pricePanel: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 18,
     flexDirection: 'row-reverse',
     gap: 12,
@@ -1138,7 +1138,7 @@ const styles = StyleSheet.create({
   },
   quickFilter: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 5,
@@ -1168,7 +1168,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   progressTrack: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 7,
     marginTop: 8,
@@ -1197,7 +1197,7 @@ const styles = StyleSheet.create({
   },
   matchBar: {
     alignItems: 'center',
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
     borderRadius: 18,
     flexDirection: 'row-reverse',
     gap: 10,
@@ -1245,15 +1245,15 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 999,
     height: 38,
     justifyContent: 'center',
     width: 38,
   },
   saveButtonActive: {
-    backgroundColor: '#fff6df',
-    borderColor: '#fedf89',
+    backgroundColor: colors.goldTint,
+    borderColor: '#f6d084',
   },
   scoreDivider: {
     backgroundColor: colors.line,
@@ -1272,7 +1272,7 @@ const styles = StyleSheet.create({
   },
   scoreStrip: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     flexDirection: 'row-reverse',
     gap: 8,
@@ -1286,7 +1286,7 @@ const styles = StyleSheet.create({
   },
   searchClear: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 30,
     justifyContent: 'center',
@@ -1301,7 +1301,7 @@ const styles = StyleSheet.create({
   },
   searchShell: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row',
     gap: 8,

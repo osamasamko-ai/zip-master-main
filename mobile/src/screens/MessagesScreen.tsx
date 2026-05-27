@@ -277,7 +277,7 @@ export function MessagesScreen() {
                   <Ionicons name="close" size={16} color={colors.muted} />
                 </Pressable>
               ) : null}
-              <TextInput value={query} onChangeText={setQuery} placeholder="ابحث عن محامٍ أو قضية" placeholderTextColor="#98a2b3" style={styles.searchInput} />
+              <TextInput value={query} onChangeText={setQuery} placeholder="ابحث عن محامٍ أو قضية" placeholderTextColor={colors.subtle} style={styles.searchInput} />
               <Ionicons name="search-outline" size={19} color={colors.navy} />
             </View>
           </View>
@@ -524,7 +524,7 @@ export function MessagesScreen() {
                     multiline
                     onChangeText={setDraft}
                     placeholder={viewerRole === 'lawyer' ? 'اكتب ردك للعميل هنا...' : 'اكتب رسالتك أو استفسارك هنا...'}
-                    placeholderTextColor="#98a2b3"
+                    placeholderTextColor={colors.subtle}
                     style={styles.messageInput}
                     value={draft}
                   />
@@ -761,8 +761,8 @@ function dayLabel(date: Date) {
 
 const styles = StyleSheet.create({
   aiPanel: {
-    backgroundColor: '#fff6df',
-    borderColor: '#fedf89',
+    backgroundColor: colors.goldTint,
+    borderColor: '#f6d084',
     borderRadius: 18,
     borderWidth: 1,
     marginHorizontal: 12,
@@ -803,7 +803,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   caseStat: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     flex: 1,
     padding: 10,
@@ -827,7 +827,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   caseCompact: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
     paddingHorizontal: 12,
@@ -847,7 +847,7 @@ const styles = StyleSheet.create({
   },
   caseSummaryItem: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     flexDirection: 'row-reverse',
     gap: 8,
@@ -868,7 +868,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   caseSwitch: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderColor: colors.line,
     borderRadius: 999,
     borderWidth: 1,
@@ -904,14 +904,14 @@ const styles = StyleSheet.create({
   },
   clearSearch: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 30,
     justifyContent: 'center',
     width: 30,
   },
   closedBox: {
-    backgroundColor: '#e9f8ef',
+    backgroundColor: colors.greenTint,
     borderRadius: 16,
     marginVertical: 8,
     padding: 10,
@@ -932,7 +932,7 @@ const styles = StyleSheet.create({
   },
   composerIconButton: {
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
     borderRadius: 999,
     height: 36,
     justifyContent: 'center',
@@ -1001,7 +1001,7 @@ const styles = StyleSheet.create({
   },
   dateSeparator: {
     alignSelf: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     color: colors.muted,
     fontSize: 11,
@@ -1011,7 +1011,7 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   draftCount: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     color: colors.muted,
     fontSize: 10,
@@ -1039,7 +1039,7 @@ const styles = StyleSheet.create({
   emptyThread: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 18,
     borderWidth: 0,
@@ -1112,7 +1112,7 @@ const styles = StyleSheet.create({
   },
   heroAction: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 38,
     justifyContent: 'center',
@@ -1125,7 +1125,7 @@ const styles = StyleSheet.create({
   },
   iconButton: {
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
     borderRadius: 999,
     height: 38,
     justifyContent: 'center',
@@ -1189,7 +1189,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   messageInput: {
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 22,
     color: colors.ink,
     flex: 1,
@@ -1217,12 +1217,12 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blue,
   },
   messageOther: {
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
   },
   messageRequest: {
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
     borderRadius: 20,
-    borderColor: '#fedf89',
+    borderColor: '#f6d084',
     borderWidth: 1,
   },
   messageRow: {
@@ -1270,7 +1270,7 @@ const styles = StyleSheet.create({
   },
   miniBadge: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 4,
@@ -1287,7 +1287,7 @@ const styles = StyleSheet.create({
   },
   miniBadgeUnread: {
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
     borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 4,
@@ -1300,7 +1300,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   miniBadgeUrgent: {
-    backgroundColor: '#fff1f0',
+    backgroundColor: colors.redTint,
   },
   modalBackdrop: {
     alignItems: 'center',
@@ -1336,7 +1336,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   progressTiny: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flex: 1,
     height: 6,
@@ -1347,7 +1347,7 @@ const styles = StyleSheet.create({
     height: '100%',
   },
   quickPrompt: {
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     maxWidth: 250,
     paddingHorizontal: 12,
@@ -1387,7 +1387,7 @@ const styles = StyleSheet.create({
   },
   reactionOption: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 46,
     justifyContent: 'center',
@@ -1407,8 +1407,8 @@ const styles = StyleSheet.create({
   },
   requestTag: {
     alignItems: 'center',
-    backgroundColor: '#fff6df',
-    borderColor: '#fedf89',
+    backgroundColor: colors.goldTint,
+    borderColor: '#f6d084',
     borderRadius: 999,
     borderWidth: 1,
     flexDirection: 'row-reverse',
@@ -1429,7 +1429,7 @@ const styles = StyleSheet.create({
   },
   searchBox: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row',
     gap: 8,
@@ -1455,8 +1455,8 @@ const styles = StyleSheet.create({
     opacity: 0.45,
   },
   smartDraft: {
-    backgroundColor: '#fff6df',
-    borderColor: '#fedf89',
+    backgroundColor: colors.goldTint,
+    borderColor: '#f6d084',
     borderRadius: 18,
     borderWidth: 1,
     marginHorizontal: 12,
@@ -1464,10 +1464,10 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   statBlue: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
   },
   statGold: {
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
   },
   statLabel: {
     color: colors.muted,
@@ -1477,7 +1477,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   statRed: {
-    backgroundColor: '#fff1f0',
+    backgroundColor: colors.redTint,
   },
   statsRow: {
     flexDirection: 'row-reverse',
@@ -1502,7 +1502,7 @@ const styles = StyleSheet.create({
   statusPill: {
     alignItems: 'center',
     alignSelf: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderColor: colors.line,
     borderRadius: 999,
     borderWidth: 1,
@@ -1543,7 +1543,7 @@ const styles = StyleSheet.create({
   },
   threadActionButton: {
     alignItems: 'center',
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
     borderRadius: 999,
     height: 32,
     justifyContent: 'center',
@@ -1597,7 +1597,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   threadProgressTrack: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 7,
     overflow: 'hidden',
@@ -1632,7 +1632,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   toggle: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     paddingHorizontal: 12,
     paddingVertical: 7,
@@ -1650,7 +1650,7 @@ const styles = StyleSheet.create({
   },
   toolChip: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     flexDirection: 'row-reverse',
     gap: 5,
@@ -1664,7 +1664,7 @@ const styles = StyleSheet.create({
   },
   trayClose: {
     alignItems: 'center',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     height: 26,
     justifyContent: 'center',
@@ -1685,8 +1685,8 @@ const styles = StyleSheet.create({
   },
   urgentBox: {
     alignItems: 'center',
-    backgroundColor: '#fff1f0',
-    borderColor: '#fecdca',
+    backgroundColor: colors.redTint,
+    borderColor: '#f7b4af',
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row-reverse',
@@ -1696,7 +1696,7 @@ const styles = StyleSheet.create({
   },
   urgentDot: {
     alignItems: 'center',
-    backgroundColor: '#fff1f0',
+    backgroundColor: colors.redTint,
     borderRadius: 999,
     bottom: -3,
     height: 18,

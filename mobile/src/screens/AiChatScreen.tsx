@@ -569,7 +569,7 @@ export function AiChatScreen() {
             value={activeSession.query}
             onChangeText={setQuery}
             placeholder="اكتب سؤالاً أو الصق نصاً للمراجعة..."
-            placeholderTextColor="#98a2b3"
+            placeholderTextColor={colors.subtle}
             multiline
             style={styles.input}
             textAlign="right"
@@ -773,7 +773,7 @@ const styles = StyleSheet.create({
     width: 24,
   },
   tabs: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     flexDirection: 'row-reverse',
     gap: 4,
@@ -837,8 +837,8 @@ const styles = StyleSheet.create({
   },
   alert: {
     alignItems: 'center',
-    backgroundColor: '#fff1f0',
-    borderColor: '#fecdca',
+    backgroundColor: colors.redTint,
+    borderColor: '#f7b4af',
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row',
@@ -857,7 +857,7 @@ const styles = StyleSheet.create({
   notice: {
     alignItems: 'center',
     backgroundColor: '#fffbeb',
-    borderColor: '#fedf89',
+    borderColor: '#f6d084',
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row-reverse',
@@ -884,7 +884,7 @@ const styles = StyleSheet.create({
   },
   assistantAvatar: {
     alignItems: 'center',
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
     borderRadius: 8,
     height: 32,
     justifyContent: 'center',
@@ -923,7 +923,7 @@ const styles = StyleSheet.create({
   sourcesButton: {
     alignItems: 'center',
     alignSelf: 'flex-end',
-    backgroundColor: '#f2f4f7',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     flexDirection: 'row-reverse',
     gap: 6,
@@ -1007,7 +1007,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   badge: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 999,
     paddingHorizontal: 10,
     paddingVertical: 5,
@@ -1082,7 +1082,7 @@ const styles = StyleSheet.create({
   },
   promptButtonHighlighted: {
     backgroundColor: '#fffbeb',
-    borderColor: '#fedf89',
+    borderColor: '#f6d084',
   },
   promptTextWrap: {
     alignItems: 'flex-end',
@@ -1128,7 +1128,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   summaryCard: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -1194,7 +1194,7 @@ const styles = StyleSheet.create({
   },
   toneChip: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     flex: 1,
     flexDirection: 'row-reverse',
@@ -1203,7 +1203,7 @@ const styles = StyleSheet.create({
     minHeight: 34,
   },
   toneChipActive: {
-    backgroundColor: '#fff6df',
+    backgroundColor: colors.goldTint,
   },
   toneText: {
     color: colors.muted,

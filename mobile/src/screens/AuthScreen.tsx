@@ -49,7 +49,7 @@ function normalizeEmail(value: string) {
 
 function getPasswordStrengthLabel(score: number) {
   const labels = ['ضعيفة جداً', 'ضعيفة', 'متوسطة', 'قوية', 'قوية جداً'];
-  const colorsByScore = ['#d0d5dd', colors.red, colors.gold, colors.green, colors.blue];
+  const colorsByScore = [colors.line, colors.red, colors.gold, colors.green, colors.blue];
   return { label: labels[score], color: colorsByScore[score] };
 }
 
@@ -311,7 +311,7 @@ export function AuthScreen() {
                     </View>
                     <View style={styles.strengthBar}>
                       {[1, 2, 3, 4].map((step) => (
-                        <View key={step} style={[styles.strengthStep, { backgroundColor: passwordStrength >= step ? strengthUi.color : '#d0d5dd' }]} />
+                        <View key={step} style={[styles.strengthStep, { backgroundColor: passwordStrength >= step ? strengthUi.color : colors.line }]} />
                       ))}
                     </View>
                     <View style={styles.requirementsGrid}>
@@ -469,12 +469,12 @@ function AuthField({
     <View>
       <Text style={styles.fieldLabel}>{label}</Text>
       <View style={styles.inputWrap}>
-        <Ionicons name={icon} size={18} color="#98a2b3" />
+        <Ionicons name={icon} size={18} color={colors.subtle} />
         <TextInput
           autoCapitalize="none"
           keyboardType={keyboardType}
           placeholder={placeholder}
-          placeholderTextColor="#98a2b3"
+          placeholderTextColor={colors.subtle}
           secureTextEntry={secureTextEntry}
           value={value}
           onChangeText={onChangeText}
@@ -788,7 +788,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   modeSwitch: {
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     flexDirection: 'row-reverse',
     gap: 4,
@@ -814,8 +814,8 @@ const styles = StyleSheet.create({
     color: colors.navy,
   },
   utilitySwitch: {
-    backgroundColor: '#f8fafc',
-    borderColor: '#eef2f6',
+    backgroundColor: colors.surface,
+    borderColor: colors.tint,
     borderRadius: 8,
     borderWidth: 1,
     flexDirection: 'row-reverse',
@@ -849,7 +849,7 @@ const styles = StyleSheet.create({
   },
   infoBox: {
     alignItems: 'flex-start',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -876,7 +876,7 @@ const styles = StyleSheet.create({
   },
   loadingBox: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     gap: 8,
     padding: 16,
@@ -941,7 +941,7 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -973,7 +973,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   passwordBox: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -1019,7 +1019,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   checkChipMet: {
-    backgroundColor: '#e9f8ef',
+    backgroundColor: colors.greenTint,
   },
   checkChipText: {
     color: colors.muted,
@@ -1034,7 +1034,7 @@ const styles = StyleSheet.create({
   },
   roleCard: {
     alignItems: 'flex-start',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -1043,7 +1043,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   roleCardActive: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.blueTint,
     borderColor: colors.navy,
   },
   roleIcon: {
@@ -1078,8 +1078,8 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   noteBox: {
-    backgroundColor: '#fff6df',
-    borderColor: '#fedf89',
+    backgroundColor: colors.goldTint,
+    borderColor: '#f6d084',
     borderRadius: 8,
     borderWidth: 1,
     padding: 12,
@@ -1099,7 +1099,7 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   checklistBox: {
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -1122,7 +1122,7 @@ const styles = StyleSheet.create({
   },
   loginTools: {
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.surface,
     borderRadius: 8,
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1177,11 +1177,11 @@ const styles = StyleSheet.create({
     padding: 11,
   },
   messageError: {
-    backgroundColor: '#fff1f0',
-    borderColor: '#fecdca',
+    backgroundColor: colors.redTint,
+    borderColor: '#f7b4af',
   },
   messageSuccess: {
-    backgroundColor: '#e9f8ef',
+    backgroundColor: colors.greenTint,
     borderColor: '#b7ebc6',
   },
   messageText: {
@@ -1212,7 +1212,7 @@ const styles = StyleSheet.create({
   },
   modalClose: {
     alignItems: 'center',
-    backgroundColor: '#eef2f6',
+    backgroundColor: colors.tint,
     borderRadius: 8,
     height: 36,
     justifyContent: 'center',

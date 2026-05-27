@@ -6,9 +6,9 @@ export function Screen({ children }: { children: React.ReactNode }) {
   return <View style={styles.screen}>{children}</View>;
 }
 
-export function Card({ children }: { children: React.ReactNode }) {
+export const Card = React.memo(function Card({ children }: { children: React.ReactNode }) {
   return <View style={styles.card}>{children}</View>;
-}
+});
 
 export function SectionTitle({ title, action }: { title: string; action?: string }) {
   return (
@@ -19,14 +19,14 @@ export function SectionTitle({ title, action }: { title: string; action?: string
   );
 }
 
-export function EmptyState({ title, note }: { title: string; note?: string }) {
+export const EmptyState = React.memo(function EmptyState({ title, note }: { title: string; note?: string }) {
   return (
     <View style={styles.emptyCard}>
       <Text style={styles.emptyTitle}>{title}</Text>
       {note ? <Text style={styles.emptyNote}>{note}</Text> : null}
     </View>
   );
-}
+});
 
 export function KeyValue({ label, value }: { label: string; value: string | number }) {
   return (
@@ -41,7 +41,7 @@ export function Divider() {
   return <View style={styles.divider} />;
 }
 
-export function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'gold' | 'green' | 'red' | 'blue' }) {
+export const Pill = React.memo(function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'gold' | 'green' | 'red' | 'blue' }) {
   const toneStyle = {
     neutral: styles.pillNeutral,
     gold: styles.pillGold,
@@ -55,7 +55,7 @@ export function Pill({ label, tone = 'neutral' }: { label: string; tone?: 'neutr
       <Text style={[styles.pillText, tone !== 'neutral' && styles.pillTextStrong]}>{label}</Text>
     </View>
   );
-}
+});
 
 export function Heading({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
@@ -83,7 +83,7 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [styles.button, variant === 'secondary' && styles.secondaryButton, pressed && !loading && styles.pressed]}
     >
-      {loading ? <ActivityIndicator color={variant === 'primary' ? '#fff' : colors.navy} /> : <Text style={[styles.buttonText, variant === 'secondary' && styles.secondaryButtonText]}>{title}</Text>}
+      {loading ? <ActivityIndicator color={variant === 'primary' ? '#fff' : colors.blue} /> : <Text style={[styles.buttonText, variant === 'secondary' && styles.secondaryButtonText]}>{title}</Text>}
     </Pressable>
   );
 }
@@ -98,7 +98,7 @@ export function Toast({ message, tone = 'success' }: { message?: string; tone?: 
   );
 }
 
-export function SkeletonCard({ lines = 3, media = false }: { lines?: number; media?: boolean }) {
+export const SkeletonCard = React.memo(function SkeletonCard({ lines = 3, media = false }: { lines?: number; media?: boolean }) {
   return (
     <View style={styles.skeletonCard}>
       <View style={styles.skeletonHeader}>
@@ -114,7 +114,7 @@ export function SkeletonCard({ lines = 3, media = false }: { lines?: number; med
       {media ? <View style={styles.skeletonMedia} /> : null}
     </View>
   );
-}
+});
 
 export function BottomSheet({
   visible,
@@ -157,7 +157,7 @@ export function Field({
       value={value}
       onChangeText={onChangeText}
       placeholder={placeholder}
-      placeholderTextColor="#98a2b3"
+      placeholderTextColor={colors.subtle}
       secureTextEntry={secureTextEntry}
       style={styles.input}
     />
@@ -194,8 +194,13 @@ export const styles = StyleSheet.create({
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
+    elevation: 2,
     marginBottom: 10,
     padding: 13,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
   },
   sectionTitle: {
     alignItems: 'center',
@@ -290,14 +295,21 @@ export const styles = StyleSheet.create({
   },
   button: {
     alignItems: 'center',
-    backgroundColor: colors.navy,
+    backgroundColor: colors.blue,
     borderRadius: 8,
+    elevation: 2,
     minHeight: 50,
     justifyContent: 'center',
     paddingHorizontal: 16,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 16,
   },
   secondaryButton: {
-    backgroundColor: colors.tint,
+    backgroundColor: colors.blueTint,
+    elevation: 0,
+    shadowOpacity: 0,
   },
   buttonText: {
     color: '#fff',
@@ -305,14 +317,14 @@ export const styles = StyleSheet.create({
     fontWeight: '800',
   },
   secondaryButtonText: {
-    color: colors.navy,
+    color: colors.blue,
   },
   pressed: {
     opacity: 0.72,
     transform: [{ scale: 0.99 }],
   },
   input: {
-    backgroundColor: colors.paper,
+    backgroundColor: colors.surface,
     borderColor: colors.line,
     borderRadius: 8,
     borderWidth: 1,
@@ -398,7 +410,7 @@ export const styles = StyleSheet.create({
     width: '100%',
   },
   sheetBackdrop: {
-    backgroundColor: 'rgba(16,24,40,0.44)',
+    backgroundColor: colors.backdrop,
     flex: 1,
     justifyContent: 'flex-end',
   },
@@ -408,9 +420,9 @@ export const styles = StyleSheet.create({
     borderTopRightRadius: 18,
     maxHeight: '88%',
     padding: 16,
-    shadowColor: colors.navy,
+    shadowColor: colors.shadow,
     shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.14,
+    shadowOpacity: 1,
     shadowRadius: 24,
   },
   sheetHandle: {
