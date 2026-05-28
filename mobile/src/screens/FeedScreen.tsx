@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
-import { ActivityIndicator, Animated, Image, LayoutAnimation, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, UIManager, View } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, UIManager, View, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { BottomSheet, Button, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
@@ -10,6 +10,8 @@ import { colors } from '../theme/colors';
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
+
+const { width } = Dimensions.get('window');
 
 type FeedFilter = 'all' | 'videos' | 'articles' | 'admins' | 'popular';
 type SortMode = 'smart' | 'latest';
@@ -35,6 +37,23 @@ const storyModes: Array<{ id: StoryMode; label: string }> = [
   { id: 'archive', label: 'الأرشيف' },
 ];
 
+// Scoring Constants for better readability and maintainability
+// Post Scoring
+const POST_CATEGORY_CONTENT_WEIGHT = 1.6;
+const POST_AUTHOR_AFFINITY_WEIGHT = 1.4;
+const POST_ENGAGEMENT_COMMENT_SAVE_WEIGHT = 2;
+const POST_ENGAGEMENT_SCALING_FACTOR = 4; // Divisor for log1p engagement
+const POST_RECENCY_MAX_SCORE = 1.2;
+const POST_RECENCY_DECAY_HOURS = 72; // Post loses all recency score after 72 hours
+const POST_VIDEO_MEDIA_BOOST = 0.25;
+const POST_IMAGE_MEDIA_BOOST = 0.15;
+const POST_FEATURED_BOOST = 1.5;
+const POST_PINNED_BOOST = 1;
+const POST_SAVED_BOOST = 0.5;
+const POST_LIKED_BOOST = 0.25;
+// Story Scoring
+const STORY_AUTHOR_AFFINITY_WEIGHT = 1.2;
+const STORY_RECENCY_DECAY_HOURS = 24; // Story loses all recency score after 24 hours
 export function FeedScreen() {
   const { user } = useAuth();
   const [posts, setPosts] = useState<any[]>([]);
@@ -54,6 +73,8 @@ export function FeedScreen() {
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('عام');
   const [storyText, setStoryText] = useState('');
+  const [storyMedia, setStoryMedia] = useState<any | null>(null);
+  const [activeStoryIndex, setActiveStoryIndex] = useState(0);
   const [commentPostId, setCommentPostId] = useState('');
   const [comment, setComment] = useState('');
   const [editingPost, setEditingPost] = useState<any | null>(null);
@@ -152,15 +173,170 @@ export function FeedScreen() {
     await Promise.all([loadPosts(activeFilter, 0, false), loadSideData()]);
   };
 
+  const renderHeader = () => (
+    <View>
+      <HeroSection
+        icon="layers-outline"
+        title="المجتمع القانوني"
+        subtitle={`${posts.length.toLocaleString('ar-IQ')} منشور · ${sortMode === 'smart' ? 'اقتراحات ذكية' : 'الأحدث أولاً'}`}
+        refreshing={refreshing}
+        rightElement={
+          <Pressable onPress={() => setSortMode(sortMode === 'smart' ? 'latest' : 'smart')} style={styles.headerIcon}>
+            <Ionicons name={sortMode === 'smart' ? 'sparkles-outline' : 'time-outline'} size={20} color={colors.blue} />
+          </Pressable>
+        }
+      />
+
+      {canCreate ? (
+        <View style={styles.composer}>
+          <View style={styles.composerTop}>
+            <View style={styles.avatar}><Text style={styles.avatarText}>{String(user?.name || 'م').charAt(0)}</Text></View>
+            <Pressable onPress={() => setComposerOpen((current) => !current)} style={styles.composerPrompt}>
+              <Text style={styles.composerPromptText}>{content || 'بماذا تفكر قانونياً؟'}</Text>
+            </Pressable>
+          </View>
+          {composerOpen ? (
+            <>
+              <TextInput multiline value={content} onChangeText={setContent} placeholder="شارك سؤالاً أو تحديثاً قانونياً" placeholderTextColor={colors.subtle} style={styles.composerInput} />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                {categories.map((item) => <Chip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}
+              </ScrollView>
+              <Button title="نشر" onPress={publishPost} loading={posting} />
+            </>
+          ) : null}
+        </View>
+      ) : (
+        <View style={styles.viewerNotice}>
+          <View style={styles.noticeIcon}><Ionicons name="eye-outline" size={18} color={colors.blue} /></View>
+          <View style={styles.flex}>
+            <Text style={styles.noticeTitle}>تابع، علّق، واحفظ المحتوى المهم</Text>
+            <Text style={styles.mutedText}>النشر متاح للمحامين الموثقين وإدارة المنصة.</Text>
+          </View>
+        </View>
+      )}
+
+      <View style={styles.storyPanel}>
+        <Text style={styles.sectionTitle}>القصص اليومية</Text>
+        <View style={styles.storyTabs}>
+          {storyModes.map((mode) => (
+            <Pressable key={mode.id} onPress={() => setStoryMode(mode.id)} style={[styles.storyTab, storyMode === mode.id && styles.storyTabActive]}>
+              <Text style={[styles.storyTabText, storyMode === mode.id && styles.storyTabTextActive]}>{mode.label}</Text>
+              <Text style={[styles.storyTabCount, storyMode === mode.id && styles.storyTabCountActive]}>{storyCounts[mode.id]}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
+          {canCreate && storyMode === 'new' && (
+            <InteractiveCard onPress={() => setStoryComposerOpen(true)} style={styles.addStoryBubble}>
+              <View style={styles.addStoryCircle}><Ionicons name="add" size={22} color="#fff" /></View>
+              <Avatar source={user?.img} name={user?.name || 'م'} small />
+              <Text style={styles.storyName} numberOfLines={1}>إضافة قصة</Text>
+            </InteractiveCard>
+          )}
+          {loadingStories && stories.length === 0 ? (
+            [1, 2, 3, 4].map((i) => <ShimmerStory key={i} />)
+          ) : (
+            <>
+              {smartStories.length === 0 && !canCreate ? <Text style={styles.mutedText}>{storyMode === 'archive' ? 'لا توجد قصص مؤرشفة حالياً.' : storyMode === 'seen' ? 'لم تشاهد أي قصة بعد.' : 'لا توجد قصص جديدة حالياً.'}</Text> : null}
+              {smartStories.map((story, idx) => <StoryBubble key={story.id} story={story} onPress={() => openStoryViewer(idx)} />)}
+            </>
+          )}
+        </ScrollView>
+      </View>
+
+      <View style={styles.sortPanel}>
+        <View style={styles.flex}>
+          <Text style={styles.cardTitle}>ترتيب المنشورات</Text>
+          <Text style={styles.mutedText}>{sortMode === 'smart' ? 'الأقرب لاهتماماتك وتفاعلاتك أولاً.' : 'أحدث المنشورات حسب وقت النشر.'}</Text>
+        </View>
+        <View style={styles.sortToggle}>
+          <Pressable onPress={() => setSortMode('smart')} style={[styles.sortOption, sortMode === 'smart' && styles.sortOptionActive]}><Text style={[styles.sortText, sortMode === 'smart' && styles.sortTextActive]}>اقتراحات</Text></Pressable>
+          <Pressable onPress={() => setSortMode('latest')} style={[styles.sortOption, sortMode === 'latest' && styles.sortOptionActive]}><Text style={[styles.sortText, sortMode === 'latest' && styles.sortTextActive]}>الأحدث</Text></Pressable>
+        </View>
+      </View>
+
+      <View style={styles.feedControls}>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
+          {filters.map((filter) => <FilterChip key={filter.id} filter={filter} active={activeFilter === filter.id} onPress={() => setActiveFilter(filter.id)} />)}
+        </ScrollView>
+      </View>
+
+      {featuredPosts.length > 0 ? (
+        <View style={styles.featuredPanel}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredRow}>
+            {featuredPosts.map((post) => <Pressable key={post.id} style={styles.featuredItem}><Text style={styles.featuredTitle} numberOfLines={2}>{post.content}</Text><Text style={styles.mutedText}>{post.category}</Text></Pressable>)}
+          </ScrollView>
+        </View>
+      ) : null}
+
+      {topics.length > 0 ? (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {topics.map((topic) => <View key={topic} style={styles.topicPill}><Text style={styles.topicText}>#{topic}</Text></View>)}
+        </ScrollView>
+      ) : null}
+
+      {!refreshing && sortedPosts.length === 0 ? <EmptyState title="لا توجد منشورات حالياً" note="جرّب فلتر آخر أو عد لاحقاً لمتابعة محتوى قانوني موثوق." /> : null}
+    </View>
+  );
+
+  const renderFooter = () => (
+    <View style={{ paddingBottom: 40 }}>
+      {loadingMore ? (
+        <ActivityIndicator color={colors.navy} style={{ marginVertical: 20 }} />
+      ) : (
+        !hasMore && posts.length > 0 && <Text style={styles.endText}>وصلت إلى نهاية المنشورات</Text>
+      )}
+    </View>
+  );
+
+  const renderItem = ({ item, index }: { item: any; index: number }) => (
+    <View>
+      <PostCardMemo
+        post={item}
+        userId={user?.id}
+        userRole={user?.role}
+        busyId={busyId}
+        onLike={() => react(item.id, 'like')}
+        onSave={() => react(item.id, 'save')}
+        onShare={() => react(item.id, 'share')}
+        onComment={() => setCommentPostId(commentPostId === item.id ? '' : item.id)}
+        commentOpen={commentPostId === item.id}
+        comment={comment}
+        onChangeComment={setComment}
+        onSubmitComment={() => submitComment(item.id)}
+        onConsult={() => openConsultation(item)}
+        onFollow={() => followLawyer(item.author.id)}
+        onEdit={() => { setEditingPost(item); setEditContent(item.content); }}
+        onDelete={() => deletePost(item)}
+        onPin={() => adminUpdate(item, { pinned: !item.pinned })}
+        onFeature={() => adminUpdate(item, { featured: !item.featured })}
+        onHide={() => adminUpdate(item, { status: 'hidden' })}
+      />
+      {index === 1 && suggestedLawyers.length > 0 ? (
+        <View style={styles.inlineLawyers}>
+          <View style={styles.rowBetween}><View /><Text style={styles.sectionTitle}>أشخاص قد تتابعهم</Text></View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.lawyerRow}>
+            {suggestedLawyers.map((lawyer) => <LawyerSuggestion key={lawyer.id} lawyer={lawyer} busy={busyId === `follow-${lawyer.id}`} onFollow={() => followLawyer(lawyer.id)} />)}
+          </ScrollView>
+        </View>
+      ) : null}
+    </View>
+  );
+
   const replacePost = (updated: any) => {
     setPosts((current) => current.map((post) => (post.id === updated.id ? updated : post)));
   };
 
   const publishPost = async () => {
     if (!content.trim()) return;
+
     setPosting(true);
+    setStatus('');
+
     try {
-      const response = await apiClient.createFeedPost(content.trim(), category);
+      const response = await (apiClient.createFeedPost as any)(content.trim(), category);
+
       setPosts((current) => [response.data, ...current]);
       setContent('');
       setStatus('تم نشر المنشور.');
@@ -172,13 +348,18 @@ export function FeedScreen() {
   };
 
   const publishStory = async () => {
-    if (!storyText.trim()) return;
+    if (!storyText.trim() && !storyMedia) return;
     setStoryPosting(true);
+    setStatus('');
+
     try {
-      const response = await apiClient.createFeedStory(storyText.trim());
+      const response = await (apiClient.createFeedStory as any)(storyText.trim());
+
       setStories((current) => [response.data, ...current]);
       setStoryText('');
+      setStoryMedia(null);
       setStatus('تم نشر القصة لمدة 24 ساعة.');
+      setStoryComposerOpen(false);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'تعذر نشر القصة.');
     } finally {
@@ -186,16 +367,13 @@ export function FeedScreen() {
     }
   };
 
-  const viewStory = async (story: any) => {
-    setActiveStory({ ...story, seenByMe: true });
-    setStories((current) => current.map((item) => item.id === story.id ? { ...item, seenByMe: true } : item));
-    if (story.seenByMe || story.isArchived) return;
-    try {
-      const response = await apiClient.markFeedStoryViewed(story.id);
-      if (response.data) setStories((current) => current.map((item) => item.id === story.id ? response.data : item));
-    } catch {
-      setStories((current) => current.map((item) => item.id === story.id ? story : item));
-    }
+  const pickStoryMedia = async () => {
+    setStatus('تم تعطيل اختيار الصور مؤقتاً بسبب عدم توافق نسخة expo-image-picker مع نسخة Expo الحالية. شغّل: npx expo install expo-image-picker ثم أعد تفعيل الاستيراد.');
+  };
+
+  const openStoryViewer = (index: number) => {
+    setActiveStoryIndex(index);
+    setActiveStory(true);
   };
 
   const react = async (id: string, action: 'like' | 'save' | 'share') => {
@@ -312,165 +490,35 @@ export function FeedScreen() {
 
   return (
     <Screen>
-      <ScrollView refreshControl={<RefreshControl refreshing={refreshing && posts.length > 0} onRefresh={refresh} />} showsVerticalScrollIndicator={false}>
-        <HeroSection
-          icon="layers-outline"
-          title="المجتمع القانوني"
-          subtitle={`${posts.length.toLocaleString('ar-IQ')} منشور · ${sortMode === 'smart' ? 'اقتراحات ذكية' : 'الأحدث أولاً'}`}
-          refreshing={refreshing}
-          rightElement={
-            <Pressable onPress={() => setSortMode(sortMode === 'smart' ? 'latest' : 'smart')} style={styles.headerIcon}>
-              <Ionicons name={sortMode === 'smart' ? 'sparkles-outline' : 'time-outline'} size={20} color={colors.blue} />
-            </Pressable>
-          }
-        />
-
-        <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
-
-        {canCreate ? (
-          <View style={styles.composer}>
-            <View style={styles.composerTop}>
-              <View style={styles.avatar}><Text style={styles.avatarText}>{String(user?.name || 'م').charAt(0)}</Text></View>
-              <Pressable onPress={() => setComposerOpen((current) => !current)} style={styles.composerPrompt}>
-                <Text style={styles.composerPromptText}>{content || 'بماذا تفكر قانونياً؟'}</Text>
-              </Pressable>
+      <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
+      <FlatList
+        data={sortedPosts}
+        keyExtractor={(item) => item.id}
+        refreshControl={
+          <RefreshControl refreshing={refreshing && posts.length > 0} onRefresh={refresh} tintColor={colors.navy} />
+        }
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={renderHeader}
+        renderItem={renderItem}
+        ListFooterComponent={renderFooter}
+        onEndReached={() => hasMore && !loadingMore && loadPosts(activeFilter, nextOffset, true)}
+        onEndReachedThreshold={0.5}
+        initialNumToRender={4}
+        maxToRenderPerBatch={4}
+        windowSize={5}
+        removeClippedSubviews={Platform.OS === 'android'}
+        ListEmptyComponent={
+          refreshing ? (
+            <View style={{ padding: 16 }}>
+              <SkeletonCard media />
+              <SkeletonCard />
             </View>
-            {composerOpen ? (
-              <>
-                <TextInput multiline value={content} onChangeText={setContent} placeholder="شارك سؤالاً أو تحديثاً قانونياً" placeholderTextColor={colors.subtle} style={styles.composerInput} />
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-                  {categories.map((item) => <Chip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}
-                </ScrollView>
-                <Button title="نشر" onPress={publishPost} loading={posting} />
-              </>
-            ) : null}
-          </View>
-        ) : (
-          <View style={styles.viewerNotice}>
-            <View style={styles.noticeIcon}><Ionicons name="eye-outline" size={18} color={colors.blue} /></View>
-            <View style={styles.flex}>
-              <Text style={styles.noticeTitle}>تابع، علّق، واحفظ المحتوى المهم</Text>
-              <Text style={styles.mutedText}>النشر متاح للمحامين الموثقين وإدارة المنصة.</Text>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.storyPanel}>
-          <View style={styles.rowBetween}>
-            {canCreate ? <Pressable onPress={() => setStoryComposerOpen((current) => !current)} style={styles.storyCreate}><Ionicons name="add" size={17} color="#fff" /><Text style={styles.storyCreateText}>قصة</Text></Pressable> : <View />}
-            <Text style={styles.sectionTitle}>القصص</Text>
-          </View>
-          <View style={styles.storyTabs}>
-            {storyModes.map((mode) => (
-              <Pressable key={mode.id} onPress={() => setStoryMode(mode.id)} style={[styles.storyTab, storyMode === mode.id && styles.storyTabActive]}>
-                <Text style={[styles.storyTabText, storyMode === mode.id && styles.storyTabTextActive]}>{mode.label}</Text>
-                <Text style={[styles.storyTabCount, storyMode === mode.id && styles.storyTabCountActive]}>{storyCounts[mode.id]}</Text>
-              </Pressable>
-            ))}
-          </View>
-          {canCreate && storyComposerOpen ? (
-            <View style={styles.storyComposer}>
-              <TextInput value={storyText} onChangeText={setStoryText} placeholder="نص قصة قصيرة..." placeholderTextColor={colors.subtle} style={styles.storyInput} />
-              <Pressable disabled={!storyText.trim() || storyPosting} onPress={publishStory} style={[styles.storyPublish, (!storyText.trim() || storyPosting) && styles.disabled]}>
-                <Ionicons name="send" size={15} color="#fff" />
-              </Pressable>
-            </View>
-          ) : null}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
-            {loadingStories && stories.length === 0 ? (
-              [1, 2, 3, 4].map((i) => <ShimmerStory key={i} />)
-            ) : (
-              <>
-                {smartStories.length === 0 ? <Text style={styles.mutedText}>{storyMode === 'archive' ? 'لا توجد قصص مؤرشفة حالياً.' : storyMode === 'seen' ? 'لم تشاهد أي قصة بعد.' : 'لا توجد قصص جديدة حالياً.'}</Text> : null}
-                {smartStories.map((story) => <StoryBubble key={story.id} story={story} onPress={() => viewStory(story)} />)}
-              </>
-            )}
-          </ScrollView>
-        </View>
-
-        <View style={styles.sortPanel}>
-          <View style={styles.flex}>
-            <Text style={styles.cardTitle}>ترتيب المنشورات</Text>
-            <Text style={styles.mutedText}>{sortMode === 'smart' ? 'الأقرب لاهتماماتك وتفاعلاتك أولاً.' : 'أحدث المنشورات حسب وقت النشر.'}</Text>
-          </View>
-          <View style={styles.sortToggle}>
-            <Pressable onPress={() => setSortMode('smart')} style={[styles.sortOption, sortMode === 'smart' && styles.sortOptionActive]}><Text style={[styles.sortText, sortMode === 'smart' && styles.sortTextActive]}>اقتراحات</Text></Pressable>
-            <Pressable onPress={() => setSortMode('latest')} style={[styles.sortOption, sortMode === 'latest' && styles.sortOptionActive]}><Text style={[styles.sortText, sortMode === 'latest' && styles.sortTextActive]}>الأحدث</Text></Pressable>
-          </View>
-        </View>
-
-        <View style={styles.feedControls}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.filterRow}>
-            {filters.map((filter) => <FilterChip key={filter.id} filter={filter} active={activeFilter === filter.id} onPress={() => setActiveFilter(filter.id)} />)}
-          </ScrollView>
-        </View>
-
-        {featuredPosts.length > 0 ? (
-          <View style={styles.featuredPanel}>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.featuredRow}>
-              {featuredPosts.map((post) => <Pressable key={post.id} style={styles.featuredItem}><Text style={styles.featuredTitle} numberOfLines={2}>{post.content}</Text><Text style={styles.mutedText}>{post.category}</Text></Pressable>)}
-            </ScrollView>
-          </View>
-        ) : null}
-
-        {topics.length > 0 ? (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {topics.map((topic) => <View key={topic} style={styles.topicPill}><Text style={styles.topicText}>#{topic}</Text></View>)}
-          </ScrollView>
-        ) : null}
-
-        {refreshing && posts.length === 0 ? (
-          <>
-            <SkeletonCard media />
-            <SkeletonCard />
-            <SkeletonCard media />
-          </>
-        ) : null}
-        {!refreshing && sortedPosts.length === 0 ? <EmptyState title="لا توجد منشورات حالياً" note="جرّب فلتر آخر أو عد لاحقاً لمتابعة محتوى قانوني موثوق." /> : null}
-
-        {sortedPosts.map((post, index) => (
-          <React.Fragment key={post.id}>
-            <PostCard
-              post={post}
-              userId={user?.id}
-              userRole={user?.role}
-              busyId={busyId}
-              onLike={() => react(post.id, 'like')}
-              onSave={() => react(post.id, 'save')}
-              onShare={() => react(post.id, 'share')}
-              onComment={() => setCommentPostId(commentPostId === post.id ? '' : post.id)}
-              commentOpen={commentPostId === post.id}
-              comment={comment}
-              onChangeComment={setComment}
-              onSubmitComment={() => submitComment(post.id)}
-              onConsult={() => openConsultation(post)}
-              onFollow={() => followLawyer(post.author.id)}
-              onEdit={() => { setEditingPost(post); setEditContent(post.content); }}
-              onDelete={() => deletePost(post)}
-              onPin={() => adminUpdate(post, { pinned: !post.pinned })}
-              onFeature={() => adminUpdate(post, { featured: !post.featured })}
-              onHide={() => adminUpdate(post, { status: 'hidden' })}
-            />
-            {index === 1 && suggestedLawyers.length > 0 ? (
-              <View style={styles.inlineLawyers}>
-                <View style={styles.rowBetween}><View /><Text style={styles.sectionTitle}>أشخاص قد تتابعهم</Text></View>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.lawyerRow}>
-                  {suggestedLawyers.map((lawyer) => <LawyerSuggestion key={lawyer.id} lawyer={lawyer} busy={busyId === `follow-${lawyer.id}`} onFollow={() => followLawyer(lawyer.id)} />)}
-                </ScrollView>
-              </View>
-            ) : null}
-          </React.Fragment>
-        ))}
-
-        {hasMore ? (
-          <Pressable disabled={loadingMore} onPress={() => loadPosts(activeFilter, nextOffset, true)} style={styles.loadMore}>
-            {loadingMore ? <ActivityIndicator color={colors.navy} /> : <Text style={styles.loadMoreText}>تحميل المزيد</Text>}
-          </Pressable>
-        ) : posts.length > 0 ? <Text style={styles.endText}>وصلت إلى نهاية المنشورات</Text> : null}
-      </ScrollView>
-
+          ) : null
+        }
+      />
       <EditModal post={editingPost} content={editContent} loading={busyId === `edit-${editingPost?.id}`} onChange={setEditContent} onClose={() => setEditingPost(null)} onSubmit={saveEdit} />
-      <StoryModal story={activeStory} onClose={() => setActiveStory(null)} />
+      <StoryModal visible={Boolean(activeStory)} stories={smartStories} initialIndex={activeStoryIndex} onClose={() => setActiveStory(null)} />
+      <StoryComposerModal visible={storyComposerOpen} onClose={() => setStoryComposerOpen(false)} text={storyText} onChange={setStoryText} onPublish={publishStory} onPickMedia={pickStoryMedia} onRemoveMedia={() => setStoryMedia(null)} media={storyMedia} loading={storyPosting} />
       <ConsultationModal post={consultationPost} note={consultationNote} paymentMethod={paymentMethod} loading={busyId === 'consult'} onChangeNote={setConsultationNote} onChangePayment={setPaymentMethod} onClose={() => setConsultationPost(null)} onSubmit={startConsultation} />
     </Screen>
   );
@@ -517,6 +565,8 @@ function InteractiveCard({ children, onPress, style }: any) {
     </Pressable>
   );
 }
+
+const PostCardMemo = React.memo(PostCard);
 
 function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide }: any) {
   const [expanded, setExpanded] = useState(false);
@@ -640,9 +690,11 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
 
 function StoryBubble({ story, onPress }: { story: any; onPress: () => void }) {
   return (
-    <InteractiveCard onPress={onPress} style={[styles.storyBubble, !story.seenByMe && styles.storyUnseen]}>
+    <InteractiveCard onPress={onPress} style={styles.storyBubble}>
       {story.mediaUrl && story.mediaType === 'image' ? <Image source={{ uri: story.mediaUrl }} style={styles.storyCoverImage} /> : null}
-      <Avatar source={story.author?.avatar || story.author?.img} name={story.author?.name || 'م'} small />
+      <View style={[styles.storyAvatarWrap, !story.seenByMe && !story.isArchived && styles.avatarUnseen]}>
+        <Avatar source={story.author?.avatar || story.author?.img} name={story.author?.name || 'م'} small />
+      </View>
       {!story.seenByMe && !story.isArchived ? <Text style={styles.newStoryBadge}>جديد</Text> : null}
       {story.isArchived ? <Text style={styles.archiveStoryBadge}>أرشيف</Text> : null}
       <Text style={styles.storyName} numberOfLines={1}>{story.author?.name || 'قصة'}</Text>
@@ -684,18 +736,6 @@ function Avatar({ source, name, small }: { source?: string | null; name: string;
   return <View style={sizeStyle}><Text style={styles.avatarText}>{String(name || 'م').charAt(0)}</Text></View>;
 }
 
-function CommentModal({ postId, comment, loading, onChange, onClose, onSubmit }: any) {
-  return (
-    <Modal transparent animationType="slide" visible={Boolean(postId)} onRequestClose={onClose}>
-      <View style={styles.modalBackdrop}><View style={styles.modalPanel}>
-        <Text style={styles.modalTitle}>إضافة تعليق</Text>
-        <TextInput multiline value={comment} onChangeText={onChange} placeholder="اكتب تعليقاً مهنياً..." placeholderTextColor={colors.subtle} style={styles.modalInput} />
-        <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="إرسال" loading={loading} onPress={onSubmit} /></View>
-      </View></View>
-    </Modal>
-  );
-}
-
 function EditModal({ post, content, loading, onChange, onClose, onSubmit }: any) {
   return (
     <BottomSheet visible={Boolean(post)} title="تعديل المنشور" onClose={onClose}>
@@ -705,22 +745,184 @@ function EditModal({ post, content, loading, onChange, onClose, onSubmit }: any)
   );
 }
 
-function StoryModal({ story, onClose }: { story: any | null; onClose: () => void }) {
+function StoryComposerModal({ visible, onClose, text, onChange, onPublish, onPickMedia, onRemoveMedia, media, loading }: any) {
   return (
-    <Modal transparent animationType="fade" visible={Boolean(story)} onRequestClose={onClose}>
-      <View style={styles.storyModalBackdrop}><Pressable onPress={onClose} style={styles.storyModalClose}><Ionicons name="close" size={21} color="#fff" /></Pressable><View style={styles.storyModalCard}><Text style={styles.storyModalAuthor}>{story?.author?.name}</Text><Text style={styles.storyModalText}>{story?.text}</Text></View></View>
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.composerModalBackdrop}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.composerModalContent}>
+          <View style={styles.modalHeader}>
+            <Pressable onPress={onClose} style={styles.closeButton}>
+              <Ionicons name="close" size={24} color={colors.navy} />
+            </Pressable>
+            <Text style={styles.modalTitle}>نشر قصة يومية</Text>
+          </View>
+
+          <View style={styles.storyDraftPreview}>
+            {media ? <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
+            <Text style={styles.storyDraftText}>{text || 'شارك خبراً أو نصيحة قانونية سريعة...'}</Text>
+          </View>
+
+          <TextInput
+            multiline
+            value={text}
+            onChangeText={onChange}
+            placeholder="ما الذي تود مشاركته مع المجتمع؟"
+            placeholderTextColor={colors.subtle}
+            maxLength={240}
+            style={styles.storyModalInput}
+          />
+
+          <Pressable onPress={onPickMedia} style={styles.mediaPickerButton}>
+            <Ionicons name="images-outline" size={20} color={colors.navy} />
+            <Text style={styles.mediaPickerText}>{media ? 'تغيير الوسائط' : 'إرفاق صورة أو فيديو'}</Text>
+            {media && <Pressable onPress={onRemoveMedia} style={styles.mediaClear}><Ionicons name="close-circle" size={18} color={colors.red} /></Pressable>}
+          </Pressable>
+
+          <View style={styles.modalActions}>
+            <Button
+              title={loading ? "جاري النشر..." : "نشر القصة الآن"}
+              onPress={() => {
+                if ((!String(text || '').trim() && !media) || loading) return;
+                onPublish();
+              }}
+              loading={loading}
+            />
+          </View>
+        </KeyboardAvoidingView>
+      </View>
     </Modal>
   );
 }
 
-function ConsultationModal({ post, note, paymentMethod, loading, onChangeNote, onChangePayment, onClose, onSubmit }: any) {
+const REPORT_REASONS = [
+  { id: 'harassment', label: 'تحرش أو مضايقة' },
+  { id: 'hate', label: 'خطاب كراهية' },
+  { id: 'spam', label: 'محتوى غير مرغوب فيه' },
+  { id: 'misinfo', label: 'معلومات مضللة' },
+  { id: 'other', label: 'أخرى' },
+];
+
+function StoryModal({ visible, stories, initialIndex, onClose }: { visible: boolean; stories: any[]; initialIndex: number; onClose: () => void }) {
+  const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const [isMuted, setIsMuted] = useState(false);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [reportStory, setReportStory] = useState<any>(null);
+  const [reporting, setReporting] = useState(false);
+  const progress = useRef(new Animated.Value(0)).current;
+  const listRef = useRef<FlatList>(null);
+
+  const handleReport = async (reason: string) => {
+    if (!reportStory) return;
+    setReporting(true);
+    try {
+      // In a real app, call apiClient.reportFeedStory(reportStory.id, reason)
+      console.log('Story report reason:', reason);
+      await new Promise(r => setTimeout(r, 1000));
+      setReportModalVisible(false);
+      setReportStory(null);
+    } finally {
+      setReporting(false);
+    }
+  };
+
+  const handleScroll = (e: any) => {
+    const nextIndex = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (nextIndex !== currentIndex) setCurrentIndex(nextIndex);
+  };
+
+  useEffect(() => {
+    if (visible) setCurrentIndex(initialIndex);
+  }, [visible, initialIndex]);
+
+  useEffect(() => {
+    if (!visible || !stories[currentIndex]) return;
+    progress.setValue(0);
+    const anim = Animated.timing(progress, {
+      toValue: 1,
+      duration: 6000,
+      useNativeDriver: false,
+    });
+
+    anim.start(({ finished }) => {
+      if (finished) {
+        if (currentIndex < stories.length - 1) {
+          listRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
+        } else {
+          onClose();
+        }
+      }
+    });
+    return () => anim.stop();
+  }, [currentIndex, visible, stories]);
+
+  const renderItem = ({ item, index }: { item: any, index: number }) => (
+    <View style={styles.storyViewerContainer}>
+      {item.mediaUrl ? <Image source={{ uri: item.mediaUrl }} style={StyleSheet.absoluteFill} /> : null}
+      <View style={styles.storyOverlay} />
+      <View style={styles.storyProgressRail}>
+        <View style={styles.storyProgressBar}>
+          <Animated.View style={[styles.storyProgressFill, { width: currentIndex === index ? progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) : index < currentIndex ? '100%' : '0%' }]} />
+        </View>
+      </View>
+      <View style={styles.storyViewerHeader}>
+        <View style={styles.authorInfo}>
+          <Avatar source={item.author?.avatar} name={item.author?.name} small />
+          <View style={styles.flex}>
+            <Text style={styles.viewerAuthorName}>{item.author?.name}</Text>
+            <Text style={styles.viewerMeta}>{formatDate(item.createdAt)}</Text>
+          </View>
+        </View>
+        <View style={styles.viewerHeaderActions}>
+          {item.mediaType === 'video' && (
+            <Pressable onPress={() => setIsMuted(!isMuted)} style={styles.viewerHeaderButton}>
+              <Ionicons name={isMuted ? "volume-mute" : "volume-high"} size={22} color="#fff" />
+            </Pressable>
+          )}
+          <Pressable onPress={() => { setReportStory(item); setReportModalVisible(true); }} style={styles.viewerHeaderButton}>
+            <Ionicons name="ellipsis-vertical" size={22} color="#fff" />
+          </Pressable>
+          <Pressable onPress={onClose} style={styles.viewerClose}><Ionicons name="close" size={30} color="#fff" /></Pressable>
+        </View>
+      </View>
+      <View style={styles.viewerContent}>
+        <View style={styles.viewerTextContainer}><Text style={styles.viewerText}>{item.text}</Text></View>
+      </View>
+      <View style={styles.viewerFooter}>
+        <Pressable style={styles.viewerReply}><Ionicons name="chatbubble-outline" size={18} color="#fff" /><Text style={styles.viewerReplyText}>أرسل رداً مهنياً...</Text></Pressable>
+      </View>
+    </View>
+  );
+
   return (
-    <BottomSheet visible={Boolean(post)} title="بدء استشارة من المنشور" onClose={onClose}>
-      <Text style={styles.mutedText}>{post?.author?.name} · {post?.author?.consultationFee || 'سعر غير محدد'}</Text>
-      {paymentMethods.map((method) => <Pressable key={method.id} onPress={() => onChangePayment(method.id)} style={[styles.paymentItem, paymentMethod === method.id && styles.paymentItemActive]}><Ionicons name={method.icon} size={20} color={colors.navy} /><View style={styles.flex}><Text style={styles.cardTitle}>{method.label}</Text><Text style={styles.mutedText}>{method.subtitle}</Text></View></Pressable>)}
-      <TextInput multiline value={note} onChangeText={onChangeNote} placeholder="ملاحظة للمحامي" placeholderTextColor={colors.subtle} style={styles.modalInput} />
-      <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="ابدأ الاستشارة" loading={loading} onPress={onSubmit} /></View>
-    </BottomSheet>
+    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+      <Modal transparent visible={reportModalVisible} animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
+        <Pressable style={styles.reportBackdrop} onPress={() => setReportModalVisible(false)}>
+          <View style={styles.reportMenu}>
+            <Text style={styles.reportTitle}>الإبلاغ عن القصة</Text>
+            {REPORT_REASONS.map(reason => (
+              <Pressable key={reason.id} style={styles.reportOption} onPress={() => handleReport(reason.id)}>
+                <Text style={styles.reportOptionText}>{reporting ? 'جارٍ الإرسال...' : reason.label}</Text>
+              </Pressable>
+            ))}
+            <Pressable style={[styles.reportOption, styles.reportCancel]} onPress={() => setReportModalVisible(false)}>
+              <Text style={styles.reportCancelText}>إلغاء</Text>
+            </Pressable>
+          </View>
+        </Pressable>
+      </Modal>
+      <FlatList
+        ref={listRef}
+        data={stories}
+        renderItem={renderItem}
+        horizontal
+        pagingEnabled
+        keyExtractor={item => item.id}
+        initialScrollIndex={initialIndex}
+        getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+        onMomentumScrollEnd={handleScroll}
+        showsHorizontalScrollIndicator={false}
+      />
+    </Modal>
   );
 }
 
@@ -731,27 +933,27 @@ function scoreText(terms: string[], ...parts: Array<string | undefined | null>) 
 }
 
 function scorePost(post: any, terms: string[], affinity: Map<string, number>) {
-  const ageHours = Math.max(0, (Date.now() - new Date(post.createdAt || 0).getTime()) / 36e5);
-  const recencyScore = Math.max(0, 1.2 - ageHours / 72);
-  const engagement = Math.log1p((post.likesCount || 0) + (post.commentsCount || 0) * 2 + (post.savesCount || 0) * 2 + (post.shareCount || 0)) / 4;
-  const mediaScore = post.mediaType === 'video' ? 0.25 : post.mediaType === 'image' ? 0.15 : 0;
-  return scoreText(terms, post.category, post.content, post.author?.specialty, post.author?.name) * 1.6 +
-    (affinity.get(post.author?.id) || 0) * 1.4 +
+  const ageHours = Math.max(0, (Date.now() - new Date(post.createdAt || 0).getTime()) / 36e5); // Convert milliseconds to hours
+  const recencyScore = Math.max(0, POST_RECENCY_MAX_SCORE - ageHours / POST_RECENCY_DECAY_HOURS);
+  const engagement = Math.log1p((post.likesCount || 0) + (post.commentsCount || 0) * POST_ENGAGEMENT_COMMENT_SAVE_WEIGHT + (post.savesCount || 0) * POST_ENGAGEMENT_COMMENT_SAVE_WEIGHT + (post.shareCount || 0)) / POST_ENGAGEMENT_SCALING_FACTOR;
+  const mediaScore = post.mediaType === 'video' ? POST_VIDEO_MEDIA_BOOST : post.mediaType === 'image' ? POST_IMAGE_MEDIA_BOOST : 0;
+  return scoreText(terms, post.category, post.content, post.author?.specialty, post.author?.name) * POST_CATEGORY_CONTENT_WEIGHT +
+    (affinity.get(post.author?.id) || 0) * POST_AUTHOR_AFFINITY_WEIGHT +
     engagement +
     recencyScore +
     mediaScore +
-    (post.featured ? 1.5 : 0) +
-    (post.pinned ? 1 : 0) +
-    (post.savedByMe ? 0.5 : 0) +
-    (post.likedByMe ? 0.25 : 0);
+    (post.featured ? POST_FEATURED_BOOST : 0) +
+    (post.pinned ? POST_PINNED_BOOST : 0) +
+    (post.savedByMe ? POST_SAVED_BOOST : 0) +
+    (post.likedByMe ? POST_LIKED_BOOST : 0);
 }
 
 function scoreStory(story: any, terms: string[], affinity: Map<string, number>) {
   const ageHours = Math.max(0, (Date.now() - new Date(story.createdAt || 0).getTime()) / 36e5);
-  return scoreText(terms, story.text, story.author?.specialty, story.author?.name) +
-    (affinity.get(story.author?.id) || 0) * 1.2 +
-    (!story.seenByMe ? 1 : 0) +
-    Math.max(0, 1 - ageHours / 24);
+  return scoreText(terms, story.text, story.author?.specialty, story.author?.name) + // Base text relevance
+    (affinity.get(story.author?.id) || 0) * STORY_AUTHOR_AFFINITY_WEIGHT + // Author affinity
+    (!story.seenByMe ? 1 : 0) + // Boost for unseen stories
+    Math.max(0, 1 - ageHours / STORY_RECENCY_DECAY_HOURS); // Recency decay over 24 hours
 }
 
 function scoreLawyer(lawyer: any, terms: string[], affinity: Map<string, number>) {
@@ -763,6 +965,17 @@ function scoreLawyer(lawyer: any, terms: string[], affinity: Map<string, number>
 function formatDate(value?: string) {
   if (!value) return 'الآن';
   return new Date(value).toLocaleDateString('ar-IQ', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function ConsultationModal({ post, note, paymentMethod, loading, onChangeNote, onChangePayment, onClose, onSubmit }: any) {
+  return (
+    <BottomSheet visible={Boolean(post)} title="بدء استشارة من المنشور" onClose={onClose}>
+      <Text style={styles.mutedText}>{post?.author?.name} · {post?.author?.consultationFee || 'سعر غير محدد'}</Text>
+      {paymentMethods.map((method) => <Pressable key={method.id} onPress={() => onChangePayment(method.id)} style={[styles.paymentItem, paymentMethod === method.id && styles.paymentItemActive]}><Ionicons name={method.icon} size={20} color={colors.navy} /><View style={styles.flex}><Text style={styles.cardTitle}>{method.label}</Text><Text style={styles.mutedText}>{method.subtitle}</Text></View></Pressable>)}
+      <TextInput multiline value={note} onChangeText={onChangeNote} placeholder="ملاحظة للمحامي" placeholderTextColor={colors.subtle} style={styles.modalInput} />
+      <View style={styles.modalActions}><Button title="إلغاء" variant="secondary" onPress={onClose} /><Button title="ابدأ الاستشارة" loading={loading} onPress={onSubmit} /></View>
+    </BottomSheet>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -784,19 +997,30 @@ const styles = StyleSheet.create({
   commentAuthor: { color: colors.ink, fontSize: 11, fontWeight: '900', textAlign: 'right' },
   commentBubble: { alignSelf: 'flex-end', backgroundColor: colors.tint, borderRadius: 16, marginTop: 8, maxWidth: '92%', padding: 9 },
   commentText: { color: colors.ink, fontSize: 12, fontWeight: '700', lineHeight: 19, marginTop: 3, textAlign: 'right' },
-  composer: {
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 16,
-    padding: 16,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    elevation: 4
-  },
+  addStoryBubble: { alignItems: 'center', backgroundColor: colors.paper, borderRadius: 16, borderWidth: 1, borderColor: colors.line, height: 138, justifyContent: 'center', width: 104 },
+  addStoryCircle: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 28, justifyContent: 'center', position: 'absolute', right: -6, top: -6, width: 28, zIndex: 5, borderWidth: 3, borderColor: colors.paper },
+  composer: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 20, borderWidth: 1, marginBottom: 16, padding: 16, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.6, shadowRadius: 12, elevation: 4 },
+  composerModalBackdrop: { backgroundColor: 'rgba(15,23,42,0.6)', flex: 1, justifyContent: 'flex-end' },
+  composerModalContent: { backgroundColor: colors.paper, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, minHeight: '60%' },
+  modalHeader: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 20 },
+  closeButton: { padding: 4 },
+  storyDraftPreview: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 24, justifyContent: 'center', minHeight: 200, padding: 24, marginBottom: 20 },
+  storyDraftText: { color: '#fff', fontSize: 18, fontWeight: '800', lineHeight: 28, textAlign: 'center' },
+  storyModalInput: { backgroundColor: colors.surface, borderRadius: 16, color: colors.ink, fontSize: 15, fontWeight: '700', minHeight: 80, padding: 16, textAlign: 'right', textAlignVertical: 'top' },
+  storyViewerContainer: { backgroundColor: colors.navy, flex: 1, paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
+  storyProgressRail: { flexDirection: 'row-reverse', gap: 4, marginBottom: 16 },
+  storyProgressBar: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, flex: 1, height: 3, overflow: 'hidden' },
+  storyProgressFill: { backgroundColor: '#fff', height: '100%' },
+  storyViewerHeader: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between' },
+  viewerAuthorName: { color: '#fff', fontSize: 14, fontWeight: '900' },
+  viewerMeta: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700', marginTop: 2 },
+  viewerClose: { padding: 4 },
+  viewerContent: { flex: 1, justifyContent: 'center' },
+  viewerTextContainer: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  viewerText: { color: '#fff', fontSize: 24, fontWeight: '900', lineHeight: 36, textAlign: 'center' },
+  viewerFooter: { alignItems: 'center', borderTopColor: 'rgba(255,255,255,0.1)', borderTopWidth: 1, flexDirection: 'row-reverse', paddingVertical: 20, marginBottom: Platform.OS === 'ios' ? 30 : 10 },
+  viewerReply: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 8, height: 44, justifyContent: 'center', paddingHorizontal: 16 },
+  viewerReplyText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   composerInput: {
     backgroundColor: colors.surface,
     borderRadius: 16,
@@ -853,6 +1077,19 @@ const styles = StyleSheet.create({
   loadMoreText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
   manageRow: { flexDirection: 'row', gap: 5 },
   mediaBox: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 16, gap: 4, marginTop: 12, padding: 18 },
+  mediaClear: { marginLeft: 'auto' },
+  mediaPickerButton: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 16, backgroundColor: colors.tint, borderRadius: 16, marginBottom: 16 },
+  mediaPickerText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
+  reportBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+  reportMenu: { backgroundColor: '#fff', borderRadius: 24, width: '90%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
+  reportTitle: { fontSize: 18, fontWeight: '900', color: colors.ink, marginBottom: 15, textAlign: 'center' },
+  reportOption: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.line, alignItems: 'center' },
+  reportOptionText: { fontSize: 14, fontWeight: '800', color: colors.navy },
+  reportCancel: { borderBottomWidth: 0, marginTop: 10 },
+  reportCancelText: { color: colors.red, fontWeight: '900' },
+  storyOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.3)' },
+  viewerHeaderActions: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
+  viewerHeaderButton: { padding: 4 },
   modalActions: { gap: 9, marginTop: 12 },
   modalBackdrop: { alignItems: 'center', backgroundColor: 'rgba(16,24,40,0.45)', flex: 1, justifyContent: 'center', padding: 16 },
   modalInput: { backgroundColor: colors.tint, borderRadius: 16, color: colors.ink, minHeight: 96, padding: 12, textAlign: 'right', textAlignVertical: 'top' },
@@ -899,17 +1136,12 @@ const styles = StyleSheet.create({
   sortToggle: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', padding: 3 },
   status: { color: colors.navy, fontSize: 12, fontWeight: '900', marginBottom: 8, textAlign: 'center' },
   storyAvatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 36, justifyContent: 'center', width: 36 },
-  storyBubble: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, minHeight: 138, padding: 10, width: 104 },
+  storyBubble: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, height: 138, padding: 10, width: 104, overflow: 'hidden' },
+  avatarUnseen: { borderColor: colors.gold, borderWidth: 2, borderRadius: 999, padding: 2 },
+  storyAvatarWrap: { marginBottom: 4 },
   storyComposer: { alignItems: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
   storyCoverImage: { borderRadius: 12, height: 70, marginBottom: 8, width: '100%' },
-  storyCreate: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, flexDirection: 'row-reverse', gap: 5, minHeight: 34, paddingHorizontal: 10 },
-  storyCreateText: { color: '#fff', fontSize: 12, fontWeight: '900' },
   storyInput: { backgroundColor: colors.tint, borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 12, textAlign: 'right' },
-  storyModalAuthor: { color: '#fff', fontSize: 18, fontWeight: '900', textAlign: 'center' },
-  storyModalBackdrop: { alignItems: 'center', backgroundColor: 'rgba(15,23,42,0.92)', flex: 1, justifyContent: 'center', padding: 20 },
-  storyModalCard: { alignItems: 'center', borderColor: 'rgba(255,255,255,0.18)', borderRadius: 24, borderWidth: 1, justifyContent: 'center', minHeight: 320, padding: 22, width: '92%' },
-  storyModalClose: { position: 'absolute', right: 18, top: 48, zIndex: 2 },
-  storyModalText: { color: '#fff', fontSize: 20, fontWeight: '800', lineHeight: 34, marginTop: 18, textAlign: 'center' },
   storyName: { color: colors.ink, fontSize: 11, fontWeight: '900', marginTop: 7, textAlign: 'right' },
   storyPanel: { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1, borderRadius: 16, marginBottom: 12, padding: 12 },
   storyPublish: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
@@ -923,7 +1155,6 @@ const styles = StyleSheet.create({
   storyTabs: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', gap: 4, marginTop: 10, padding: 4 },
   storyTabText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
   storyTabTextActive: { color: colors.blue },
-  storyUnseen: { borderColor: colors.blue, borderWidth: 2 },
   subtitle: { color: colors.muted, fontSize: 13, fontWeight: '800', marginTop: 4, textAlign: 'right' },
   tag: { backgroundColor: colors.blueTint, borderRadius: 999, color: colors.blue, fontSize: 11, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 },
   tagRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 12 },
