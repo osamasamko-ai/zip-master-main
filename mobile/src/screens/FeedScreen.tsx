@@ -1,11 +1,15 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { ActivityIndicator, Animated, Image, Modal, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { ActivityIndicator, Animated, Image, LayoutAnimation, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, UIManager, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { BottomSheet, Button, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
 import { HeroSection } from '../components/ui/HeroSection';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
+
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
 
 type FeedFilter = 'all' | 'videos' | 'articles' | 'admins' | 'popular';
 type SortMode = 'smart' | 'latest';
@@ -495,15 +499,71 @@ function ShimmerStory() {
   return <Animated.View style={[styles.storySkeleton, { opacity: anim.interpolate({ inputRange: [0, 1], outputRange: [0.4, 0.8] }) }]} />;
 }
 
+function InteractiveCard({ children, onPress, style }: any) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, friction: 8, tension: 40 }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 8, tension: 40 }).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View style={[style, { transform: [{ scale }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+}
+
 function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide }: any) {
   const [expanded, setExpanded] = useState(false);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const heartAnim = useRef(new Animated.Value(0)).current;
+  const lastTap = useRef(0);
+
+  useEffect(() => {
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  const handleImagePress = () => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    if (now - lastTap.current < DOUBLE_TAP_DELAY) {
+      if (!post.likedByMe) {
+        onLike();
+      }
+      heartAnim.setValue(0);
+      Animated.sequence([
+        Animated.spring(heartAnim, { toValue: 1, useNativeDriver: true, bounciness: 15 }),
+        Animated.timing(heartAnim, { toValue: 0, duration: 200, delay: 500, useNativeDriver: true })
+      ]).start();
+    }
+    lastTap.current = now;
+  };
+
+  const toggleExpand = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setExpanded(!expanded);
+  };
+
   const canManage = userRole === 'admin' || userId === post.author?.id;
   const isLong = String(post.content || '').length > 260;
   const text = expanded || !isLong ? post.content : `${String(post.content || '').slice(0, 260)}...`;
+
   return (
-    <View style={[styles.postCard, post.pinned && styles.pinnedPost]}>
+    <Animated.View style={[styles.postCard, post.pinned && styles.pinnedPost, { opacity: fadeAnim }]}>
       {(post.pinned || post.author?.role === 'admin') ? (
-        <View style={styles.postRibbon}><Text style={styles.postRibbonText}>{post.pinned ? 'منشور مثبت' : 'إعلان رسمي'}</Text><Ionicons name={post.pinned ? 'pin-outline' : 'megaphone-outline'} size={15} color={colors.blue} /></View>
+        <View style={[styles.postRibbon, post.pinned && styles.pinnedRibbon]}>
+          <Text style={styles.postRibbonText}>{post.pinned ? 'منشور مثبت' : 'إعلان رسمي'}</Text>
+          <Ionicons name={post.pinned ? 'pin-outline' : 'megaphone-outline'} size={15} color={post.pinned ? colors.gold : colors.blue} />
+        </View>
       ) : null}
       <View style={styles.postHeader}>
         {canManage ? (
@@ -527,19 +587,24 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
         </View>
       </View>
       <Text style={styles.postText}>{text}</Text>
-      {isLong ? <Pressable onPress={() => setExpanded((value) => !value)}><Text style={styles.readMore}>{expanded ? 'عرض أقل' : 'قراءة المزيد'}</Text></Pressable> : null}
+      {isLong ? <Pressable onPress={toggleExpand}><Text style={styles.readMore}>{expanded ? 'عرض أقل' : 'قراءة المزيد'}</Text></Pressable> : null}
       <View style={styles.tagRow}><Text style={styles.tag}>#{post.category || 'عام'}</Text><Text style={styles.tag}>{post.readingTime || 1} دقيقة قراءة</Text></View>
       {post.mediaUrl ? (
-        <View style={[styles.mediaBox, post.mediaType === 'image' && styles.imageMediaBox]}>
+        <Pressable onPress={handleImagePress} style={[styles.mediaBox, post.mediaType === 'image' && styles.imageMediaBox]}>
           {post.mediaType === 'image' ? (
-            <Image source={{ uri: post.mediaUrl }} style={styles.postImage} resizeMode="cover" />
+            <>
+              <Image source={{ uri: post.mediaUrl }} style={styles.postImage} resizeMode="cover" />
+              <Animated.View style={[styles.heartOverlay, { transform: [{ scale: heartAnim }], opacity: heartAnim }]}>
+                <Ionicons name="heart" size={80} color="#fff" />
+              </Animated.View>
+            </>
           ) : (
             <>
               <Ionicons name="play-circle-outline" size={34} color={colors.blue} />
               <Text style={styles.mutedText}>فيديو مرفق · افتحه من نسخة الويب للمشاهدة الكاملة</Text>
             </>
           )}
-        </View>
+        </Pressable>
       ) : null}
       <View style={styles.countRow}><Text style={styles.countText}>{(post.likesCount || 0).toLocaleString('ar-IQ')} إعجاب</Text><Text style={styles.countText}>{post.commentsCount || 0} تعليق · {post.shareCount || 0} مشاركة · {post.savesCount || 0} حفظ</Text></View>
       <View style={styles.actionRow}>
@@ -569,20 +634,20 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
         </View>
       ) : null}
       {(post.comments || []).slice(-3).map((item: any) => <View key={item.id} style={styles.commentBubble}><Text style={styles.commentAuthor}>{item.author?.name}</Text><Text style={styles.commentText}>{item.content}</Text></View>)}
-    </View>
+    </Animated.View>
   );
 }
 
 function StoryBubble({ story, onPress }: { story: any; onPress: () => void }) {
   return (
-    <Pressable onPress={onPress} style={[styles.storyBubble, !story.seenByMe && styles.storyUnseen]}>
+    <InteractiveCard onPress={onPress} style={[styles.storyBubble, !story.seenByMe && styles.storyUnseen]}>
       {story.mediaUrl && story.mediaType === 'image' ? <Image source={{ uri: story.mediaUrl }} style={styles.storyCoverImage} /> : null}
       <Avatar source={story.author?.avatar || story.author?.img} name={story.author?.name || 'م'} small />
       {!story.seenByMe && !story.isArchived ? <Text style={styles.newStoryBadge}>جديد</Text> : null}
       {story.isArchived ? <Text style={styles.archiveStoryBadge}>أرشيف</Text> : null}
       <Text style={styles.storyName} numberOfLines={1}>{story.author?.name || 'قصة'}</Text>
       <Text style={styles.storyText} numberOfLines={2}>{story.text}</Text>
-    </Pressable>
+    </InteractiveCard>
   );
 }
 
@@ -722,16 +787,29 @@ const styles = StyleSheet.create({
   composer: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    marginBottom: 12,
-    padding: 14,
+    marginBottom: 16,
+    padding: 16,
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.6,
+    shadowRadius: 12,
+    elevation: 4
   },
-  composerInput: { backgroundColor: colors.surface, borderRadius: 12, color: colors.ink, marginTop: 10, minHeight: 80, padding: 12, textAlign: 'right', textAlignVertical: 'top', borderColor: colors.line, borderWidth: 1 },
+  composerInput: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    color: colors.ink,
+    marginTop: 12,
+    minHeight: 100,
+    padding: 16,
+    textAlign: 'right',
+    textAlignVertical: 'top',
+    borderColor: colors.line,
+    borderWidth: 1,
+    fontSize: 15
+  },
   composerPrompt: { backgroundColor: colors.tint, borderRadius: 999, flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
   composerPromptText: { color: colors.muted, fontSize: 13, fontWeight: '800', textAlign: 'right' },
   composerTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 10 },
@@ -757,6 +835,7 @@ const styles = StyleSheet.create({
   followButton: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 6, justifyContent: 'center', minHeight: 38 },
   followText: { color: colors.blue, fontSize: 12, fontWeight: '900' },
   headerIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 40, justifyContent: 'center', width: 40 },
+  heartOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
   hero: { backgroundColor: colors.paper, borderRadius: 16, marginBottom: 12, padding: 14 },
   heroIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 44, justifyContent: 'center', width: 44 },
   heroTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 12 },
@@ -792,21 +871,23 @@ const styles = StyleSheet.create({
   postCard: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 16,
+    borderRadius: 20,
     borderWidth: 1,
-    marginBottom: 12,
+    marginBottom: 16,
     overflow: 'hidden',
-    padding: 14,
+    padding: 18,
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
-    shadowRadius: 10
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
+    elevation: 5
   },
   postHeader: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
   postImage: { aspectRatio: 1, width: '100%' },
   postRibbon: { alignItems: 'center', backgroundColor: colors.surface, flexDirection: 'row-reverse', gap: 6, marginHorizontal: -14, marginTop: -14, marginBottom: 14, padding: 9 },
+  pinnedRibbon: { backgroundColor: colors.goldTint, borderBottomColor: colors.gold, borderBottomWidth: 1 },
   postRibbonText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
-  postText: { color: colors.ink, fontSize: 14, fontWeight: '700', lineHeight: 24, marginTop: 12, textAlign: 'right' },
+  postText: { color: colors.ink, fontSize: 15, fontWeight: '700', lineHeight: 26, marginTop: 14, textAlign: 'right' },
   readMore: { color: colors.blue, fontSize: 12, fontWeight: '900', marginTop: 6, textAlign: 'right' },
   rowBetween: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: '900', textAlign: 'right' },

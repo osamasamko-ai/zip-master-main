@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { Animated, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { apiClient } from '../api/client';
 import { BottomSheet, Button, Card, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
@@ -29,6 +29,25 @@ type RouteKey =
 type LawyersScreenProps = {
   onOpen?: (route: RouteKey) => void;
 };
+
+function InteractiveCard({ children, onPress, style }: any) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, friction: 8, tension: 40 }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 8, tension: 40 }).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut}>
+      <Animated.View style={[style, { transform: [{ scale }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
+}
 
 const paymentMethods = [
   { id: 'zain-cash', label: 'زين كاش', subtitle: 'تأكيد فوري وآمن', icon: 'phone-portrait-outline' as const, recommended: true },
@@ -389,7 +408,7 @@ function LawyerCard({
   const readiness = Math.min(100, Math.round(((lawyer.rating || 0) / 5) * 72 + (lawyer.isOnline ? 14 : 0) + (lawyer.verified ? 14 : 0)));
 
   return (
-    <Pressable onPress={onSelect} style={[styles.lawyerCard, selected && styles.lawyerCardSelected]}>
+    <InteractiveCard onPress={onSelect} style={[styles.lawyerCard, selected && styles.lawyerCardSelected]}>
       <View style={styles.lawyerTopRow}>
         <Pressable onPress={onFollow} style={[styles.saveButton, followed && styles.saveButtonActive]}>
           <Ionicons name={followed ? 'bookmark' : 'bookmark-outline'} size={18} color={followed ? colors.gold : colors.muted} />
@@ -468,7 +487,7 @@ function LawyerCard({
           active={followed}
         />
       </View>
-    </Pressable>
+    </InteractiveCard>
   );
 }
 

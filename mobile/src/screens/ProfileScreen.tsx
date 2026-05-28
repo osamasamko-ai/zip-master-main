@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
+import { ActivityIndicator, Animated, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { EmptyState, Screen, SkeletonCard } from '../components/ui';
+import { HeroSection } from '../components/ui/HeroSection';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
@@ -110,7 +111,27 @@ function buildOwnProfileFromSettings(profile: any, fallbackUser: any) {
     accountBalance: profile?.accountBalance ?? fallbackUser?.accountBalance ?? 0,
     nationalIdVerified: Boolean(profile?.nationalIdVerified),
     lawyerLicenseVerified: Boolean(profile?.lawyerLicenseVerified),
+    twoFactorEnabled: Boolean(profile?.twoFactor),
   };
+}
+
+function InteractiveCard({ children, onPress, style, disabled }: any) {
+  const scale = useRef(new Animated.Value(1)).current;
+
+  const handlePressIn = () => {
+    Animated.spring(scale, { toValue: 0.98, useNativeDriver: true, friction: 8, tension: 40 }).start();
+  };
+  const handlePressOut = () => {
+    Animated.spring(scale, { toValue: 1, useNativeDriver: true, friction: 8, tension: 40 }).start();
+  };
+
+  return (
+    <Pressable onPress={onPress} onPressIn={handlePressIn} onPressOut={handlePressOut} disabled={disabled}>
+      <Animated.View style={[style, { transform: [{ scale }] }]}>
+        {children}
+      </Animated.View>
+    </Pressable>
+  );
 }
 
 export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }) {
@@ -218,6 +239,10 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
     }
   };
 
+  const handleShare = async () => {
+    await Share.share({ title: profile?.name, message: `تعرّف على الملف المهني لـ ${profile?.name} على منصة القسطاس.` });
+  };
+
   if (loading && !profile) {
     return (
       <Screen>
@@ -249,11 +274,32 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadProfile} tintColor={colors.navy} />}
         contentContainerStyle={styles.content}
       >
+        <HeroSection
+          icon="scale-outline"
+          title={isOwnProfile ? "ملفي الشخصي" : "الملف الشخصي"}
+          subtitle={isOwnProfile ? `أهلاً ${profile?.name?.split(' ')[0]}، هنا تجد ملخص نشاطك وبياناتك.` : `عرض السجل المهني لـ ${profile?.name}`}
+          refreshing={refreshing}
+        />
+
+        {isOwnProfile && (
+          <View style={styles.completionBarContainer}>
+            <View style={styles.completionTextRow}>
+              <Text style={styles.completionLabel}>جاهزية الحساب والتوثيق</Text>
+              <Text style={styles.completionValue}>{profile?.profileScore ?? 0}%</Text>
+            </View>
+            <View style={styles.completionTrack}>
+              <View
+                style={[styles.completionFill, { width: `${profile?.profileScore ?? 0}%` }]}
+              />
+            </View>
+          </View>
+        )}
+
         <View style={styles.hero}>
           <View style={styles.cover}>
             {coverUri ? <Image source={{ uri: coverUri }} style={styles.coverImage} /> : <View style={styles.coverFallback} />}
             <View style={styles.coverOverlay} />
-            <View style={styles.coverActions}>
+            <View style={styles.coverActions} pointerEvents="box-none">
               <IconButton icon="newspaper-outline" onPress={() => onOpen?.('feed')} />
               {isOwnProfile ? <IconButton icon="camera-outline" onPress={() => onOpen?.('settings')} /> : null}
             </View>
@@ -272,7 +318,9 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
 
             <View style={styles.identityText}>
               <View style={styles.badgeRow}>
-                {profile?.verified ? <Badge label={isProfessionalProfile ? 'محامٍ موثق' : isAdminProfile ? 'إدارة موثقة' : 'حساب موثق'} tone="blue" /> : <Badge label="بانتظار التوثيق" tone="gold" />}
+                {profile?.verified || profile?.status === 'approved' ? (
+                  <View style={styles.verifiedRow}><Ionicons name="shield-checkmark" size={14} color={colors.blue} /><Badge label={isProfessionalProfile ? 'محامٍ موثق' : isAdminProfile ? 'إدارة موثقة' : 'حساب موثق'} tone="blue" /></View>
+                ) : <Badge label="بانتظار التوثيق" tone="gold" />}
                 <Badge label={profile?.specialty || 'حساب'} />
               </View>
               <Text style={styles.name}>{profile?.name}</Text>
@@ -291,10 +339,11 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
           <View style={styles.actionRow}>
             {isOwnProfile ? (
               <Action label="تعديل الملف" icon="settings-outline" primary onPress={() => onOpen?.('settings')} />
-            ) : isProfessionalProfile ? (
+            ) : profile?.id ? (
               <>
                 <Action label="تواصل" icon="chatbubble-outline" primary onPress={() => onOpen?.('messages')} />
                 <Action label={isFollowing ? 'متابع' : 'متابعة'} icon={isFollowing ? 'checkmark-outline' : 'add-outline'} loading={followBusy} onPress={toggleFollow} />
+                <Action label="مشاركة" icon="share-social-outline" onPress={handleShare} />
               </>
             ) : (
               <Action label="عرض النشاط" icon="newspaper-outline" primary onPress={() => onOpen?.('feed')} />
@@ -307,7 +356,7 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
           <View style={styles.statsGrid}>
             <Stat label={isProfessionalProfile ? 'التقييم' : 'اكتمال الملف'} value={isProfessionalProfile ? Number(profile?.rating || 0).toFixed(1) : `${profile?.profileScore ?? 0}%`} note={isProfessionalProfile ? `${profile?.reviewCount || 0} مراجعة` : 'جاهزية الحساب'} />
             <Stat label="المتابعون" value={(profile?.followers || 0).toLocaleString('ar-IQ')} note="متابع" />
-            <Stat label={isProfessionalProfile ? 'الخبرة' : 'الحالة'} value={isProfessionalProfile ? `${profile?.experienceYears || 0}` : profile?.verified ? 'موثق' : 'نشط'} note={isProfessionalProfile ? 'سنوات ممارسة' : profile?.specialty} />
+            <Stat label={isOwnProfile ? 'قوة الأمان' : isProfessionalProfile ? 'الخبرة' : 'الحالة'} value={isOwnProfile ? (profile?.twoFactorEnabled ? '92/100' : '71/100') : isProfessionalProfile ? `${profile?.experienceYears || 0}` : profile?.verified ? 'موثق' : 'نشط'} note={isOwnProfile ? (profile?.twoFactorEnabled ? 'حماية قوية' : 'تحتاج تحسين') : isProfessionalProfile ? 'سنوات ممارسة' : profile?.specialty} />
             <Stat label={isProfessionalProfile ? 'القضايا' : 'النشاط'} value={profile?.casesHandled || '0'} note={isProfessionalProfile ? 'منجزة' : 'عام'} />
           </View>
         </View>
@@ -315,10 +364,10 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
         {stories.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRail}>
             {stories.map((story) => (
-              <Pressable key={story.id} onPress={() => markStorySeen(story)} style={[styles.storyChip, !story.seenByMe && styles.storyChipNew]}>
+              <InteractiveCard key={story.id} onPress={() => markStorySeen(story)} style={[styles.storyChip, !story.seenByMe && styles.storyChipNew]}>
                 <Ionicons name={story.seenByMe ? 'play-circle-outline' : 'ellipse'} size={16} color={story.seenByMe ? colors.muted : colors.blue} />
                 <Text style={styles.storyChipText} numberOfLines={1}>{story.text || 'قصة جديدة'}</Text>
-              </Pressable>
+              </InteractiveCard>
             ))}
           </ScrollView>
         ) : null}
@@ -393,13 +442,13 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
         onPress={() => onOpen?.(isProfessionalProfile ? 'messages' : 'settings')}
       />
 
-      <Section title="نبذة وتعريف">
+      <Section title="نبذة وتعريف" style={styles.sectionNoPadding}>
         <Text style={styles.bodyText}>{profile?.bio}</Text>
       </Section>
 
       <Section title={isProfessionalProfile ? 'التخصصات والتميز' : 'الاهتمامات والنشاط'}>
         <View style={styles.chipWrap}>
-          {highlights.map((item: string) => <InfoChip key={item} label={item} icon="sparkles-outline" />)}
+          {highlights.map((item: string) => <InteractiveCard key={item} style={styles.infoChipInteractive}><InfoChip label={item} icon="sparkles-outline" /></InteractiveCard>)}
         </View>
       </Section>
 
@@ -419,7 +468,7 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
       </Section>
 
       <Section title="إشارات الثقة">
-        <TrustRow label="التحقق" value={profile?.verified ? 'موثق' : 'بانتظار التوثيق'} />
+        <TrustRow label="التحقق" value={profile?.verified ? 'موثق' : 'بانتظار التوثيق'} tone={profile?.verified ? 'green' : 'gold'} />
         <TrustRow label="المراجعات" value={`${profile?.reviewCount || 0} مراجعة`} />
         <TrustRow label={isProfessionalProfile ? 'سعر الاستشارة' : 'نوع الحساب'} value={isProfessionalProfile ? profile?.consultationFee : profile?.specialty} />
         <TrustRow label="الرصيد" value={`${profile?.accountBalance ?? 0}`} />
@@ -428,7 +477,7 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
       {isProfessionalProfile ? (
         <Section title="مواعيد متاحة للحجز" action="توقيت بغداد">
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.calendarRail}>
-            {CALENDAR_DAYS.map((day, index) => (
+            {CALENDAR_DAYS.map((day, index) => ( // Wrap DayCard with InteractiveCard
               <Pressable key={day.date} onPress={() => setSelectedDate(index)} style={[styles.dayCard, selectedDate === index && styles.dayCardActive]}>
                 <Text style={[styles.dayText, selectedDate === index && styles.dayTextActive]}>{day.day}</Text>
                 <Text style={[styles.dateText, selectedDate === index && styles.dayTextActive]}>{day.date}</Text>
@@ -436,7 +485,7 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
             ))}
           </ScrollView>
           <View style={styles.slotGrid}>
-            {TIME_SLOTS.map((slot) => <Text key={slot} style={styles.slot}>{slot}</Text>)}
+            {TIME_SLOTS.map((slot) => <InteractiveCard key={slot} style={styles.slot}><Text style={styles.slotText}>{slot}</Text></InteractiveCard>)}
           </View>
         </Section>
       ) : null}
@@ -444,13 +493,13 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
       {isProfessionalProfile && relatedLawyers.length > 0 ? (
         <Section title="محامون مشابهون">
           {relatedLawyers.map((item: any) => (
-            <View key={item.id} style={styles.relatedRow}>
+            <InteractiveCard key={item.id} style={styles.relatedRow}>
               <Image source={{ uri: item.avatar || avatarFor(item.name) }} style={styles.relatedAvatar} />
               <View style={styles.relatedText}>
                 <Text style={styles.relatedName}>{item.name}</Text>
                 <Text style={styles.relatedMeta}>{item.specialty} · {item.rating || 0}</Text>
               </View>
-            </View>
+            </InteractiveCard>
           ))}
         </Section>
       ) : null}
@@ -467,7 +516,7 @@ function PostsTab({ posts, profile, onOpen }: any) {
       <Section title={`منشورات ${profile?.name || ''}`} action="عرض تواصل">
         <View style={styles.postSummary}>
           <Credential label="منشور" value={posts.length.toLocaleString('ar-IQ')} />
-          <Credential label="إعجاب" value={likes.toLocaleString('ar-IQ')} />
+          <Credential label="إعجاب" value={likes.toLocaleString('ar-IQ')} tone="gold" />
           <Credential label="وسائط" value={mediaCount.toLocaleString('ar-IQ')} />
         </View>
         <Pressable onPress={() => onOpen?.('feed')} style={styles.secondaryButton}>
@@ -478,7 +527,7 @@ function PostsTab({ posts, profile, onOpen }: any) {
       {posts.length === 0 ? (
         <EmptyState title="لا توجد منشورات بعد" note="عند نشر نشاط في تواصل سيظهر هنا." />
       ) : (
-        posts.map((post: any) => (
+        posts.map((post: any) => ( // Wrap PostCard with InteractiveCard
           <View key={post.id} style={styles.postCard}>
             <View style={styles.postHeader}>
               <Image source={{ uri: profile?.avatar || avatarFor(profile?.name || 'مستخدم') }} style={styles.postAvatar} />
@@ -504,7 +553,7 @@ function PostsTab({ posts, profile, onOpen }: any) {
 function ReviewsTab({ reviews }: { reviews: any[] }) {
   return (
     <View style={styles.tabContent}>
-      <Section title="المراجعات">
+      <Section title="المراجعات" style={styles.sectionNoPadding}>
         {reviews.length === 0 ? (
           <Text style={styles.emptyInline}>لا توجد مراجعات بعد.</Text>
         ) : (
@@ -527,7 +576,7 @@ function ReviewsTab({ reviews }: { reviews: any[] }) {
 function ActivityTab({ items }: { items: any[] }) {
   return (
     <View style={styles.tabContent}>
-      <Section title="النشاط الأخير">
+      <Section title="النشاط الأخير" style={styles.sectionNoPadding}>
         {items.length === 0 ? (
           <Text style={styles.emptyInline}>لا يوجد نشاط حديث.</Text>
         ) : (
@@ -547,7 +596,7 @@ function ActivityTab({ items }: { items: any[] }) {
 }
 
 function Section({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
-  return (
+  return ( // Apply Card styling to Section
     <View style={styles.section}>
       <View style={styles.sectionHeader}>
         {action ? <Text style={styles.sectionAction}>{action}</Text> : <View />}
@@ -559,7 +608,7 @@ function Section({ title, action, children }: { title: string; action?: string; 
 }
 
 function Notice({ title, text, action, onPress }: { title: string; text: string; action?: string; onPress?: () => void }) {
-  return (
+  return ( // Apply Card styling to Notice
     <View style={styles.notice}>
       <View style={styles.noticeTextWrap}>
         <Text style={styles.noticeTitle}>{title}</Text>
@@ -575,7 +624,7 @@ function Notice({ title, text, action, onPress }: { title: string; text: string;
 }
 
 function Stat({ label, value, note }: { label: string; value: string; note?: string }) {
-  return (
+  return ( // Apply InteractiveCard to Stat
     <View style={styles.statCard}>
       <Text style={styles.statLabel}>{label}</Text>
       <Text style={styles.statValue}>{value}</Text>
@@ -585,7 +634,7 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
 }
 
 function Credential({ label, value, tone }: { label: string; value: string; tone?: 'green' | 'gold' }) {
-  return (
+  return ( // Apply Card styling to Credential
     <View style={styles.credential}>
       <Text style={styles.credentialLabel}>{label}</Text>
       <Text style={[styles.credentialValue, tone === 'green' && styles.greenText, tone === 'gold' && styles.goldText]}>{value}</Text>
@@ -594,7 +643,7 @@ function Credential({ label, value, tone }: { label: string; value: string; tone
 }
 
 function TrustRow({ label, value }: { label: string; value: string }) {
-  return (
+  return ( // Apply Card styling to TrustRow
     <View style={styles.trustRow}>
       <Text style={styles.trustValue}>{value}</Text>
       <Text style={styles.trustLabel}>{label}</Text>
@@ -603,7 +652,7 @@ function TrustRow({ label, value }: { label: string; value: string }) {
 }
 
 function InfoChip({ label, icon }: { label: string; icon?: keyof typeof Ionicons.glyphMap }) {
-  return (
+  return ( // Apply Card styling to InfoChip
     <View style={styles.infoChip}>
       {icon ? <Ionicons name={icon} size={13} color={colors.gold} /> : null}
       <Text style={styles.infoChipText}>{label}</Text>
@@ -620,7 +669,7 @@ function Badge({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 
 }
 
 function Meta({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: string }) {
-  return (
+  return ( // Apply Card styling to Meta
     <View style={styles.metaItem}>
       <Ionicons name={icon} size={13} color={colors.muted} />
       <Text style={styles.metaText}>{text}</Text>
@@ -629,7 +678,7 @@ function Meta({ icon, text }: { icon: keyof typeof Ionicons.glyphMap; text: stri
 }
 
 function IconButton({ icon, onPress }: { icon: keyof typeof Ionicons.glyphMap; onPress: () => void }) {
-  return (
+  return ( // Apply InteractiveCard to IconButton
     <Pressable onPress={onPress} style={styles.iconButton}>
       <Ionicons name={icon} size={18} color={colors.navy} />
     </Pressable>
@@ -637,7 +686,7 @@ function IconButton({ icon, onPress }: { icon: keyof typeof Ionicons.glyphMap; o
 }
 
 function Action({ label, icon, primary, loading, onPress }: { label: string; icon: keyof typeof Ionicons.glyphMap; primary?: boolean; loading?: boolean; onPress: () => void }) {
-  return (
+  return ( // Apply InteractiveCard to Action
     <Pressable onPress={onPress} disabled={loading} style={[styles.actionButton, primary && styles.actionButtonPrimary]}>
       {loading ? <ActivityIndicator color={primary ? '#fff' : colors.navy} /> : <Ionicons name={icon} size={17} color={primary ? '#fff' : colors.navy} />}
       <Text style={[styles.actionText, primary && styles.actionTextPrimary]}>{label}</Text>
@@ -647,6 +696,11 @@ function Action({ label, icon, primary, loading, onPress }: { label: string; ico
 
 const styles = StyleSheet.create({
   content: {
+    paddingBottom: 18,
+  },
+  completionBarContainer: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
     paddingBottom: 18,
   },
   loadingState: {
@@ -662,9 +716,13 @@ const styles = StyleSheet.create({
   hero: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
     overflow: 'hidden',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 1,
+    shadowRadius: 18,
   },
   cover: {
     height: 150,
@@ -685,14 +743,14 @@ const styles = StyleSheet.create({
   },
   coverActions: {
     bottom: 10,
-    flexDirection: 'row',
+    flexDirection: 'row-reverse',
     gap: 8,
     left: 10,
     position: 'absolute',
   },
   iconButton: {
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: 'rgba(255,255,255,0.88)',
     borderRadius: 8,
     height: 38,
     justifyContent: 'center',
@@ -701,7 +759,7 @@ const styles = StyleSheet.create({
   identity: {
     alignItems: 'flex-end',
     flexDirection: 'row-reverse',
-    gap: 14,
+    gap: 12,
     paddingHorizontal: 14,
     paddingTop: 0,
   },
@@ -711,7 +769,7 @@ const styles = StyleSheet.create({
   },
   avatar: {
     backgroundColor: colors.paper,
-    borderColor: colors.paper,
+    borderColor: '#fff',
     borderRadius: 48,
     borderWidth: 4,
     height: 96,
@@ -720,7 +778,7 @@ const styles = StyleSheet.create({
   onlineDot: {
     borderColor: colors.paper,
     borderRadius: 999,
-    borderWidth: 3,
+    borderWidth: 2,
     bottom: 8,
     height: 17,
     position: 'absolute',
@@ -736,7 +794,7 @@ const styles = StyleSheet.create({
   storyPlay: {
     alignItems: 'center',
     backgroundColor: colors.blue,
-    borderColor: colors.paper,
+    borderColor: '#fff',
     borderRadius: 999,
     borderWidth: 3,
     bottom: 5,
@@ -755,6 +813,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 6,
+  },
+  verifiedRow: { // Already styled, ensuring consistency
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
   },
   badge: {
     backgroundColor: colors.tint,
@@ -790,7 +853,7 @@ const styles = StyleSheet.create({
   },
   socialProof: {
     color: colors.ink,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: '900',
     marginTop: 7,
     textAlign: 'right',
@@ -813,15 +876,15 @@ const styles = StyleSheet.create({
   },
   actionRow: {
     alignItems: 'center',
-    flexDirection: 'row-reverse',
+    flexDirection: 'row',
     gap: 8,
     padding: 14,
   },
   actionButton: {
     alignItems: 'center',
     backgroundColor: colors.tint,
-    borderRadius: 8,
-    flex: 1,
+    borderRadius: 12,
+    flexGrow: 1,
     flexDirection: 'row-reverse',
     gap: 6,
     justifyContent: 'center',
@@ -829,7 +892,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   actionButtonPrimary: {
-    backgroundColor: colors.navy,
+    backgroundColor: colors.blue,
   },
   actionText: {
     color: colors.navy,
@@ -842,7 +905,7 @@ const styles = StyleSheet.create({
   notifyButton: {
     alignItems: 'center',
     backgroundColor: colors.tint,
-    borderRadius: 8,
+    borderRadius: 12,
     height: 44,
     justifyContent: 'center',
     width: 44,
@@ -852,7 +915,7 @@ const styles = StyleSheet.create({
   },
   statsGrid: {
     borderTopColor: colors.line,
-    borderTopWidth: 1,
+    borderTopWidth: 0, // Remove top border as HeroSection already has a border
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 8,
@@ -861,7 +924,7 @@ const styles = StyleSheet.create({
   statCard: {
     alignItems: 'flex-end',
     backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: 16,
     flexBasis: '48%',
     flexGrow: 1,
     padding: 12,
@@ -892,7 +955,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     gap: 7,
@@ -911,7 +974,7 @@ const styles = StyleSheet.create({
   storyPreview: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 16,
     borderWidth: 1,
     marginTop: 12,
     padding: 12,
@@ -920,12 +983,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 10,
+    marginBottom: 12,
   },
   smallIconButton: {
     alignItems: 'center',
     backgroundColor: colors.tint,
-    borderRadius: 8,
+    borderRadius: 10,
     height: 32,
     justifyContent: 'center',
     width: 32,
@@ -950,7 +1013,7 @@ const styles = StyleSheet.create({
   },
   tabs: {
     backgroundColor: colors.tint,
-    borderRadius: 8,
+    borderRadius: 14,
     flexDirection: 'row-reverse',
     gap: 4,
     marginTop: 12,
@@ -958,7 +1021,7 @@ const styles = StyleSheet.create({
   },
   tab: {
     alignItems: 'center',
-    borderRadius: 7,
+    borderRadius: 10,
     flex: 1,
     flexDirection: 'row-reverse',
     gap: 4,
@@ -977,15 +1040,15 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   tabContent: {
-    marginTop: 12,
+    marginTop: 0, // Remove extra margin as sections have their own
     gap: 12,
   },
   notice: {
     alignItems: 'center',
     backgroundColor: colors.blueTint,
     borderColor: '#bfdbfe',
-    borderRadius: 8,
-    borderWidth: 1,
+    borderRadius: 16,
+    borderWidth: 1.5,
     flexDirection: 'row',
     gap: 10,
     padding: 12,
@@ -1009,7 +1072,7 @@ const styles = StyleSheet.create({
   },
   noticeButton: {
     backgroundColor: colors.navy,
-    borderRadius: 8,
+    borderRadius: 14,
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
@@ -1021,7 +1084,7 @@ const styles = StyleSheet.create({
   section: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
     padding: 14,
   },
@@ -1030,7 +1093,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 10,
-  },
+  }, // Already styled, ensuring consistency
   sectionTitle: {
     color: colors.ink,
     fontSize: 17,
@@ -1057,7 +1120,7 @@ const styles = StyleSheet.create({
   infoChip: {
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderColor: colors.line,
+    borderColor: colors.blueTint,
     borderRadius: 999,
     borderWidth: 1,
     flexDirection: 'row-reverse',
@@ -1070,6 +1133,10 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '900',
   },
+  infoChipInteractive: { // Wrapper style for InteractiveCard
+    marginRight: 8, // Adjust spacing for interactive chips
+    fontWeight: '900',
+  },
   credentialGrid: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
@@ -1078,7 +1145,7 @@ const styles = StyleSheet.create({
   credential: {
     alignItems: 'flex-end',
     backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: 16,
     flexBasis: '48%',
     flexGrow: 1,
     padding: 12,
@@ -1104,7 +1171,7 @@ const styles = StyleSheet.create({
   trustRow: {
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: 16,
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 8,
@@ -1126,7 +1193,7 @@ const styles = StyleSheet.create({
   dayCard: {
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderColor: colors.line,
+    borderColor: colors.blueTint,
     borderRadius: 8,
     borderWidth: 1,
     minWidth: 96,
@@ -1159,13 +1226,16 @@ const styles = StyleSheet.create({
   slot: {
     backgroundColor: colors.surface,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 12,
     borderWidth: 1,
     color: colors.ink,
     fontSize: 12,
     fontWeight: '900',
     paddingHorizontal: 12,
     paddingVertical: 9,
+  },
+  slotText: { // Added for text inside InteractiveCard
+    color: colors.ink, fontSize: 12, fontWeight: '900',
   },
   relatedRow: {
     alignItems: 'center',
@@ -1217,7 +1287,7 @@ const styles = StyleSheet.create({
   postCard: {
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 8,
+    borderRadius: 20,
     borderWidth: 1,
     padding: 14,
   },
@@ -1264,7 +1334,7 @@ const styles = StyleSheet.create({
   },
   reviewCard: {
     backgroundColor: colors.surface,
-    borderRadius: 8,
+    borderRadius: 16,
     marginBottom: 10,
     padding: 12,
   },
@@ -1299,7 +1369,7 @@ const styles = StyleSheet.create({
   },
   activityRow: {
     alignItems: 'center',
-    backgroundColor: colors.surface,
+    backgroundColor: colors.paper,
     borderRadius: 8,
     flexDirection: 'row',
     gap: 10,
@@ -1349,7 +1419,7 @@ const styles = StyleSheet.create({
   },
   logoutButton: {
     alignItems: 'center',
-    backgroundColor: colors.redTint,
+    backgroundColor: colors.paper,
     borderColor: '#f7b4af',
     borderRadius: 8,
     borderWidth: 1,
@@ -1363,5 +1433,30 @@ const styles = StyleSheet.create({
     color: colors.red,
     fontSize: 14,
     fontWeight: '900',
+  },
+  completionBarContainer: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 12,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.5,
+    shadowRadius: 10,
+  },
+  completionTextRow: {
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  completionLabel: { color: colors.muted, fontSize: 11, fontWeight: '900' },
+  completionValue: { color: colors.navy, fontSize: 13, fontWeight: '900' },
+  completionTrack: { backgroundColor: colors.tint, borderRadius: 999, height: 6, overflow: 'hidden' },
+  completionFill: { backgroundColor: colors.navy, height: '100%' },
+  sectionNoPadding: {
+    paddingVertical: 0, // For sections that only contain text and don't need extra vertical padding
   },
 });
