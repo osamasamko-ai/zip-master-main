@@ -2,6 +2,26 @@ import { prisma } from './prisma';
 import { hashPassword, verifyPassword } from './auth';
 import { getLegalServices } from './adminData';
 
+// In-memory cache for frequently accessed data
+const CACHE_TTL_MS = 30_000;
+const cacheStore = new Map<string, { expiresAt: number; value: unknown }>();
+
+async function getCached<T>(key: string, loader: () => Promise<T>): Promise<T> {
+  const cached = cacheStore.get(key);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) {
+    return cached.value as T;
+  }
+
+  const value = await loader();
+  cacheStore.set(key, { expiresAt: now + CACHE_TTL_MS, value });
+  return value;
+}
+
+function invalidateCache(...keys: string[]) {
+  keys.forEach((key) => cacheStore.delete(key));
+}
+
 const USER_DASHBOARD_SERVICES = [
   {
     id: 'srv-1',
@@ -399,56 +419,60 @@ export async function revokeSession(userId: string, sessionId: string) {
 }
 
 export async function getLawyers(currentUserId?: string, search?: string) {
-  const [lawyers, follows] = await Promise.all([
-    prisma.user.findMany({
-      where: {
-        role: { in: ['pro', 'admin'] },
-        lawyerProfile: { isNot: null },
-        ...(search
-          ? {
-            OR: [
-              { name: { contains: search } },
-              { location: { contains: search } },
-              { lawyerProfile: { specialty: { contains: search } } },
-            ],
-          }
-          : {}),
-      },
-      select: {
-        id: true,
-        name: true,
-        role: true,
-        location: true,
-        verified: true,
-        img: true,
-        roleDescription: true,
-        createdAt: true,
-        lawyerProfile: {
-          select: lawyerProfileCardSelect,
+  const cacheKey = `lawyers:${currentUserId || 'anon'}:${search || ''}`;
+  
+  return getCached(cacheKey, async () => {
+    const [lawyers, follows] = await Promise.all([
+      prisma.user.findMany({
+        where: {
+          role: { in: ['pro', 'admin'] },
+          lawyerProfile: { isNot: null },
+          ...(search
+            ? {
+              OR: [
+                { name: { contains: search } },
+                { location: { contains: search } },
+                { lawyerProfile: { specialty: { contains: search } } },
+              ],
+            }
+            : {}),
         },
-        _count: {
-          select: {
-            followers: true,
-            reviewsReceived: true,
+        select: {
+          id: true,
+          name: true,
+          role: true,
+          location: true,
+          verified: true,
+          img: true,
+          roleDescription: true,
+          createdAt: true,
+          lawyerProfile: {
+            select: lawyerProfileCardSelect,
+          },
+          _count: {
+            select: {
+              followers: true,
+              reviewsReceived: true,
+            },
           },
         },
-      },
-      orderBy: [{ verified: 'desc' }, { createdAt: 'desc' }],
-    }),
-    currentUserId
-      ? prisma.userFollow.findMany({ where: { followerId: currentUserId }, select: { lawyerId: true } })
-      : Promise.resolve([]),
-  ]);
+        orderBy: [{ verified: 'desc' }, { createdAt: 'desc' }],
+      }),
+      currentUserId
+        ? prisma.userFollow.findMany({ where: { followerId: currentUserId }, select: { lawyerId: true } })
+        : Promise.resolve([]),
+    ]);
 
-  const followedSet = new Set(follows.map((item) => item.lawyerId));
-  return lawyers.map((user) =>
-    buildLawyerCard(
-      user,
-      getRelatedCount(user, 'followers'),
-      getRelatedCount(user, 'reviewsReceived'),
-      followedSet.has(user.id),
-    ),
-  );
+    const followedSet = new Set(follows.map((item) => item.lawyerId));
+    return lawyers.map((user) =>
+      buildLawyerCard(
+        user,
+        getRelatedCount(user, 'followers'),
+        getRelatedCount(user, 'reviewsReceived'),
+        followedSet.has(user.id),
+      ),
+    );
+  });
 }
 
 export async function getFollowingLawyers(userId: string) {

@@ -1,11 +1,1 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
-*.pdf
-*.png
-*.jpg
+(src/server/appData.ts)
