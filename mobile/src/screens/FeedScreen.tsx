@@ -1,6 +1,20 @@
-import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, UIManager, View, FlatList } from 'react-native';
+import React, { useEffect, useMemo, useState, useRef, useCallback } from 'react';
+import { ActivityIndicator, Animated, Dimensions, FlatList, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, UIManager, View } from 'react-native';
+import { FlashList } from "@shopify/flash-list";
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
+import Reanimated, {
+  useSharedValue,
+  useAnimatedStyle,
+  withSpring,
+  withTiming,
+  withSequence,
+  withDelay,
+  runOnJS,
+  interpolate,
+} from 'react-native-reanimated';
+import { Gesture, GestureDetector, GestureHandlerRootView } from 'react-native-gesture-handler';
 import { apiClient } from '../api/client';
 import { BottomSheet, Button, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
 import { HeroSection } from '../components/ui/HeroSection';
@@ -11,7 +25,11 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+
+const INSTA_STORY_SIZE = 72;
+const INSTA_AVATAR_SIZE = 36;
+const POST_IMAGE_ASPECT = 1; // Square like classic Instagram
 
 type FeedFilter = 'all' | 'videos' | 'articles' | 'admins' | 'popular';
 type SortMode = 'smart' | 'latest';
@@ -296,6 +314,7 @@ export function FeedScreen() {
         post={item}
         userId={user?.id}
         userRole={user?.role}
+        user={user}
         busyId={busyId}
         onLike={() => react(item.id, 'like')}
         onSave={() => react(item.id, 'save')}
@@ -377,16 +396,18 @@ export function FeedScreen() {
   };
 
   const react = async (id: string, action: 'like' | 'save' | 'share') => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setBusyId(`${action}-${id}`);
     try {
-      const response =
-        action === 'like'
-          ? await apiClient.likeFeedPost(id)
-          : action === 'save'
-            ? await apiClient.saveFeedPost(id)
-            : await apiClient.shareFeedPost(id);
+      const response = action === 'like'
+        ? await apiClient.likeFeedPost(id)
+        : action === 'save'
+          ? await apiClient.saveFeedPost(id)
+          : await apiClient.shareFeedPost(id);
+
       if (response.data) replacePost(response.data);
       if (action === 'share') setStatus('تمت مشاركة المنشور.');
+      if (action === 'save' && response.data.savedByMe) Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'تعذر تنفيذ الإجراء.');
     } finally {
@@ -489,24 +510,19 @@ export function FeedScreen() {
   };
 
   return (
-    <Screen>
+    <View style={styles.screenContainer}>
       <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
-      <FlatList
+      <FlashList
         data={sortedPosts}
         keyExtractor={(item) => item.id}
-        refreshControl={
-          <RefreshControl refreshing={refreshing && posts.length > 0} onRefresh={refresh} tintColor={colors.navy} />
-        }
+        refreshControl={<RefreshControl refreshing={refreshing && posts.length > 0} onRefresh={refresh} tintColor={colors.navy} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={renderHeader}
         renderItem={renderItem}
         ListFooterComponent={renderFooter}
         onEndReached={() => hasMore && !loadingMore && loadPosts(activeFilter, nextOffset, true)}
         onEndReachedThreshold={0.5}
-        initialNumToRender={4}
-        maxToRenderPerBatch={4}
-        windowSize={5}
-        removeClippedSubviews={Platform.OS === 'android'}
+        estimatedItemSize={550}
         ListEmptyComponent={
           refreshing ? (
             <View style={{ padding: 16 }}>
@@ -520,7 +536,7 @@ export function FeedScreen() {
       <StoryModal visible={Boolean(activeStory)} stories={smartStories} initialIndex={activeStoryIndex} onClose={() => setActiveStory(null)} />
       <StoryComposerModal visible={storyComposerOpen} onClose={() => setStoryComposerOpen(false)} text={storyText} onChange={setStoryText} onPublish={publishStory} onPickMedia={pickStoryMedia} onRemoveMedia={() => setStoryMedia(null)} media={storyMedia} loading={storyPosting} />
       <ConsultationModal post={consultationPost} note={consultationNote} paymentMethod={paymentMethod} loading={busyId === 'consult'} onChangeNote={setConsultationNote} onChangePayment={setPaymentMethod} onClose={() => setConsultationPost(null)} onSubmit={startConsultation} />
-    </Screen>
+    </View>
   );
 }
 
@@ -568,10 +584,22 @@ function InteractiveCard({ children, onPress, style }: any) {
 
 const PostCardMemo = React.memo(PostCard);
 
-function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide }: any) {
+function PostCard({ post, userId, userRole, user, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide }: any) {
   const [expanded, setExpanded] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
-  const heartAnim = useRef(new Animated.Value(0)).current;
+
+  const heartScale = useSharedValue(0);
+  const heartOpacity = useSharedValue(0);
+
+  const animatedHeartStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        scale: interpolate(heartScale.value, [0, 1], [0.5, 1.2])
+      }
+    ],
+    opacity: heartOpacity.value,
+  }));
+
   const lastTap = useRef(0);
 
   useEffect(() => {
@@ -586,14 +614,22 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
     const now = Date.now();
     const DOUBLE_TAP_DELAY = 300;
     if (now - lastTap.current < DOUBLE_TAP_DELAY) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       if (!post.likedByMe) {
         onLike();
       }
-      heartAnim.setValue(0);
-      Animated.sequence([
-        Animated.spring(heartAnim, { toValue: 1, useNativeDriver: true, bounciness: 15 }),
-        Animated.timing(heartAnim, { toValue: 0, duration: 200, delay: 500, useNativeDriver: true })
-      ]).start();
+
+      heartScale.value = 0;
+      heartOpacity.value = 0;
+
+      heartScale.value = withSequence(
+        withSpring(1, { damping: 12, stiffness: 100 }),
+        withDelay(400, withTiming(0, { duration: 200 }))
+      );
+      heartOpacity.value = withSequence(
+        withTiming(1, { duration: 100 }),
+        withDelay(400, withTiming(0, { duration: 200 }))
+      );
     }
     lastTap.current = now;
   };
@@ -608,97 +644,96 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
   const text = expanded || !isLong ? post.content : `${String(post.content || '').slice(0, 260)}...`;
 
   return (
-    <Animated.View style={[styles.postCard, post.pinned && styles.pinnedPost, { opacity: fadeAnim }]}>
-      {(post.pinned || post.author?.role === 'admin') ? (
-        <View style={[styles.postRibbon, post.pinned && styles.pinnedRibbon]}>
-          <Text style={styles.postRibbonText}>{post.pinned ? 'منشور مثبت' : 'إعلان رسمي'}</Text>
-          <Ionicons name={post.pinned ? 'pin-outline' : 'megaphone-outline'} size={15} color={post.pinned ? colors.gold : colors.blue} />
-        </View>
-      ) : null}
-      <View style={styles.postHeader}>
-        {canManage ? (
-          <View style={styles.manageRow}>
-            {userId === post.author?.id ? <IconButton icon="create-outline" onPress={onEdit} /> : null}
-            {userRole === 'admin' ? <><IconButton icon="pin-outline" onPress={onPin} /><IconButton icon="star-outline" onPress={onFeature} /><IconButton icon="eye-off-outline" onPress={onHide} /></> : null}
-            <IconButton icon="trash-outline" danger onPress={onDelete} />
+    <Animated.View style={[styles.instaPost, { opacity: fadeAnim }]}>
+      {/* Header */}
+      <View style={styles.instaPostHeader}>
+        <Avatar source={post.author?.avatar || post.author?.img} name={post.author?.name || 'م'} />
+        <View style={styles.instaPostHeaderInfo}>
+          <View style={styles.authorLine}>
+            <Text style={styles.instaAuthorName}>{post.author?.name || 'عضو المنصة'}</Text>
+            {post.author?.verified && <Ionicons name="shield-checkmark" size={14} color={colors.blue} />}
           </View>
-        ) : null}
-        <View style={styles.authorInfo}>
-          <Avatar source={post.author?.avatar || post.author?.img} name={post.author?.name || 'م'} />
-          <View style={styles.flex}>
-            <View style={styles.authorLine}>
-              {post.author?.verified ? <Ionicons name="shield-checkmark" size={16} color={colors.blue} /> : null}
-              {post.featured ? <Pill label="مميز" tone="gold" /> : null}
-              {post.author?.role === 'admin' ? <Pill label="إدارة" tone="blue" /> : <Pill label="محامي" tone="neutral" />}
-              <Text style={styles.authorName} numberOfLines={1}>{post.author?.name || post.authorName || 'عضو المنصة'}</Text>
-            </View>
-            <Text style={styles.mutedText}>{post.author?.specialty || post.author?.roleLabel || post.category} · {formatDate(post.createdAt)}</Text>
-          </View>
+          <Text style={styles.instaPostLocation}>{post.category || 'المجتمع القانوني'}</Text>
         </View>
+        <Pressable hitSlop={10} onPress={() => { /* Open more menu */ }}>
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.muted} />
+        </Pressable>
       </View>
-      <Text style={styles.postText}>{text}</Text>
-      {isLong ? <Pressable onPress={toggleExpand}><Text style={styles.readMore}>{expanded ? 'عرض أقل' : 'قراءة المزيد'}</Text></Pressable> : null}
-      <View style={styles.tagRow}><Text style={styles.tag}>#{post.category || 'عام'}</Text><Text style={styles.tag}>{post.readingTime || 1} دقيقة قراءة</Text></View>
+
+      {/* Media Content */}
       {post.mediaUrl ? (
         <Pressable onPress={handleImagePress} style={[styles.mediaBox, post.mediaType === 'image' && styles.imageMediaBox]}>
           {post.mediaType === 'image' ? (
             <>
-              <Image source={{ uri: post.mediaUrl }} style={styles.postImage} resizeMode="cover" />
-              <Animated.View style={[styles.heartOverlay, { transform: [{ scale: heartAnim }], opacity: heartAnim }]}>
+              <Image source={post.mediaUrl} style={styles.instaPostImage} contentFit="cover" transition={400} />
+              <Reanimated.View style={[styles.heartOverlay, animatedHeartStyle]}>
                 <Ionicons name="heart" size={80} color="#fff" />
-              </Animated.View>
+              </Reanimated.View>
             </>
-          ) : (
-            <>
-              <Ionicons name="play-circle-outline" size={34} color={colors.blue} />
-              <Text style={styles.mutedText}>فيديو مرفق · افتحه من نسخة الويب للمشاهدة الكاملة</Text>
-            </>
-          )}
+          ) : <View style={styles.videoPlaceholder}><Ionicons name="play" size={40} color="#fff" /></View>}
         </Pressable>
-      ) : null}
-      <View style={styles.countRow}><Text style={styles.countText}>{(post.likesCount || 0).toLocaleString('ar-IQ')} إعجاب</Text><Text style={styles.countText}>{post.commentsCount || 0} تعليق · {post.shareCount || 0} مشاركة · {post.savesCount || 0} حفظ</Text></View>
-      <View style={styles.actionRow}>
-        <Action icon="thumbs-up-outline" label="إعجاب" active={post.likedByMe} loading={busyId === `like-${post.id}`} onPress={onLike} />
-        <Action icon="chatbubble-outline" label="تعليق" onPress={onComment} />
-        <Action icon="share-social-outline" label="مشاركة" loading={busyId === `share-${post.id}`} onPress={onShare} />
-        <Action icon="bookmark-outline" label="حفظ" active={post.savedByMe} loading={busyId === `save-${post.id}`} onPress={onSave} />
-      </View>
-      {commentOpen ? (
-        <View style={styles.inlineComment}>
-          <TextInput
-            value={comment}
-            onChangeText={onChangeComment}
-            placeholder="اكتب تعليقاً مهنياً..."
-            placeholderTextColor={colors.subtle}
-            style={styles.inlineCommentInput}
-          />
-          <Pressable disabled={!String(comment || '').trim() || busyId === `comment-${post.id}`} onPress={onSubmitComment} style={[styles.inlineCommentSend, (!String(comment || '').trim() || busyId === `comment-${post.id}`) && styles.disabled]}>
-            {busyId === `comment-${post.id}` ? <ActivityIndicator color="#fff" /> : <Ionicons name="send" size={16} color="#fff" />}
+      ) : <View style={styles.textOnlyPostSpacer} />}
+
+      {/* Icons */}
+      <View style={styles.instaActionRow}>
+        <View style={styles.instaActionLeft}>
+          <Pressable onPress={onLike} style={styles.instaIcon}>
+            <Ionicons name={post.likedByMe ? "heart" : "heart-outline"} size={26} color={post.likedByMe ? colors.red : colors.ink} />
+          </Pressable>
+          <Pressable onPress={onComment} style={styles.instaIcon}>
+            <Ionicons name="chatbubble-outline" size={24} color={colors.ink} />
+          </Pressable>
+          <Pressable onPress={onShare} style={styles.instaIcon}>
+            <Ionicons name="paper-plane-outline" size={24} color={colors.ink} />
           </Pressable>
         </View>
-      ) : null}
-      {post.author?.role === 'lawyer' && post.author?.id !== userId ? (
-        <View style={styles.lawyerActions}>
-          <Pressable onPress={onConsult} style={styles.consultButton}><Ionicons name="card-outline" size={16} color="#fff" /><Text style={styles.consultText}>استشارة</Text></Pressable>
-          <Pressable onPress={onFollow} style={styles.followButton}><Ionicons name="add-circle-outline" size={16} color={colors.blue} /><Text style={styles.followText}>متابعة</Text></Pressable>
+        <Pressable onPress={onSave} style={styles.instaIcon}>
+          <Ionicons name={post.savedByMe ? "bookmark" : "bookmark-outline"} size={24} color={post.savedByMe ? colors.gold : colors.ink} />
+        </Pressable>
+      </View>
+
+      {/* Captions & Info */}
+      <View style={styles.instaContent}>
+        <Text style={styles.instaLikesText}>{(post.likesCount || 0).toLocaleString('ar-IQ')} إعجاب</Text>
+
+        <View style={styles.instaCaptionRow}>
+          <Text style={styles.instaCaption}>
+            <Text style={styles.instaCaptionAuthor}>{post.author?.name || 'عضو'} </Text>
+            {text}
+          </Text>
+        </View>
+
+        {isLong && <Pressable onPress={toggleExpand}><Text style={styles.instaReadMore}>{expanded ? 'عرض أقل' : 'المزيد'}</Text></Pressable>}
+
+        {post.commentsCount > 0 && (
+          <Pressable onPress={onComment}>
+            <Text style={styles.instaViewComments}>عرض جميع التعليقات ({post.commentsCount.toLocaleString('ar-IQ')})</Text>
+          </Pressable>
+        )}
+
+        <Text style={styles.instaTime}>{formatDate(post.createdAt)}</Text>
+      </View>
+
+      {commentOpen ? (
+        <View style={styles.instaInlineComment}>
+          <Avatar source={user?.img} name={user?.name || 'م'} small />
+          <TextInput value={comment} onChangeText={onChangeComment} placeholder="أضف تعليقاً..." placeholderTextColor={colors.subtle} style={styles.instaCommentInput} />
+          <Pressable onPress={onSubmitComment} disabled={!comment.trim()}><Text style={[styles.instaCommentPost, !comment.trim() && { opacity: 0.5 }]}>نشر</Text></Pressable>
         </View>
       ) : null}
-      {(post.comments || []).slice(-3).map((item: any) => <View key={item.id} style={styles.commentBubble}><Text style={styles.commentAuthor}>{item.author?.name}</Text><Text style={styles.commentText}>{item.content}</Text></View>)}
     </Animated.View>
   );
 }
 
 function StoryBubble({ story, onPress }: { story: any; onPress: () => void }) {
   return (
-    <InteractiveCard onPress={onPress} style={styles.storyBubble}>
-      {story.mediaUrl && story.mediaType === 'image' ? <Image source={{ uri: story.mediaUrl }} style={styles.storyCoverImage} /> : null}
-      <View style={[styles.storyAvatarWrap, !story.seenByMe && !story.isArchived && styles.avatarUnseen]}>
-        <Avatar source={story.author?.avatar || story.author?.img} name={story.author?.name || 'م'} small />
+    <InteractiveCard onPress={onPress} style={styles.instaStory}>
+      <View style={[styles.instaStoryRing, !story.seenByMe && !story.isArchived && styles.instaStoryRingUnseen]}>
+        <View style={styles.instaStoryInner}>
+          <Avatar source={story.author?.avatar || story.author?.img} name={story.author?.name || 'م'} />
+        </View>
       </View>
-      {!story.seenByMe && !story.isArchived ? <Text style={styles.newStoryBadge}>جديد</Text> : null}
-      {story.isArchived ? <Text style={styles.archiveStoryBadge}>أرشيف</Text> : null}
-      <Text style={styles.storyName} numberOfLines={1}>{story.author?.name || 'قصة'}</Text>
-      <Text style={styles.storyText} numberOfLines={2}>{story.text}</Text>
+      <Text style={styles.instaStoryName} numberOfLines={1}>{story.author?.name?.split(' ')[0]}</Text>
     </InteractiveCard>
   );
 }
@@ -811,6 +846,38 @@ function StoryModal({ visible, stories, initialIndex, onClose }: { visible: bool
   const progress = useRef(new Animated.Value(0)).current;
   const listRef = useRef<FlatList>(null);
 
+  const translateY = useSharedValue(0);
+  const modalOpacity = useSharedValue(1);
+
+  const closeStory = useCallback(() => {
+    onClose();
+    translateY.value = 0;
+    modalOpacity.value = 1;
+  }, [onClose]);
+
+  const swipeGesture = Gesture.Pan()
+    .onUpdate((event) => {
+      if (event.translationY > 0) {
+        translateY.value = event.translationY;
+        modalOpacity.value = interpolate(event.translationY, [0, 300], [1, 0.5], 'clamp');
+      }
+    })
+    .onEnd((event) => {
+      if (event.translationY > 150 || event.velocityY > 800) {
+        translateY.value = withTiming(height, { duration: 250 }, () => {
+          runOnJS(closeStory)();
+        });
+      } else {
+        translateY.value = withSpring(0);
+        modalOpacity.value = withSpring(1);
+      }
+    });
+
+  const animatedContainerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: translateY.value }],
+    opacity: modalOpacity.value,
+  }));
+
   const handleReport = async (reason: string) => {
     if (!reportStory) return;
     setReporting(true);
@@ -910,18 +977,24 @@ function StoryModal({ visible, stories, initialIndex, onClose }: { visible: bool
           </View>
         </Pressable>
       </Modal>
-      <FlatList
-        ref={listRef}
-        data={stories}
-        renderItem={renderItem}
-        horizontal
-        pagingEnabled
-        keyExtractor={item => item.id}
-        initialScrollIndex={initialIndex}
-        getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
-        onMomentumScrollEnd={handleScroll}
-        showsHorizontalScrollIndicator={false}
-      />
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <GestureDetector gesture={swipeGesture}>
+          <Reanimated.View style={[{ flex: 1 }, animatedContainerStyle]}>
+            <FlatList
+              ref={listRef}
+              data={stories}
+              renderItem={renderItem}
+              horizontal
+              pagingEnabled
+              keyExtractor={item => item.id}
+              initialScrollIndex={initialIndex}
+              getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+              onMomentumScrollEnd={handleScroll}
+              showsHorizontalScrollIndicator={false}
+            />
+          </Reanimated.View>
+        </GestureDetector>
+      </GestureHandlerRootView>
     </Modal>
   );
 }
@@ -979,187 +1052,157 @@ function ConsultationModal({ post, note, paymentMethod, loading, onChangeNote, o
 }
 
 const styles = StyleSheet.create({
-  actionRow: { borderTopColor: colors.line, borderTopWidth: 1, flexDirection: 'row-reverse', gap: 2, marginTop: 10, paddingTop: 4 },
-  activeText: { color: colors.blue },
-  archiveStoryBadge: { backgroundColor: 'rgba(16,24,40,0.72)', borderRadius: 999, color: '#fff', fontSize: 9, fontWeight: '900', left: 8, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 3, position: 'absolute', top: 8 },
-  authorInfo: { alignItems: 'center', flex: 1, flexDirection: 'row-reverse', gap: 10 },
-  authorLine: { alignItems: 'center', flexDirection: 'row-reverse', gap: 6 },
-  authorName: { color: colors.ink, fontSize: 14, fontWeight: '900', textAlign: 'right' },
-  avatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 42, justifyContent: 'center', width: 42 },
-  avatarSmall: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
-  avatarText: { color: '#fff', fontSize: 15, fontWeight: '900' },
+  screenContainer: { flex: 1, backgroundColor: colors.paper },
+  authorLine: { alignItems: 'center', flexDirection: 'row-reverse', gap: 4 },
+  avatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: INSTA_AVATAR_SIZE, justifyContent: 'center', width: INSTA_AVATAR_SIZE },
+  avatarSmall: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 28, justifyContent: 'center', width: 28 },
+  avatarText: { color: '#fff', fontSize: 14, fontWeight: '900' },
   cardTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', textAlign: 'right' },
   chip: { backgroundColor: colors.tint, borderRadius: 999, minHeight: 34, justifyContent: 'center', paddingHorizontal: 11 },
   chipActive: { backgroundColor: colors.navy },
   chipRow: { flexDirection: 'row-reverse', gap: 8, paddingBottom: 10 },
   chipText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   chipTextActive: { color: '#fff' },
-  commentAuthor: { color: colors.ink, fontSize: 11, fontWeight: '900', textAlign: 'right' },
-  commentBubble: { alignSelf: 'flex-end', backgroundColor: colors.tint, borderRadius: 16, marginTop: 8, maxWidth: '92%', padding: 9 },
-  commentText: { color: colors.ink, fontSize: 12, fontWeight: '700', lineHeight: 19, marginTop: 3, textAlign: 'right' },
-  addStoryBubble: { alignItems: 'center', backgroundColor: colors.paper, borderRadius: 16, borderWidth: 1, borderColor: colors.line, height: 138, justifyContent: 'center', width: 104 },
-  addStoryCircle: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 28, justifyContent: 'center', position: 'absolute', right: -6, top: -6, width: 28, zIndex: 5, borderWidth: 3, borderColor: colors.paper },
+
+  // INSTAGRAM POST STYLES
+  instaPost: { backgroundColor: '#fff', marginBottom: 16 },
+  instaPostHeader: { flexDirection: 'row-reverse', alignItems: 'center', padding: 12, gap: 10 },
+  instaPostHeaderInfo: { flex: 1, alignItems: 'flex-end' },
+  instaAuthorName: { fontSize: 14, fontWeight: '900', color: colors.ink },
+  instaPostLocation: { fontSize: 11, color: colors.muted, marginTop: 1 },
+  instaPostImage: { width: '100%', aspectRatio: POST_IMAGE_ASPECT },
+  instaActionRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 10 },
+  instaActionLeft: { flexDirection: 'row-reverse', alignItems: 'center', gap: 16 },
+  instaIcon: { padding: 2 },
+  instaContent: { paddingHorizontal: 14 },
+  instaLikesText: { fontSize: 14, fontWeight: '900', color: colors.ink, marginBottom: 5, textAlign: 'right' },
+  instaCaptionRow: { flexDirection: 'row-reverse', flexWrap: 'wrap' },
+  instaCaption: { fontSize: 14, color: colors.ink, lineHeight: 21, textAlign: 'right' },
+  instaCaptionAuthor: { fontWeight: '900', color: colors.ink },
+  instaReadMore: { fontSize: 13, color: colors.muted, marginTop: 4, textAlign: 'right', fontWeight: '700' },
+  instaViewComments: { fontSize: 13, color: colors.muted, marginTop: 6, textAlign: 'right', fontWeight: '600' },
+  instaTime: { fontSize: 10, color: colors.subtle, marginTop: 8, textAlign: 'right', textTransform: 'uppercase' },
+
+  // INSTAGRAM COMMENT INPUT
+  instaInlineComment: { flexDirection: 'row-reverse', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 10, borderTopColor: colors.line, borderTopWidth: 0.5, gap: 10 },
+  instaCommentInput: { flex: 1, fontSize: 14, color: colors.ink, paddingVertical: 4, textAlign: 'right' },
+  instaCommentPost: { fontSize: 14, fontWeight: '900', color: colors.blue },
+
+  // INSTAGRAM STORY STYLES
+  instaStory: { alignItems: 'center', width: INSTA_STORY_SIZE + 10, gap: 6 },
+  instaStoryRing: { width: INSTA_STORY_SIZE, height: INSTA_STORY_SIZE, borderRadius: 999, padding: 2.5, backgroundColor: colors.line, justifyContent: 'center', alignItems: 'center' },
+  instaStoryRingUnseen: { backgroundColor: colors.gold }, // Or use a linear gradient if available
+  instaStoryInner: { width: '100%', height: '100%', borderRadius: 999, backgroundColor: '#fff', padding: 2.5, justifyContent: 'center', alignItems: 'center' },
+  instaStoryName: { fontSize: 11, fontWeight: '700', color: colors.ink },
+  addStoryBubble: { alignItems: 'center', gap: 6, width: INSTA_STORY_SIZE + 10 },
+  addStoryCircle: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 22, justifyContent: 'center', position: 'absolute', left: 5, bottom: 20, width: 22, zIndex: 10, borderWidth: 2, borderColor: '#fff' },
+
   composer: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 20, borderWidth: 1, marginBottom: 16, padding: 16, shadowColor: colors.shadow, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.6, shadowRadius: 12, elevation: 4 },
-  composerModalBackdrop: { backgroundColor: 'rgba(15,23,42,0.6)', flex: 1, justifyContent: 'flex-end' },
-  composerModalContent: { backgroundColor: colors.paper, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, minHeight: '60%' },
-  modalHeader: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 20 },
-  closeButton: { padding: 4 },
-  storyDraftPreview: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 24, justifyContent: 'center', minHeight: 200, padding: 24, marginBottom: 20 },
-  storyDraftText: { color: '#fff', fontSize: 18, fontWeight: '800', lineHeight: 28, textAlign: 'center' },
-  storyModalInput: { backgroundColor: colors.surface, borderRadius: 16, color: colors.ink, fontSize: 15, fontWeight: '700', minHeight: 80, padding: 16, textAlign: 'right', textAlignVertical: 'top' },
-  storyViewerContainer: { backgroundColor: colors.navy, flex: 1, paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
-  storyProgressRail: { flexDirection: 'row-reverse', gap: 4, marginBottom: 16 },
-  storyProgressBar: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, flex: 1, height: 3, overflow: 'hidden' },
-  storyProgressFill: { backgroundColor: '#fff', height: '100%' },
-  storyViewerHeader: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between' },
-  viewerAuthorName: { color: '#fff', fontSize: 14, fontWeight: '900' },
-  viewerMeta: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700', marginTop: 2 },
-  viewerClose: { padding: 4 },
-  viewerContent: { flex: 1, justifyContent: 'center' },
-  viewerTextContainer: { alignItems: 'center', justifyContent: 'center', padding: 24 },
-  viewerText: { color: '#fff', fontSize: 24, fontWeight: '900', lineHeight: 36, textAlign: 'center' },
-  viewerFooter: { alignItems: 'center', borderTopColor: 'rgba(255,255,255,0.1)', borderTopWidth: 1, flexDirection: 'row-reverse', paddingVertical: 20, marginBottom: Platform.OS === 'ios' ? 30 : 10 },
-  viewerReply: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 8, height: 44, justifyContent: 'center', paddingHorizontal: 16 },
-  viewerReplyText: { color: '#fff', fontSize: 13, fontWeight: '800' },
-  composerInput: {
-    backgroundColor: colors.surface,
-    borderRadius: 16,
-    color: colors.ink,
-    marginTop: 12,
-    minHeight: 100,
-    padding: 16,
-    textAlign: 'right',
-    textAlignVertical: 'top',
-    borderColor: colors.line,
-    borderWidth: 1,
-    fontSize: 15
-  },
-  composerPrompt: { backgroundColor: colors.tint, borderRadius: 999, flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
-  composerPromptText: { color: colors.muted, fontSize: 13, fontWeight: '800', textAlign: 'right' },
+  composerPrompt: { flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
+  composerPromptText: { color: colors.muted, fontSize: 14, fontWeight: '700', textAlign: 'right' },
   composerTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 10 },
-  consultButton: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 6, justifyContent: 'center', minHeight: 38 },
-  consultText: { color: '#fff', fontSize: 12, fontWeight: '900' },
-  countRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginTop: 12 },
-  countText: { color: colors.muted, fontSize: 11, fontWeight: '800' },
-  dangerButton: { backgroundColor: colors.redTint },
+  composerInput: { backgroundColor: colors.tint, borderRadius: 12, padding: 12, textAlign: 'right', minHeight: 80, color: colors.ink, marginBottom: 10 },
+
   disabled: { opacity: 0.45 },
   endText: { color: colors.muted, fontSize: 12, fontWeight: '900', marginVertical: 14, textAlign: 'center' },
-  featuredItem: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, padding: 11, width: 210 },
-  featuredPanel: { marginBottom: 8 },
-  featuredRow: { flexDirection: 'row-reverse', gap: 9, paddingBottom: 8 },
-  featuredTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', lineHeight: 20, textAlign: 'right' },
   feedControls: { marginBottom: 4 },
-  feedHeader: { marginBottom: 12 },
-  filterChip: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, flexDirection: 'row-reverse', gap: 5, minHeight: 38, paddingHorizontal: 11 },
+  filterChip: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', gap: 5, minHeight: 34, paddingHorizontal: 12 },
   filterChipActive: { backgroundColor: colors.navy },
   filterRow: { flexDirection: 'row-reverse', gap: 8, paddingBottom: 10 },
   filterText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   filterTextActive: { color: '#fff' },
   flex: { flex: 1 },
-  followButton: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 6, justifyContent: 'center', minHeight: 38 },
-  followText: { color: colors.blue, fontSize: 12, fontWeight: '900' },
-  headerIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 40, justifyContent: 'center', width: 40 },
   heartOverlay: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 10 },
-  hero: { backgroundColor: colors.paper, borderRadius: 16, marginBottom: 12, padding: 14 },
-  heroIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 44, justifyContent: 'center', width: 44 },
-  heroTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 12 },
   iconButton: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 999, height: 34, justifyContent: 'center', width: 34 },
-  imageMediaBox: { backgroundColor: '#101828', padding: 0 },
-  inlineComment: { alignItems: 'center', flexDirection: 'row-reverse', gap: 8, marginTop: 10 },
-  inlineCommentInput: { backgroundColor: colors.tint, borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 14, textAlign: 'right' },
-  inlineCommentSend: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 42, justifyContent: 'center', width: 42 },
-  lawyerActions: { flexDirection: 'row-reverse', gap: 8, marginTop: 10 },
-  inlineLawyers: { backgroundColor: '#fff', borderRadius: 18, marginBottom: 12, padding: 12 },
-  lawyerCard: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 18, padding: 12, width: 138 },
-  lawyerRow: { flexDirection: 'row-reverse', gap: 10, paddingTop: 8 },
-  lawyersPanel: { backgroundColor: colors.surface, borderRadius: 18, marginBottom: 12, padding: 12 },
-  loadMore: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, justifyContent: 'center', marginVertical: 12, minHeight: 44 },
-  loadMoreText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
-  manageRow: { flexDirection: 'row', gap: 5 },
-  mediaBox: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 16, gap: 4, marginTop: 12, padding: 18 },
-  mediaClear: { marginLeft: 'auto' },
-  mediaPickerButton: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 16, backgroundColor: colors.tint, borderRadius: 16, marginBottom: 16 },
-  mediaPickerText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
-  reportBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  reportMenu: { backgroundColor: '#fff', borderRadius: 24, width: '90%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
-  reportTitle: { fontSize: 18, fontWeight: '900', color: colors.ink, marginBottom: 15, textAlign: 'center' },
-  reportOption: { paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.line, alignItems: 'center' },
-  reportOptionText: { fontSize: 14, fontWeight: '800', color: colors.navy },
-  reportCancel: { borderBottomWidth: 0, marginTop: 10 },
-  reportCancelText: { color: colors.red, fontWeight: '900' },
-  storyOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.3)' },
+  imageMediaBox: { backgroundColor: '#000' },
+  mediaBox: { width: '100%', aspectRatio: POST_IMAGE_ASPECT },
+  videoPlaceholder: { ...StyleSheet.absoluteFillObject, backgroundColor: colors.navy, justifyContent: 'center', alignItems: 'center' },
+  textOnlyPostSpacer: { height: 12 },
+  sectionTitle: { color: colors.ink, fontSize: 14, fontWeight: '900', textAlign: 'right', marginBottom: 10 },
+  storyRow: { flexDirection: 'row-reverse', gap: 12, paddingTop: 10 },
+  storySkeleton: { backgroundColor: colors.tint, borderRadius: 999, height: INSTA_STORY_SIZE, width: INSTA_STORY_SIZE },
+  storyPanel: { borderBottomColor: colors.line, borderBottomWidth: 0.5, paddingBottom: 16, marginBottom: 4, paddingHorizontal: 12 },
+
+  // Header & Sort
+  headerIcon: { padding: 8, borderRadius: 999, backgroundColor: colors.tint },
+  viewerNotice: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: colors.tint, borderRadius: 12, padding: 14, marginBottom: 12 },
+  noticeIcon: { width: 36, height: 36, borderRadius: 999, backgroundColor: colors.blueTint || colors.tint, justifyContent: 'center', alignItems: 'center' },
+  noticeTitle: { fontSize: 13, fontWeight: '800', color: colors.ink, textAlign: 'right' },
+  storyTabs: { flexDirection: 'row-reverse', gap: 6, marginBottom: 10 },
+  storyTab: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 999, backgroundColor: colors.tint },
+  storyTabActive: { backgroundColor: colors.blueTint || colors.tint },
+  storyTabText: { fontSize: 12, fontWeight: '700', color: colors.muted },
+  storyTabTextActive: { color: colors.blue, fontWeight: '900' },
+  storyTabCount: { fontSize: 10, fontWeight: '800', color: colors.subtle },
+  storyTabCountActive: { color: colors.blue },
+  sortPanel: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: colors.paper, borderBottomWidth: 0.5, borderBottomColor: colors.line, marginBottom: 4 },
+  sortToggle: { flexDirection: 'row-reverse', backgroundColor: colors.tint, borderRadius: 999, overflow: 'hidden' },
+  sortOption: { paddingVertical: 6, paddingHorizontal: 12 },
+  sortOptionActive: { backgroundColor: colors.navy },
+  sortText: { fontSize: 12, fontWeight: '700', color: colors.muted },
+  sortTextActive: { color: '#fff' },
+
+  // Featured & Topics
+  featuredPanel: { marginVertical: 8 },
+  featuredRow: { flexDirection: 'row-reverse', gap: 8, paddingHorizontal: 12 },
+  featuredItem: { backgroundColor: colors.tint, borderRadius: 12, padding: 12, width: 180 },
+  featuredTitle: { fontSize: 13, fontWeight: '800', color: colors.ink, textAlign: 'right', lineHeight: 20 },
+  topicPill: { backgroundColor: colors.surface || colors.tint, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
+  topicText: { fontSize: 12, fontWeight: '700', color: colors.blue },
+
+  // Lawyers
+  inlineLawyers: { backgroundColor: colors.paper, padding: 12, borderTopWidth: 0.5, borderTopColor: colors.line },
+  lawyerRow: { flexDirection: 'row-reverse', gap: 10, marginTop: 8 },
+  lawyerCard: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 12, padding: 12, width: 120 },
+  followButton: { marginTop: 8, backgroundColor: colors.blue, borderRadius: 999, paddingVertical: 5, paddingHorizontal: 14, minWidth: 70, alignItems: 'center' },
+  followText: { color: '#fff', fontSize: 12, fontWeight: '900' },
+
+  // Modal & Common
+  modalActions: { gap: 10, marginTop: 16 },
+  modalInput: { backgroundColor: colors.tint, borderRadius: 12, padding: 12, textAlign: 'right', minHeight: 80 },
+  rowBetween: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
+  mutedText: { fontSize: 12, color: colors.muted, textAlign: 'right' },
+  statusBadge: { fontSize: 10, fontWeight: '900', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, overflow: 'hidden' },
+  paymentItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 12, borderRadius: 12, backgroundColor: colors.tint, marginBottom: 8 },
+  paymentItemActive: { borderColor: colors.blue, borderWidth: 1.5, backgroundColor: colors.blueTint || colors.tint },
+  modalHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  closeButton: { padding: 4 },
+  modalTitle: { fontSize: 18, fontWeight: '900', color: colors.ink, textAlign: 'right' },
+  composerModalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  composerModalContent: { backgroundColor: colors.paper, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 20, maxHeight: '80%' },
+  storyDraftPreview: { backgroundColor: colors.navy, borderRadius: 16, height: 180, justifyContent: 'center', alignItems: 'center', padding: 20, marginBottom: 16, overflow: 'hidden' },
+  storyDraftText: { color: '#fff', fontSize: 18, fontWeight: '800', textAlign: 'center' },
+  storyModalInput: { backgroundColor: colors.tint, borderRadius: 12, padding: 12, textAlign: 'right', minHeight: 60, color: colors.ink, marginBottom: 12 },
+  mediaPickerButton: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, padding: 12, backgroundColor: colors.tint, borderRadius: 12, marginBottom: 12 },
+  mediaPickerText: { fontSize: 13, fontWeight: '700', color: colors.navy, flex: 1, textAlign: 'right' },
+  mediaClear: { marginLeft: 8 },
+
+  // Story Viewer
+  storyViewerContainer: { width, flex: 1, backgroundColor: '#000', justifyContent: 'space-between' },
+  storyOverlay: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(0,0,0,0.3)' },
+  storyProgressRail: { flexDirection: 'row', gap: 3, paddingTop: Platform.OS === 'ios' ? 50 : 20, paddingHorizontal: 8 },
+  storyProgressBar: { flex: 1, height: 2.5, backgroundColor: 'rgba(255,255,255,0.3)', borderRadius: 2, overflow: 'hidden' },
+  storyProgressFill: { backgroundColor: '#fff', height: '100%' },
+  storyViewerHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12 },
+  authorInfo: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  viewerAuthorName: { color: '#fff', fontSize: 14, fontWeight: '900' },
+  viewerMeta: { color: 'rgba(255,255,255,0.7)', fontSize: 11 },
   viewerHeaderActions: { flexDirection: 'row-reverse', alignItems: 'center', gap: 12 },
   viewerHeaderButton: { padding: 4 },
-  modalActions: { gap: 9, marginTop: 12 },
-  modalBackdrop: { alignItems: 'center', backgroundColor: 'rgba(16,24,40,0.45)', flex: 1, justifyContent: 'center', padding: 16 },
-  modalInput: { backgroundColor: colors.tint, borderRadius: 16, color: colors.ink, minHeight: 96, padding: 12, textAlign: 'right', textAlignVertical: 'top' },
-  modalPanel: { backgroundColor: '#fff', borderRadius: 22, maxHeight: '88%', padding: 16, width: '94%' },
-  modalTitle: { color: colors.ink, fontSize: 18, fontWeight: '900', marginBottom: 10, textAlign: 'right' },
-  mutedText: { color: colors.muted, fontSize: 11, fontWeight: '800', lineHeight: 18, marginTop: 4, textAlign: 'right' },
-  newStoryBadge: { backgroundColor: colors.blue, borderRadius: 999, color: '#fff', fontSize: 9, fontWeight: '900', left: 8, overflow: 'hidden', paddingHorizontal: 7, paddingVertical: 3, position: 'absolute', top: 8 },
-  noticeIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
-  noticeTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', textAlign: 'right' },
-  paymentItem: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 10 },
-  paymentItemActive: { backgroundColor: colors.blueTint },
-  pinnedPost: { borderColor: colors.blue, borderWidth: 1.5 },
-  postAction: { alignItems: 'center', borderRadius: 10, flex: 1, gap: 3, justifyContent: 'center', minHeight: 42 },
-  postActionActive: { backgroundColor: colors.blueTint },
-  postActionText: { color: colors.muted, fontSize: 10, fontWeight: '900' },
-  postCard: {
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 20,
-    borderWidth: 1,
-    marginBottom: 16,
-    overflow: 'hidden',
-    padding: 18,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.8,
-    shadowRadius: 16,
-    elevation: 5
-  },
-  postHeader: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
-  postImage: { aspectRatio: 1, width: '100%' },
-  postRibbon: { alignItems: 'center', backgroundColor: colors.surface, flexDirection: 'row-reverse', gap: 6, marginHorizontal: -14, marginTop: -14, marginBottom: 14, padding: 9 },
-  pinnedRibbon: { backgroundColor: colors.goldTint, borderBottomColor: colors.gold, borderBottomWidth: 1 },
-  postRibbonText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
-  postText: { color: colors.ink, fontSize: 15, fontWeight: '700', lineHeight: 26, marginTop: 14, textAlign: 'right' },
-  readMore: { color: colors.blue, fontSize: 12, fontWeight: '900', marginTop: 6, textAlign: 'right' },
-  rowBetween: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
-  sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: '900', textAlign: 'right' },
-  sortOption: { borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
-  sortOptionActive: { backgroundColor: colors.paper },
-  sortPanel: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, flexDirection: 'row-reverse', gap: 12, marginBottom: 12, padding: 12 },
-  sortText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
-  sortTextActive: { color: colors.blue },
-  sortToggle: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', padding: 3 },
-  status: { color: colors.navy, fontSize: 12, fontWeight: '900', marginBottom: 8, textAlign: 'center' },
-  storyAvatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 36, justifyContent: 'center', width: 36 },
-  storyBubble: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, height: 138, padding: 10, width: 104, overflow: 'hidden' },
-  avatarUnseen: { borderColor: colors.gold, borderWidth: 2, borderRadius: 999, padding: 2 },
-  storyAvatarWrap: { marginBottom: 4 },
-  storyComposer: { alignItems: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
-  storyCoverImage: { borderRadius: 12, height: 70, marginBottom: 8, width: '100%' },
-  storyInput: { backgroundColor: colors.tint, borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 12, textAlign: 'right' },
-  storyName: { color: colors.ink, fontSize: 11, fontWeight: '900', marginTop: 7, textAlign: 'right' },
-  storyPanel: { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1, borderRadius: 16, marginBottom: 12, padding: 12 },
-  storyPublish: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
-  storyRow: { flexDirection: 'row-reverse', gap: 10, paddingTop: 10 },
-  storyText: { color: colors.muted, fontSize: 10, fontWeight: '800', lineHeight: 15, marginTop: 5, textAlign: 'right' },
-  storySkeleton: { backgroundColor: colors.tint, borderRadius: 16, height: 138, width: 104 },
-  storyTab: { alignItems: 'center', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 5, justifyContent: 'center', minHeight: 32 },
-  storyTabActive: { backgroundColor: colors.paper },
-  storyTabCount: { backgroundColor: colors.paper, borderRadius: 999, color: colors.subtle, fontSize: 9, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 2 },
-  storyTabCountActive: { backgroundColor: colors.blueTint, color: colors.blue },
-  storyTabs: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', gap: 4, marginTop: 10, padding: 4 },
-  storyTabText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
-  storyTabTextActive: { color: colors.blue },
-  subtitle: { color: colors.muted, fontSize: 13, fontWeight: '800', marginTop: 4, textAlign: 'right' },
-  tag: { backgroundColor: colors.blueTint, borderRadius: 999, color: colors.blue, fontSize: 11, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 4 },
-  tagRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 12 },
-  title: { color: colors.ink, fontSize: 24, fontWeight: '900', textAlign: 'right' },
-  topicPill: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
-  topicText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
-  viewerNotice: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 12, padding: 12 },
+  viewerClose: { padding: 4 },
+  viewerContent: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+  viewerTextContainer: { backgroundColor: 'rgba(0,0,0,0.5)', borderRadius: 16, padding: 16 },
+  viewerText: { color: '#fff', fontSize: 20, fontWeight: '800', textAlign: 'center', lineHeight: 30 },
+  viewerFooter: { paddingBottom: Platform.OS === 'ios' ? 30 : 10, paddingHorizontal: 12 },
+  viewerReply: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14 },
+  viewerReplyText: { color: 'rgba(255,255,255,0.6)', fontSize: 13 },
+
+  // Report
+  reportBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  reportMenu: { backgroundColor: '#fff', width: '85%', borderRadius: 16, padding: 20 },
+  reportTitle: { fontSize: 16, fontWeight: '900', color: colors.ink, textAlign: 'center', marginBottom: 12 },
+  reportOption: { paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: colors.line, alignItems: 'center' },
+  reportOptionText: { fontSize: 14, color: colors.navy, fontWeight: '700' },
+  reportCancel: { borderBottomWidth: 0, marginTop: 8 },
+  reportCancelText: { color: colors.red, fontWeight: '900' },
 });
