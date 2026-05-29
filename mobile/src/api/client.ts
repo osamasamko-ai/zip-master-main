@@ -45,12 +45,19 @@ class ApiClient {
     return this.token;
   }
 
+  getMediaUrl(value?: string | null) {
+    if (!value) return '';
+    if (/^(https?:|file:|data:|blob:)/i.test(value)) return value;
+    return `${this.baseUrl}${value.startsWith('/') ? value : `/${value}`}`;
+  }
+
   private async request<T>(path: string, options: RequestInit = {}): Promise<ApiEnvelope<T>> {
     const method = (options.method || 'GET').toUpperCase();
     const cacheKey = `${this.token || 'guest'}:${method}:${path}`;
     const cached = this.cache.get(cacheKey);
     const now = Date.now();
     const canCache = method === 'GET';
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
 
     if (canCache && cached && now - cached.timestamp < defaultCacheTtlMs) {
       return cached.payload as ApiEnvelope<T>;
@@ -64,7 +71,7 @@ class ApiClient {
     const requestPromise = fetch(`${this.baseUrl}${path}`, {
       ...options,
       headers: {
-        'Content-Type': 'application/json',
+        ...(!isFormData ? { 'Content-Type': 'application/json' } : {}),
         ...(this.token ? { Authorization: `Bearer ${this.token}` } : {}),
         ...(options.headers || {}),
       },
@@ -188,17 +195,26 @@ class ApiClient {
     return this.request<any>(`/api/app/feed/stories/${storyId}/view`, { method: 'POST' });
   }
 
-  createFeedStory(text: string) {
+  createFeedStory(data: { text: string; media?: any | null }) {
+    const formData = new FormData();
+    formData.append('text', data.text);
+    if (data.media) formData.append('media', data.media as any);
+
     return this.request<any>('/api/app/feed/stories', {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: formData as any,
     });
   }
 
-  createFeedPost(content: string, category = 'عام') {
+  createFeedPost(data: { content: string; category?: string; media?: any | null }) {
+    const formData = new FormData();
+    formData.append('content', data.content);
+    if (data.category) formData.append('category', data.category);
+    if (data.media) formData.append('media', data.media as any);
+
     return this.request<any>('/api/app/feed', {
       method: 'POST',
-      body: JSON.stringify({ content, category }),
+      body: formData as any,
     });
   }
 

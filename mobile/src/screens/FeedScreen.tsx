@@ -12,11 +12,14 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const POST_MEDIA_ASPECT = 4 / 5;
+const STORY_MEDIA_ASPECT = 9 / 16;
 
 type FeedFilter = 'all' | 'videos' | 'articles' | 'admins' | 'popular';
 type SortMode = 'smart' | 'latest';
 type StoryMode = 'new' | 'seen' | 'archive';
+type PickedMedia = ImagePicker.ImagePickerAsset;
 
 const filters: Array<{ id: FeedFilter; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { id: 'all', label: 'الكل', icon: 'layers-outline' },
@@ -55,6 +58,36 @@ const POST_LIKED_BOOST = 0.25;
 // Story Scoring
 const STORY_AUTHOR_AFFINITY_WEIGHT = 1.2;
 const STORY_RECENCY_DECAY_HOURS = 24; // Story loses all recency score after 24 hours
+
+function getPickedMediaKind(media?: PickedMedia | null) {
+  const type = String(media?.type || '').toLowerCase();
+  const mimeType = String(media?.mimeType || '').toLowerCase();
+  return type === 'video' || mimeType.startsWith('video/') ? 'video' : 'image';
+}
+
+function getMediaMimeType(media: PickedMedia) {
+  if (media.mimeType) return media.mimeType;
+  return getPickedMediaKind(media) === 'video' ? 'video/mp4' : 'image/jpeg';
+}
+
+function getMediaFileName(media: PickedMedia, fallback: string) {
+  if (media.fileName) return media.fileName;
+  const extension = getMediaMimeType(media).split('/')[1]?.split(';')[0] || (getPickedMediaKind(media) === 'video' ? 'mp4' : 'jpg');
+  return `${fallback}.${extension === 'jpeg' ? 'jpg' : extension}`;
+}
+
+function assetToUpload(media: PickedMedia, fallbackName: string) {
+  return {
+    uri: media.uri,
+    name: getMediaFileName(media, fallbackName),
+    type: getMediaMimeType(media),
+  };
+}
+
+function mediaUrl(value?: string | null) {
+  return apiClient.getMediaUrl(value);
+}
+
 export function FeedScreen() {
   const { user } = useAuth();
   const [posts, setPosts] = useState<any[]>([]);
@@ -73,9 +106,11 @@ export function FeedScreen() {
   const [storyPosting, setStoryPosting] = useState(false);
   const [content, setContent] = useState('');
   const [category, setCategory] = useState('عام');
+  const [postMedia, setPostMedia] = useState<PickedMedia | null>(null);
   const [storyText, setStoryText] = useState('');
-  const [storyMedia, setStoryMedia] = useState<any | null>(null);
+  const [storyMedia, setStoryMedia] = useState<PickedMedia | null>(null);
   const [activeStoryIndex, setActiveStoryIndex] = useState(0);
+  const [storyViewerStories, setStoryViewerStories] = useState<any[]>([]);
   const [commentPostId, setCommentPostId] = useState('');
   const [comment, setComment] = useState('');
   const [editingPost, setEditingPost] = useState<any | null>(null);
@@ -209,6 +244,19 @@ export function FeedScreen() {
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                 {categories.map((item) => <Chip key={item} label={item} active={category === item} onPress={() => setCategory(item)} />)}
               </ScrollView>
+              {postMedia ? (
+                <MediaPreview media={postMedia} variant="post" onRemove={() => setPostMedia(null)} />
+              ) : null}
+              <View style={styles.composerToolRow}>
+                <Pressable onPress={() => pickPostMedia('image')} style={styles.composerTool}>
+                  <Ionicons name="image-outline" size={18} color={colors.green} />
+                  <Text style={styles.composerToolText}>صورة</Text>
+                </Pressable>
+                <Pressable onPress={() => pickPostMedia('video')} style={styles.composerTool}>
+                  <Ionicons name="videocam-outline" size={18} color={colors.red} />
+                  <Text style={styles.composerToolText}>فيديو</Text>
+                </Pressable>
+              </View>
               <Button title="نشر" onPress={publishPost} loading={posting} />
             </>
           ) : null}
@@ -225,6 +273,7 @@ export function FeedScreen() {
 
       <View style={styles.storyPanel}>
         <Text style={styles.sectionTitle}>القصص اليومية</Text>
+        <Text style={styles.storyPanelNote}>تابع تحديثات المجتمع كما تظهر في فيسبوك.</Text>
         <View style={styles.storyTabs}>
           {storyModes.map((mode) => (
             <Pressable key={mode.id} onPress={() => setStoryMode(mode.id)} style={[styles.storyTab, storyMode === mode.id && styles.storyTabActive]}>
@@ -236,11 +285,7 @@ export function FeedScreen() {
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.storyRow}>
           {canCreate && storyMode === 'new' && (
-            <InteractiveCard onPress={() => setStoryComposerOpen(true)} style={styles.addStoryBubble}>
-              <View style={styles.addStoryCircle}><Ionicons name="add" size={22} color="#fff" /></View>
-              <Avatar source={user?.img} name={user?.name || 'م'} small />
-              <Text style={styles.storyName} numberOfLines={1}>إضافة قصة</Text>
-            </InteractiveCard>
+            <CreateStoryCard user={user} onPress={() => setStoryComposerOpen(true)} />
           )}
           {loadingStories && stories.length === 0 ? (
             [1, 2, 3, 4].map((i) => <ShimmerStory key={i} />)
@@ -338,16 +383,21 @@ export function FeedScreen() {
   };
 
   const publishPost = useCallback(async () => {
-    if (!content.trim()) return;
+    if (!content.trim() && !postMedia) return;
 
     setPosting(true);
     setStatus('');
 
     try {
-      const response = await (apiClient.createFeedPost as any)(content.trim(), category);
+      const response = await apiClient.createFeedPost({
+        content: content.trim(),
+        category,
+        media: postMedia ? assetToUpload(postMedia, 'post-media') : null,
+      });
 
       setPosts((current) => [response.data, ...current]);
       setContent('');
+      setPostMedia(null);
       setComposerOpen(false);
       setStatus('تم نشر المنشور.');
     } catch (error) {
@@ -355,7 +405,7 @@ export function FeedScreen() {
     } finally {
       setPosting(false);
     }
-  }, [category, content]);
+  }, [category, content, postMedia]);
 
   const publishStory = async () => {
     if (!storyText.trim() && !storyMedia) return;
@@ -363,7 +413,10 @@ export function FeedScreen() {
     setStatus('');
 
     try {
-      const response = await (apiClient.createFeedStory as any)(storyText.trim());
+      const response = await apiClient.createFeedStory({
+        text: storyText.trim(),
+        media: storyMedia ? assetToUpload(storyMedia, 'story-media') : null,
+      });
 
       setStories((current) => [response.data, ...current]);
       setStoryText('');
@@ -377,29 +430,53 @@ export function FeedScreen() {
     }
   };
 
-  const pickStoryMedia = async () => {
+  const pickMedia = async (kind: 'image' | 'video' | 'all') => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
-      setStatus('يلزم السماح بالوصول للصور لإرفاق وسائط بالقصة.');
-      return;
+      setStatus('يلزم السماح بالوصول للصور والفيديو لإرفاق وسائط.');
+      return null;
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
       allowsEditing: true,
       aspect: [9, 16],
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      mediaTypes:
+        kind === 'image'
+          ? ImagePicker.MediaTypeOptions.Images
+          : kind === 'video'
+            ? ImagePicker.MediaTypeOptions.Videos
+            : ImagePicker.MediaTypeOptions.All,
       quality: 0.82,
+      videoMaxDuration: 60,
     });
 
     if (!result.canceled && result.assets?.[0]) {
-      setStoryMedia(result.assets[0]);
+      return result.assets[0];
+    }
+    return null;
+  };
+
+  const pickPostMedia = async (kind: 'image' | 'video') => {
+    const media = await pickMedia(kind);
+    if (media) {
+      setPostMedia(media);
+      setComposerOpen(true);
     }
   };
 
+  const pickStoryMedia = async () => {
+    const media = await pickMedia('all');
+    if (media) setStoryMedia(media);
+  };
+
   const openStoryViewer = (index: number) => {
+    const storiesForViewer = smartStories.length > 0 ? smartStories : stories.filter((story) => !story.isArchived);
+    const story = storiesForViewer[index];
+    if (!story) return;
+
+    setStoryViewerStories(storiesForViewer);
     setActiveStoryIndex(index);
     setStoryViewerOpen(true);
-    const story = smartStories[index];
     if (story?.id && !story.seenByMe) {
       setStories((current) => current.map((item) => item.id === story.id ? { ...item, seenByMe: true } : item));
       void apiClient.markFeedStoryViewed(story.id).catch(() => undefined);
@@ -548,7 +625,7 @@ export function FeedScreen() {
         }
       />
       <EditModal post={editingPost} content={editContent} loading={busyId === `edit-${editingPost?.id}`} onChange={setEditContent} onClose={() => setEditingPost(null)} onSubmit={saveEdit} />
-      <StoryModal visible={storyViewerOpen} stories={smartStories} initialIndex={activeStoryIndex} onClose={() => setStoryViewerOpen(false)} />
+      <StoryModal visible={storyViewerOpen} stories={storyViewerStories} initialIndex={activeStoryIndex} onClose={() => setStoryViewerOpen(false)} />
       <StoryComposerModal visible={storyComposerOpen} onClose={() => setStoryComposerOpen(false)} text={storyText} onChange={setStoryText} onPublish={publishStory} onPickMedia={pickStoryMedia} onRemoveMedia={() => setStoryMedia(null)} media={storyMedia} loading={storyPosting} />
       <ConsultationModal post={consultationPost} note={consultationNote} paymentMethod={paymentMethod} loading={busyId === 'consult'} onChangeNote={setConsultationNote} onChangePayment={setPaymentMethod} onClose={() => setConsultationPost(null)} onSubmit={startConsultation} />
     </Screen>
@@ -594,6 +671,53 @@ function InteractiveCard({ children, onPress, style }: any) {
         {children}
       </Animated.View>
     </Pressable>
+  );
+}
+
+function MediaPreview({ media, variant, onRemove }: { media: PickedMedia; variant: 'post' | 'story'; onRemove: () => void }) {
+  const kind = getPickedMediaKind(media);
+  const isStory = variant === 'story';
+
+  return (
+    <View style={[styles.mediaPreview, isStory && styles.storyMediaPreview]}>
+      {kind === 'image' ? (
+        <Image source={{ uri: media.uri }} style={styles.mediaPreviewImage} resizeMode="cover" />
+      ) : (
+        <View style={styles.videoPreview}>
+          <Ionicons name="play-circle" size={44} color="#fff" />
+          <Text style={styles.videoPreviewText}>فيديو جاهز للنشر</Text>
+        </View>
+      )}
+      <View style={styles.mediaPreviewBadge}>
+        <Ionicons name={kind === 'video' ? 'videocam' : 'image'} size={13} color="#fff" />
+        <Text style={styles.mediaPreviewBadgeText}>{kind === 'video' ? 'فيديو' : 'صورة'}</Text>
+      </View>
+      <Pressable onPress={onRemove} style={styles.mediaRemoveButton}>
+        <Ionicons name="close" size={18} color="#fff" />
+      </Pressable>
+    </View>
+  );
+}
+
+function CreateStoryCard({ user, onPress }: { user: any; onPress: () => void }) {
+  return (
+    <InteractiveCard onPress={onPress} style={styles.createStoryCard}>
+      <View style={styles.createStoryMedia}>
+        {user?.img || user?.avatar ? (
+          <Image source={{ uri: mediaUrl(user.img || user.avatar) }} style={styles.createStoryImage} resizeMode="cover" />
+        ) : (
+          <View style={styles.createStoryFallback}>
+            <Text style={styles.createStoryInitial}>{String(user?.name || 'م').charAt(0)}</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.createStoryFooter}>
+        <View style={styles.createStoryPlus}>
+          <Ionicons name="add" size={22} color="#fff" />
+        </View>
+        <Text style={styles.createStoryText} numberOfLines={2}>إنشاء قصة</Text>
+      </View>
+    </InteractiveCard>
   );
 }
 
@@ -674,16 +798,16 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
         <Pressable onPress={handleImagePress} style={[styles.mediaBox, post.mediaType === 'image' && styles.imageMediaBox]}>
           {post.mediaType === 'image' ? (
             <>
-              <Image source={{ uri: post.mediaUrl }} style={styles.postImage} resizeMode="cover" />
+              <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={styles.postImage} resizeMode="cover" />
               <Animated.View style={[styles.heartOverlay, { transform: [{ scale: heartAnim }], opacity: heartAnim }]}>
                 <Ionicons name="heart" size={80} color="#fff" />
               </Animated.View>
             </>
           ) : (
-            <>
-              <Ionicons name="play-circle-outline" size={34} color={colors.blue} />
-              <Text style={styles.mutedText}>فيديو مرفق · افتحه من نسخة الويب للمشاهدة الكاملة</Text>
-            </>
+            <View style={styles.feedVideoBox}>
+              <Ionicons name="play-circle" size={48} color="#fff" />
+              <Text style={styles.feedVideoText}>فيديو مرفق</Text>
+            </View>
           )}
         </Pressable>
       ) : null}
@@ -720,16 +844,33 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
 }
 
 function StoryBubble({ story, onPress }: { story: any; onPress: () => void }) {
+  const hasMedia = Boolean(story.mediaUrl);
+  const isVideo = story.mediaType === 'video';
+
   return (
     <InteractiveCard onPress={onPress} style={styles.storyBubble}>
-      {story.mediaUrl && story.mediaType === 'image' ? <Image source={{ uri: story.mediaUrl }} style={styles.storyCoverImage} /> : null}
+      {hasMedia && story.mediaType === 'image' ? <Image source={{ uri: mediaUrl(story.mediaUrl) }} style={styles.storyCardMedia} resizeMode="cover" /> : null}
+      {isVideo ? (
+        <View style={styles.storyCardVideo}>
+          <Ionicons name="play-circle" size={42} color="#fff" />
+        </View>
+      ) : null}
+      {!hasMedia ? (
+        <View style={styles.storyCardTextOnly}>
+          <Ionicons name="newspaper-outline" size={28} color="#fff" />
+          <Text style={styles.storyCardTextOnlyText} numberOfLines={4}>{story.text || 'قصة جديدة'}</Text>
+        </View>
+      ) : null}
+      {hasMedia ? <View style={styles.storyCardShade} /> : null}
       <View style={[styles.storyAvatarWrap, !story.seenByMe && !story.isArchived && styles.avatarUnseen]}>
         <Avatar source={story.author?.avatar || story.author?.img} name={story.author?.name || 'م'} small />
       </View>
       {!story.seenByMe && !story.isArchived ? <Text style={styles.newStoryBadge}>جديد</Text> : null}
       {story.isArchived ? <Text style={styles.archiveStoryBadge}>أرشيف</Text> : null}
-      <Text style={styles.storyName} numberOfLines={1}>{story.author?.name || 'قصة'}</Text>
-      <Text style={styles.storyText} numberOfLines={2}>{story.text}</Text>
+      <View style={styles.storyCardFooter}>
+        <Text style={styles.storyName} numberOfLines={2}>{story.author?.name || 'قصة'}</Text>
+        {isVideo ? <Text style={styles.storyText} numberOfLines={1}>فيديو</Text> : null}
+      </View>
     </InteractiveCard>
   );
 }
@@ -763,7 +904,7 @@ function IconButton({ icon, onPress, danger }: { icon: keyof typeof Ionicons.gly
 
 function Avatar({ source, name, small }: { source?: string | null; name: string; small?: boolean }) {
   const sizeStyle = small ? styles.avatarSmall : styles.avatar;
-  if (source) return <Image source={{ uri: source }} style={sizeStyle} />;
+  if (source) return <Image source={{ uri: mediaUrl(source) }} style={sizeStyle} />;
   return <View style={sizeStyle}><Text style={styles.avatarText}>{String(name || 'م').charAt(0)}</Text></View>;
 }
 
@@ -789,8 +930,17 @@ function StoryComposerModal({ visible, onClose, text, onChange, onPublish, onPic
           </View>
 
           <View style={styles.storyDraftPreview}>
-            {media ? <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" /> : null}
-            <Text style={styles.storyDraftText}>{text || 'شارك خبراً أو نصيحة قانونية سريعة...'}</Text>
+            {media ? (
+              getPickedMediaKind(media) === 'image' ? (
+                <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+              ) : (
+                <View style={styles.storyVideoDraft}>
+                  <Ionicons name="play-circle" size={56} color="#fff" />
+                  <Text style={styles.videoPreviewText}>فيديو قصة جاهز</Text>
+                </View>
+              )
+            ) : null}
+            <Text style={styles.storyDraftText}>{text || (media ? 'أضف تعليقاً قصيراً للقصة...' : 'شارك خبراً أو نصيحة قانونية سريعة...')}</Text>
           </View>
 
           <TextInput
@@ -808,6 +958,7 @@ function StoryComposerModal({ visible, onClose, text, onChange, onPublish, onPic
             <Text style={styles.mediaPickerText}>{media ? 'تغيير الوسائط' : 'إرفاق صورة أو فيديو'}</Text>
             {media && <Pressable onPress={onRemoveMedia} style={styles.mediaClear}><Ionicons name="close-circle" size={18} color={colors.red} /></Pressable>}
           </Pressable>
+          {media ? <MediaPreview media={media} variant="story" onRemove={onRemoveMedia} /> : null}
 
           <View style={styles.modalActions}>
             <Button
@@ -862,8 +1013,8 @@ function StoryModal({ visible, stories, initialIndex, onClose }: { visible: bool
   };
 
   useEffect(() => {
-    if (visible) setCurrentIndex(initialIndex);
-  }, [visible, initialIndex]);
+    if (visible) setCurrentIndex(Math.min(initialIndex, Math.max(stories.length - 1, 0)));
+  }, [visible, initialIndex, stories.length]);
 
   useEffect(() => {
     if (!visible || !stories[currentIndex]) return;
@@ -886,18 +1037,38 @@ function StoryModal({ visible, stories, initialIndex, onClose }: { visible: bool
     return () => anim.stop();
   }, [currentIndex, visible, stories]);
 
-  const renderItem = ({ item, index }: { item: any, index: number }) => (
+  const renderItem = ({ item }: { item: any, index: number }) => (
     <View style={styles.storyViewerContainer}>
-      {item.mediaUrl ? <Image source={{ uri: item.mediaUrl }} style={StyleSheet.absoluteFill} /> : null}
+      {item.mediaUrl && item.mediaType === 'image' ? <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={styles.storyViewerMedia} resizeMode="cover" /> : null}
+      {item.mediaUrl && item.mediaType === 'video' ? (
+        <View style={styles.storyVideoViewer}>
+          <Ionicons name="play-circle" size={72} color="#fff" />
+          <Text style={styles.storyDraftText}>فيديو قصة</Text>
+        </View>
+      ) : null}
       <View style={styles.storyOverlay} />
       <View style={styles.storyProgressRail}>
-        <View style={styles.storyProgressBar}>
-          <Animated.View style={[styles.storyProgressFill, { width: currentIndex === index ? progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] }) : index < currentIndex ? '100%' : '0%' }]} />
-        </View>
+        {stories.map((story, progressIndex) => (
+          <View key={story.id || progressIndex} style={styles.storyProgressBar}>
+            <Animated.View
+              style={[
+                styles.storyProgressFill,
+                {
+                  width:
+                    currentIndex === progressIndex
+                      ? progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] })
+                      : progressIndex < currentIndex
+                        ? '100%'
+                        : '0%',
+                },
+              ]}
+            />
+          </View>
+        ))}
       </View>
       <View style={styles.storyViewerHeader}>
         <View style={styles.authorInfo}>
-          <Avatar source={item.author?.avatar} name={item.author?.name} small />
+          <Avatar source={item.author?.avatar || item.author?.img} name={item.author?.name} small />
           <View style={styles.flex}>
             <Text style={styles.viewerAuthorName}>{item.author?.name}</Text>
             <Text style={styles.viewerMeta}>{formatDate(item.createdAt)}</Text>
@@ -924,8 +1095,10 @@ function StoryModal({ visible, stories, initialIndex, onClose }: { visible: bool
     </View>
   );
 
+  if (!stories.length) return null;
+
   return (
-    <Modal transparent animationType="fade" visible={visible} onRequestClose={onClose}>
+    <Modal animationType="fade" visible={visible} onRequestClose={onClose}>
       <Modal transparent visible={reportModalVisible} animationType="fade" onRequestClose={() => setReportModalVisible(false)}>
         <Pressable style={styles.reportBackdrop} onPress={() => setReportModalVisible(false)}>
           <View style={styles.reportMenu}>
@@ -945,11 +1118,16 @@ function StoryModal({ visible, stories, initialIndex, onClose }: { visible: bool
         ref={listRef}
         data={stories}
         renderItem={renderItem}
+        style={styles.storyViewerList}
+        contentContainerStyle={styles.storyViewerTrack}
         horizontal
         pagingEnabled
         keyExtractor={item => item.id}
-        initialScrollIndex={initialIndex}
+        initialScrollIndex={Math.min(initialIndex, stories.length - 1)}
         getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
+        onScrollToIndexFailed={(info) => {
+          setTimeout(() => listRef.current?.scrollToIndex({ index: Math.min(info.index, stories.length - 1), animated: false }), 80);
+        }}
         onMomentumScrollEnd={handleScroll}
         showsHorizontalScrollIndicator={false}
       />
@@ -1037,10 +1215,13 @@ const styles = StyleSheet.create({
   composerModalContent: { backgroundColor: colors.paper, borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, minHeight: '60%' },
   modalHeader: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between', marginBottom: 20 },
   closeButton: { padding: 4 },
-  storyDraftPreview: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 24, justifyContent: 'center', minHeight: 200, padding: 24, marginBottom: 20 },
+  storyDraftPreview: { alignItems: 'center', aspectRatio: STORY_MEDIA_ASPECT, backgroundColor: colors.navy, borderRadius: 18, justifyContent: 'center', marginBottom: 20, overflow: 'hidden', padding: 24, width: '100%' },
   storyDraftText: { color: '#fff', fontSize: 18, fontWeight: '800', lineHeight: 28, textAlign: 'center' },
   storyModalInput: { backgroundColor: colors.surface, borderRadius: 16, color: colors.ink, fontSize: 15, fontWeight: '700', minHeight: 80, padding: 16, textAlign: 'right', textAlignVertical: 'top' },
-  storyViewerContainer: { backgroundColor: colors.navy, flex: 1, paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 60 : 40 },
+  storyViewerContainer: { backgroundColor: colors.navy, flex: 1, height, minHeight: height, paddingHorizontal: 16, paddingTop: Platform.OS === 'ios' ? 60 : 40, width },
+  storyViewerList: { backgroundColor: colors.navy, flex: 1, height },
+  storyViewerMedia: { ...StyleSheet.absoluteFillObject, height, width },
+  storyViewerTrack: { minHeight: height },
   storyProgressRail: { flexDirection: 'row-reverse', gap: 4, marginBottom: 16 },
   storyProgressBar: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, flex: 1, height: 3, overflow: 'hidden' },
   storyProgressFill: { backgroundColor: '#fff', height: '100%' },
@@ -1070,11 +1251,22 @@ const styles = StyleSheet.create({
   composerMetaRow: { alignItems: 'center', flexDirection: 'row-reverse', gap: 10, marginBottom: 8, marginTop: 8 },
   composerPrompt: { backgroundColor: colors.tint, borderRadius: 999, flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 14 },
   composerPromptText: { color: colors.muted, fontSize: 13, fontWeight: '800', textAlign: 'right' },
+  composerTool: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 8, borderWidth: 1, flex: 1, flexDirection: 'row-reverse', gap: 7, justifyContent: 'center', minHeight: 40 },
+  composerToolRow: { flexDirection: 'row-reverse', gap: 8, marginBottom: 10 },
+  composerToolText: { color: colors.ink, fontSize: 12, fontWeight: '900' },
   composerTop: { alignItems: 'center', flexDirection: 'row-reverse', gap: 10 },
   consultButton: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 6, justifyContent: 'center', minHeight: 38 },
   consultText: { color: '#fff', fontSize: 12, fontWeight: '900' },
   countRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', marginTop: 12 },
   countText: { color: colors.muted, fontSize: 11, fontWeight: '800' },
+  createStoryCard: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 10, borderWidth: 1, height: 199, overflow: 'hidden', width: 112 },
+  createStoryFallback: { alignItems: 'center', backgroundColor: colors.blueTint, flex: 1, justifyContent: 'center' },
+  createStoryFooter: { alignItems: 'center', backgroundColor: colors.paper, height: 58, justifyContent: 'flex-end', paddingBottom: 9, paddingHorizontal: 8 },
+  createStoryImage: { height: '100%', width: '100%' },
+  createStoryInitial: { color: colors.blue, fontSize: 28, fontWeight: '900' },
+  createStoryMedia: { backgroundColor: colors.tint, flex: 1 },
+  createStoryPlus: { alignItems: 'center', backgroundColor: colors.blue, borderColor: colors.paper, borderRadius: 999, borderWidth: 3, height: 34, justifyContent: 'center', position: 'absolute', top: -18, width: 34 },
+  createStoryText: { color: colors.ink, fontSize: 11, fontWeight: '900', lineHeight: 15, textAlign: 'center' },
   dangerButton: { backgroundColor: colors.redTint },
   disabled: { opacity: 0.45 },
   endText: { color: colors.muted, fontSize: 12, fontWeight: '900', marginVertical: 14, textAlign: 'center' },
@@ -1110,10 +1302,15 @@ const styles = StyleSheet.create({
   loadMore: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, justifyContent: 'center', marginVertical: 12, minHeight: 44 },
   loadMoreText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
   manageRow: { flexDirection: 'row', gap: 5 },
-  mediaBox: { alignItems: 'center', backgroundColor: colors.tint, borderRadius: 8, gap: 4, marginTop: 12, overflow: 'hidden', padding: 18 },
+  mediaBox: { alignItems: 'center', backgroundColor: '#101828', borderRadius: 8, marginHorizontal: -14, marginTop: 12, overflow: 'hidden' },
   mediaClear: { marginLeft: 'auto' },
   mediaPickerButton: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 16, backgroundColor: colors.tint, borderRadius: 16, marginBottom: 16 },
   mediaPickerText: { color: colors.navy, fontSize: 13, fontWeight: '900' },
+  mediaPreview: { aspectRatio: POST_MEDIA_ASPECT, backgroundColor: '#101828', borderRadius: 8, marginBottom: 10, overflow: 'hidden', width: '100%' },
+  mediaPreviewBadge: { alignItems: 'center', backgroundColor: 'rgba(15,23,42,0.72)', borderRadius: 999, bottom: 10, flexDirection: 'row-reverse', gap: 5, paddingHorizontal: 10, paddingVertical: 6, position: 'absolute', right: 10 },
+  mediaPreviewBadgeText: { color: '#fff', fontSize: 11, fontWeight: '900' },
+  mediaPreviewImage: { height: '100%', width: '100%' },
+  mediaRemoveButton: { alignItems: 'center', backgroundColor: 'rgba(15,23,42,0.72)', borderRadius: 999, height: 32, justifyContent: 'center', left: 10, position: 'absolute', top: 10, width: 32 },
   reportBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   reportMenu: { backgroundColor: '#fff', borderRadius: 24, width: '90%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
   reportTitle: { fontSize: 18, fontWeight: '900', color: colors.ink, marginBottom: 15, textAlign: 'center' },
@@ -1136,6 +1333,8 @@ const styles = StyleSheet.create({
   paymentItem: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 10 },
   paymentItemActive: { backgroundColor: colors.blueTint },
   pinnedPost: { borderColor: colors.blue, borderWidth: 1.5 },
+  feedVideoBox: { alignItems: 'center', aspectRatio: POST_MEDIA_ASPECT, backgroundColor: '#101828', justifyContent: 'center', width: '100%' },
+  feedVideoText: { color: '#fff', fontSize: 13, fontWeight: '900', marginTop: 8 },
   postAction: { alignItems: 'center', borderRadius: 8, flex: 1, gap: 3, justifyContent: 'center', minHeight: 42 },
   postActionActive: { backgroundColor: colors.blueTint },
   postActionText: { color: colors.muted, fontSize: 10, fontWeight: '900' },
@@ -1154,7 +1353,7 @@ const styles = StyleSheet.create({
     elevation: 3
   },
   postHeader: { flexDirection: 'row', gap: 8, justifyContent: 'space-between' },
-  postImage: { aspectRatio: 1, width: '100%' },
+  postImage: { aspectRatio: POST_MEDIA_ASPECT, width: '100%' },
   postRibbon: { alignItems: 'center', backgroundColor: colors.surface, flexDirection: 'row-reverse', gap: 6, marginHorizontal: -14, marginTop: -14, marginBottom: 14, padding: 9 },
   pinnedRibbon: { backgroundColor: colors.goldTint, borderBottomColor: colors.gold, borderBottomWidth: 1 },
   postRibbonText: { color: colors.ink, fontSize: 11, fontWeight: '900' },
@@ -1170,18 +1369,29 @@ const styles = StyleSheet.create({
   sortToggle: { backgroundColor: colors.tint, borderRadius: 999, flexDirection: 'row-reverse', padding: 3 },
   status: { color: colors.navy, fontSize: 12, fontWeight: '900', marginBottom: 8, textAlign: 'center' },
   storyAvatar: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 36, justifyContent: 'center', width: 36 },
-  storyBubble: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 8, height: 138, padding: 10, width: 104, overflow: 'hidden' },
-  avatarUnseen: { borderColor: colors.gold, borderWidth: 2, borderRadius: 999, padding: 2 },
-  storyAvatarWrap: { marginBottom: 4 },
+  storyAvatarWrap: { borderColor: 'rgba(255,255,255,0.92)', borderRadius: 999, borderWidth: 2, position: 'absolute', right: 8, top: 8, zIndex: 3 },
+  storyBubble: { backgroundColor: '#101828', borderColor: colors.line, borderWidth: 1, borderRadius: 10, height: 199, overflow: 'hidden', width: 112 },
+  avatarUnseen: { borderColor: colors.blue, borderWidth: 3 },
+  storyCardFooter: { bottom: 9, left: 8, position: 'absolute', right: 8, zIndex: 3 },
+  storyCardMedia: { height: '100%', width: '100%' },
+  storyCardShade: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(15,23,42,0.22)', zIndex: 1 },
+  storyCardTextOnly: { alignItems: 'center', backgroundColor: colors.navy, flex: 1, gap: 8, justifyContent: 'center', padding: 12 },
+  storyCardTextOnlyText: { color: '#fff', fontSize: 12, fontWeight: '900', lineHeight: 18, textAlign: 'center' },
+  storyCardVideo: { alignItems: 'center', backgroundColor: '#101828', flex: 1, justifyContent: 'center' },
   storyComposer: { alignItems: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
   storyCoverImage: { borderRadius: 12, height: 70, marginBottom: 8, width: '100%' },
   storyInput: { backgroundColor: colors.tint, borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 12, textAlign: 'right' },
-  storyName: { color: colors.ink, fontSize: 11, fontWeight: '900', marginTop: 7, textAlign: 'right' },
-  storyPanel: { backgroundColor: colors.surface, borderColor: colors.line, borderWidth: 1, borderRadius: 8, marginBottom: 12, padding: 12 },
+  storyMediaPreview: { aspectRatio: STORY_MEDIA_ASPECT },
+  storyName: { color: '#fff', fontSize: 12, fontWeight: '900', lineHeight: 16, textAlign: 'right', textShadowColor: 'rgba(0,0,0,0.34)', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 3 },
+  storyPanel: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 8, marginBottom: 12, padding: 12 },
+  storyPanelNote: { color: colors.muted, fontSize: 11, fontWeight: '800', marginTop: 4, textAlign: 'right' },
   storyPublish: { alignItems: 'center', backgroundColor: colors.blue, borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
-  storyRow: { flexDirection: 'row-reverse', gap: 10, paddingTop: 10 },
-  storyText: { color: colors.muted, fontSize: 10, fontWeight: '800', lineHeight: 15, marginTop: 5, textAlign: 'right' },
-  storySkeleton: { backgroundColor: colors.tint, borderRadius: 16, height: 138, width: 104 },
+  storyRow: { flexDirection: 'row-reverse', gap: 10, paddingBottom: 2, paddingTop: 12 },
+  storyText: { color: 'rgba(255,255,255,0.86)', fontSize: 10, fontWeight: '900', lineHeight: 15, marginTop: 3, textAlign: 'right' },
+  storyVideoCover: { alignItems: 'center', backgroundColor: '#101828', borderRadius: 12, height: 70, justifyContent: 'center', marginBottom: 8, width: '100%' },
+  storyVideoDraft: { ...StyleSheet.absoluteFillObject, alignItems: 'center', backgroundColor: '#101828', justifyContent: 'center' },
+  storyVideoViewer: { ...StyleSheet.absoluteFillObject, alignItems: 'center', backgroundColor: '#101828', justifyContent: 'center' },
+  storySkeleton: { backgroundColor: colors.tint, borderRadius: 10, height: 199, width: 112 },
   storyTab: { alignItems: 'center', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 5, justifyContent: 'center', minHeight: 32 },
   storyTabActive: { backgroundColor: colors.paper },
   storyTabCount: { backgroundColor: colors.paper, borderRadius: 999, color: colors.subtle, fontSize: 9, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 6, paddingVertical: 2 },
@@ -1195,5 +1405,7 @@ const styles = StyleSheet.create({
   title: { color: colors.ink, fontSize: 24, fontWeight: '900', textAlign: 'right' },
   topicPill: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   topicText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
+  videoPreview: { alignItems: 'center', backgroundColor: '#101828', flex: 1, justifyContent: 'center' },
+  videoPreviewText: { color: '#fff', fontSize: 13, fontWeight: '900', marginTop: 8 },
   viewerNotice: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 12, padding: 12 },
 });
