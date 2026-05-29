@@ -99,8 +99,11 @@ function getMediaMimeType(media: PickedMedia) {
   if (extension === 'm4v') return 'video/x-m4v';
   if (extension === 'webm') return 'video/webm';
   if (extension === '3gp' || extension === '3gpp') return 'video/3gpp';
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
   if (extension === 'png') return 'image/png';
   if (extension === 'webp') return 'image/webp';
+  if (extension === 'heic') return 'image/heic';
+  if (extension === 'heif') return 'image/heif';
 
   return getPickedMediaKind(media) === 'video' ? 'video/mp4' : 'image/jpeg';
 }
@@ -478,7 +481,7 @@ export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
     }
 
     const pickerOptions: ImagePicker.ImagePickerOptions = {
-      allowsEditing: kind === 'image',
+      allowsEditing: false,
       mediaTypes:
         kind === 'image'
           ? ImagePicker.MediaTypeOptions.Images
@@ -488,8 +491,6 @@ export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
       quality: 0.82,
       videoMaxDuration: 60,
     };
-
-    if (kind === 'image') pickerOptions.aspect = [9, 16];
 
     const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
 
@@ -738,7 +739,7 @@ function MediaPreview({ media, variant, onRemove }: { media: PickedMedia; varian
   return (
     <View style={[styles.mediaPreview, isStory && styles.storyMediaPreview]}>
       {kind === 'image' ? (
-        <Image source={{ uri: media.uri }} style={styles.mediaPreviewImage} resizeMode="cover" />
+        <Image source={{ uri: media.uri }} style={styles.mediaPreviewImage} resizeMode="contain" />
       ) : (
         <View style={styles.videoPreview}>
           <FeedVideo uri={media.uri} style={styles.mediaPreviewImage} contentFit="cover" nativeControls={false} muted autoPlay loop />
@@ -903,7 +904,7 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
         post.mediaType === 'image' ? (
           <Pressable onPress={handleImagePress} style={[styles.mediaBox, styles.imageMediaBox]}>
             <>
-              <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={styles.postImage} resizeMode="cover" />
+              <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={styles.postImage} resizeMode="contain" />
               <Animated.View style={[styles.heartOverlay, { transform: [{ scale: heartAnim }], opacity: heartAnim }]}>
                 <Ionicons name="heart" size={80} color="#fff" />
               </Animated.View>
@@ -953,7 +954,7 @@ function StoryBubble({ story, onPress }: { story: any; onPress: () => void }) {
 
   return (
     <InteractiveCard onPress={onPress} style={styles.storyBubble}>
-      {hasMedia && story.mediaType === 'image' ? <Image source={{ uri: mediaUrl(story.mediaUrl) }} style={styles.storyCardMedia} resizeMode="cover" /> : null}
+      {hasMedia && story.mediaType === 'image' ? <Image source={{ uri: mediaUrl(story.mediaUrl) }} style={styles.storyCardMedia} resizeMode="contain" /> : null}
       {isVideo ? (
         <View style={styles.storyCardVideo}>
           <FeedVideo uri={mediaUrl(story.mediaUrl)} style={styles.storyCardMedia} contentFit="cover" nativeControls={false} muted autoPlay loop />
@@ -1039,7 +1040,7 @@ function StoryComposerModal({ visible, onClose, text, onChange, onPublish, onPic
           <View style={styles.storyDraftPreview}>
             {media ? (
               getPickedMediaKind(media) === 'image' ? (
-                <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
+                <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="contain" />
               ) : (
                 <View style={styles.storyVideoDraft}>
                   <FeedVideo uri={media.uri} style={styles.mediaPreviewImage} contentFit="cover" nativeControls={false} muted autoPlay loop />
@@ -1200,7 +1201,7 @@ function StoryModal({ visible, stories, initialIndex, onClose, onViewed, onReply
 
   const renderItem = ({ item }: { item: any, index: number }) => (
     <View style={styles.storyViewerContainer}>
-      {item.mediaUrl && item.mediaType === 'image' ? <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={styles.storyViewerMedia} resizeMode="cover" /> : null}
+      {item.mediaUrl && item.mediaType === 'image' ? <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={styles.storyViewerMedia} resizeMode="contain" /> : null}
       {item.mediaUrl && item.mediaType === 'video' ? (
         <View style={styles.storyVideoViewer}>
           <FeedVideo uri={mediaUrl(item.mediaUrl)} style={styles.storyViewerMedia} contentFit="contain" nativeControls autoPlay muted={isMuted} />
