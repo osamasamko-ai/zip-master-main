@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { ActivityIndicator, Animated, Image, Pressable, RefreshControl, ScrollView, Share, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { apiClient } from '../api/client';
-import { EmptyState, Screen, SkeletonCard } from '../components/ui';
+import { EmptyState, Screen, SkeletonCard, Toast } from '../components/ui';
 import { HeroSection } from '../components/ui/HeroSection';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
@@ -56,6 +57,10 @@ const TIME_SLOTS = ['09:00 ص', '10:30 ص', '12:00 م', '02:00 م', '04:30 م', 
 
 function avatarFor(name: string) {
   return `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=0d2a59&color=ffffff&rounded=true&font-size=0.4`;
+}
+
+function mediaUrl(value?: string | null) {
+  return apiClient.getMediaUrl(value);
 }
 
 function toHighlights(value: any) {
@@ -135,7 +140,7 @@ function InteractiveCard({ children, onPress, style, disabled }: any) {
 }
 
 export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }) {
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -149,8 +154,10 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
   const [relatedLawyers, setRelatedLawyers] = useState<any[]>([]);
   const [activeStoryId, setActiveStoryId] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(0);
+  const [selectedSlot, setSelectedSlot] = useState('');
   const [followBusy, setFollowBusy] = useState(false);
   const [isFollowing, setIsFollowing] = useState(false);
+  const [status, setStatus] = useState('');
 
   const isOwnProfile = Boolean(user?.id && profile?.id === user.id);
   const isProfessionalProfile = profile?.role === 'pro' || profile?.isProfessional;
@@ -234,13 +241,20 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
       const next = response.data || {};
       setIsFollowing(!isFollowing);
       setProfile((current: any) => current ? { ...current, followers: next.followerCount ?? Math.max(0, (current.followers || 0) + (isFollowing ? -1 : 1)) } : current);
+      setStatus(isFollowing ? 'تم إلغاء المتابعة.' : 'تمت متابعة الملف.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'تعذر تحديث المتابعة.');
     } finally {
       setFollowBusy(false);
     }
   };
 
   const handleShare = async () => {
-    await Share.share({ title: profile?.name, message: `تعرّف على الملف المهني لـ ${profile?.name} على منصة القسطاس.` });
+    try {
+      await Share.share({ title: profile?.name, message: `تعرّف على الملف المهني لـ ${profile?.name} على منصة القسطاس.` });
+    } catch {
+      setStatus('تعذر مشاركة الملف حالياً.');
+    }
   };
 
   if (loading && !profile) {
@@ -264,11 +278,12 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
     );
   }
 
-  const coverUri = profile?.coverImage || null;
-  const avatarUri = profile?.avatar || profile?.img || avatarFor(profile?.name || 'مستخدم');
+  const coverUri = mediaUrl(profile?.coverImage) || null;
+  const avatarUri = mediaUrl(profile?.avatar || profile?.img) || avatarFor(profile?.name || 'مستخدم');
 
   return (
     <Screen>
+      <Toast message={status} tone={status.includes('تعذر') ? 'error' : 'success'} />
       <ScrollView
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadProfile} tintColor={colors.navy} />}
@@ -297,7 +312,7 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
 
         <View style={styles.hero}>
           <View style={styles.cover}>
-            {coverUri ? <Image source={{ uri: coverUri }} style={styles.coverImage} /> : <View style={styles.coverFallback} />}
+            {coverUri ? <Image source={{ uri: coverUri }} style={styles.coverImage} resizeMode="cover" /> : <View style={styles.coverFallback} />}
             <View style={styles.coverOverlay} />
             <View style={styles.coverActions} pointerEvents="box-none">
               <IconButton icon="newspaper-outline" onPress={() => onOpen?.('feed')} />
@@ -307,7 +322,7 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
 
           <View style={styles.identity}>
             <View style={styles.avatarWrap}>
-              <Image source={{ uri: avatarUri }} style={styles.avatar} />
+              <Image source={{ uri: avatarUri }} style={styles.avatar} resizeMode="cover" />
               <View style={[styles.onlineDot, profile?.isOnline ? styles.onlineDotActive : styles.onlineDotMuted]} />
               {stories.length > 0 ? (
                 <Pressable onPress={() => markStorySeen(stories.find((story) => !story.seenByMe) || stories[0])} style={styles.storyPlay}>
@@ -348,7 +363,7 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
             ) : (
               <Action label="عرض النشاط" icon="newspaper-outline" primary onPress={() => onOpen?.('feed')} />
             )}
-            <Pressable onPress={() => setNotificationsEnabled((current) => !current)} style={[styles.notifyButton, notificationsEnabled && styles.notifyButtonActive]}>
+            <Pressable onPress={() => { setNotificationsEnabled((current) => !current); setStatus(notificationsEnabled ? 'تم إيقاف تنبيهات الملف.' : 'تم تفعيل تنبيهات الملف.'); }} style={[styles.notifyButton, notificationsEnabled && styles.notifyButtonActive]}>
               <Ionicons name={notificationsEnabled ? 'notifications' : 'notifications-off-outline'} size={18} color={notificationsEnabled ? colors.blue : colors.muted} />
             </Pressable>
           </View>
@@ -380,7 +395,11 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
               </Pressable>
               <Text style={styles.storyPreviewTitle}>قصة {profile?.name}</Text>
             </View>
-            {activeStory.mediaUrl && activeStory.mediaType !== 'video' ? <Image source={{ uri: activeStory.mediaUrl }} style={styles.storyImage} /> : null}
+            {activeStory.mediaUrl && activeStory.mediaType === 'video' ? (
+              <ProfileVideo uri={mediaUrl(activeStory.mediaUrl)} style={styles.storyImage} contentFit="contain" nativeControls autoPlay />
+            ) : activeStory.mediaUrl ? (
+              <Image source={{ uri: mediaUrl(activeStory.mediaUrl) }} style={styles.storyImage} resizeMode="contain" />
+            ) : null}
             <Text style={styles.storyText}>{activeStory.text || 'لا يوجد نص للقصة.'}</Text>
           </View>
         ) : null}
@@ -407,6 +426,9 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
             relatedLawyers={relatedLawyers}
             selectedDate={selectedDate}
             setSelectedDate={setSelectedDate}
+            selectedSlot={selectedSlot}
+            setSelectedSlot={setSelectedSlot}
+            setStatus={setStatus}
             onOpen={onOpen}
           />
         ) : activeTab === 'posts' ? (
@@ -416,17 +438,14 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
         ) : (
           <ActivityTab items={activityItems} />
         )}
-
-        <Pressable onPress={logout} style={styles.logoutButton}>
-          <Ionicons name="log-out-outline" size={18} color={colors.red} />
-          <Text style={styles.logoutText}>تسجيل الخروج</Text>
-        </Pressable>
       </ScrollView>
     </Screen>
   );
 }
 
-function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights, credentialBadges, relatedLawyers, selectedDate, setSelectedDate, onOpen }: any) {
+function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights, credentialBadges, relatedLawyers, selectedDate, setSelectedDate, selectedSlot, setSelectedSlot, setStatus, onOpen }: any) {
+  const nextRoute = isOwnProfile ? 'settings' : isProfessionalProfile ? 'messages' : 'feed';
+
   return (
     <View style={styles.tabContent}>
       <Notice
@@ -438,8 +457,8 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
               ? 'حدّث صورتك ونبذتك وبياناتك ليظهر ملفك بشكل أوضح داخل المنصة.'
               : 'هذا ملف عام يعرض هوية الحساب ونشاطه داخل المنصة.'
         }
-        action={isProfessionalProfile ? 'ابدأ الآن' : isOwnProfile ? 'تعديل الملف' : undefined}
-        onPress={() => onOpen?.(isProfessionalProfile ? 'messages' : 'settings')}
+        action={isOwnProfile ? 'تعديل الملف' : isProfessionalProfile ? 'ابدأ الآن' : 'عرض النشاط'}
+        onPress={() => onOpen?.(nextRoute)}
       />
 
       <Section title="نبذة وتعريف" style={styles.sectionNoPadding}>
@@ -485,7 +504,18 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
             ))}
           </ScrollView>
           <View style={styles.slotGrid}>
-            {TIME_SLOTS.map((slot) => <InteractiveCard key={slot} style={styles.slot}><Text style={styles.slotText}>{slot}</Text></InteractiveCard>)}
+            {TIME_SLOTS.map((slot) => (
+              <InteractiveCard
+                key={slot}
+                onPress={() => {
+                  setSelectedSlot(slot);
+                  setStatus(`تم اختيار موعد ${slot}. افتح الرسائل لتأكيد الحجز.`);
+                }}
+                style={[styles.slot, selectedSlot === slot && styles.slotActive]}
+              >
+                <Text style={[styles.slotText, selectedSlot === slot && styles.slotTextActive]}>{slot}</Text>
+              </InteractiveCard>
+            ))}
           </View>
         </Section>
       ) : null}
@@ -493,8 +523,8 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
       {isProfessionalProfile && relatedLawyers.length > 0 ? (
         <Section title="محامون مشابهون">
           {relatedLawyers.map((item: any) => (
-            <InteractiveCard key={item.id} style={styles.relatedRow}>
-              <Image source={{ uri: item.avatar || avatarFor(item.name) }} style={styles.relatedAvatar} />
+            <InteractiveCard key={item.id} onPress={() => onOpen?.('lawyers')} style={styles.relatedRow}>
+              <Image source={{ uri: mediaUrl(item.avatar || item.img) || avatarFor(item.name) }} style={styles.relatedAvatar} />
               <View style={styles.relatedText}>
                 <Text style={styles.relatedName}>{item.name}</Text>
                 <Text style={styles.relatedMeta}>{item.specialty} · {item.rating || 0}</Text>
@@ -530,7 +560,7 @@ function PostsTab({ posts, profile, onOpen }: any) {
         posts.map((post: any) => ( // Wrap PostCard with InteractiveCard
           <View key={post.id} style={styles.postCard}>
             <View style={styles.postHeader}>
-              <Image source={{ uri: profile?.avatar || avatarFor(profile?.name || 'مستخدم') }} style={styles.postAvatar} />
+              <Image source={{ uri: mediaUrl(profile?.avatar || profile?.img) || avatarFor(profile?.name || 'مستخدم') }} style={styles.postAvatar} />
               <View style={styles.postHeaderText}>
                 <View style={styles.badgeRow}>
                   {post.pinned ? <Badge label="مثبت" tone="gold" /> : null}
@@ -541,7 +571,11 @@ function PostsTab({ posts, profile, onOpen }: any) {
               </View>
             </View>
             {post.content ? <Text style={styles.postContent}>{post.content}</Text> : null}
-            {post.mediaUrl && post.mediaType !== 'video' ? <Image source={{ uri: post.mediaUrl }} style={styles.postImage} /> : null}
+            {post.mediaUrl && post.mediaType === 'video' ? (
+              <ProfileVideo uri={mediaUrl(post.mediaUrl)} style={styles.postImage} contentFit="contain" nativeControls />
+            ) : post.mediaUrl ? (
+              <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={styles.postImage} resizeMode="contain" />
+            ) : null}
             <Text style={styles.postStats}>{(post.likesCount || 0).toLocaleString('ar-IQ')} إعجاب · {(post.commentsCount || 0).toLocaleString('ar-IQ')} تعليق · {(post.shareCount || 0).toLocaleString('ar-IQ')} مشاركة</Text>
           </View>
         ))
@@ -692,6 +726,32 @@ function Action({ label, icon, primary, loading, onPress }: { label: string; ico
       <Text style={[styles.actionText, primary && styles.actionTextPrimary]}>{label}</Text>
     </Pressable>
   );
+}
+
+function ProfileVideo({
+  uri,
+  style,
+  contentFit = 'cover',
+  nativeControls = true,
+  autoPlay = false,
+}: {
+  uri: string;
+  style: any;
+  contentFit?: 'contain' | 'cover' | 'fill';
+  nativeControls?: boolean;
+  autoPlay?: boolean;
+}) {
+  const player = useVideoPlayer(uri, (playerInstance) => {
+    playerInstance.staysActiveInBackground = false;
+    if (autoPlay) playerInstance.play();
+  });
+
+  useEffect(() => {
+    if (autoPlay) player.play();
+    else player.pause();
+  }, [autoPlay, player]);
+
+  return <VideoView player={player} style={style} contentFit={contentFit} nativeControls={nativeControls} playsInline allowsPictureInPicture={false} />;
 }
 
 const styles = StyleSheet.create({
@@ -1229,8 +1289,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 9,
   },
+  slotActive: {
+    backgroundColor: colors.blue,
+    borderColor: colors.blue,
+  },
   slotText: { // Added for text inside InteractiveCard
     color: colors.ink, fontSize: 12, fontWeight: '900',
+  },
+  slotTextActive: {
+    color: '#fff',
   },
   relatedRow: {
     alignItems: 'center',
@@ -1409,23 +1476,6 @@ const styles = StyleSheet.create({
   },
   primaryButtonText: {
     color: '#fff',
-    fontSize: 14,
-    fontWeight: '900',
-  },
-  logoutButton: {
-    alignItems: 'center',
-    backgroundColor: colors.paper,
-    borderColor: '#f7b4af',
-    borderRadius: 8,
-    borderWidth: 1,
-    flexDirection: 'row-reverse',
-    gap: 8,
-    justifyContent: 'center',
-    marginTop: 12,
-    minHeight: 46,
-  },
-  logoutText: {
-    color: colors.red,
     fontSize: 14,
     fontWeight: '900',
   },

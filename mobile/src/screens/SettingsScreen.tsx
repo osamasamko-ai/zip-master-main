@@ -61,7 +61,7 @@ function formatConsultationFeeInput(value: string) {
 }
 
 export function SettingsScreen() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const isProfessional = user?.role === 'pro' || user?.role === 'admin';
   const [activeSection, setActiveSection] = useState<Section>('account');
   const [loadingSettings, setLoadingSettings] = useState(true);
@@ -304,6 +304,10 @@ export function SettingsScreen() {
               <InfoRow label="تاريخ الانضمام" value="كانون الثاني 2024" />
             </SectionCard>
             <SectionCard title="منطقة الخطر" note="إجراءات حساسة لا يمكن التراجع عنها.">
+              <Pressable onPress={logout} style={styles.logoutButton}>
+                <Ionicons name="log-out-outline" size={18} color="#fff" />
+                <Text style={styles.logoutButtonText}>تسجيل الخروج</Text>
+              </Pressable>
               <View style={styles.dangerBox}>
                 <Text style={styles.dangerTitle}>حذف الحساب</Text>
                 <Text style={styles.dangerText}>لطلب حذف الحساب والملفات، تواصل مع الدعم لمراجعة الهوية قبل التنفيذ.</Text>
@@ -541,6 +545,8 @@ const styles = StyleSheet.create({
   inputDisabled: { color: colors.muted },
   label: { color: colors.ink, fontSize: 13, fontWeight: '900', marginBottom: 7, textAlign: 'right' },
   linkText: { color: colors.blue, fontSize: 12, fontWeight: '900' },
+  logoutButton: { alignItems: 'center', backgroundColor: colors.red, borderRadius: 8, flexDirection: 'row-reverse', gap: 8, justifyContent: 'center', marginBottom: 10, minHeight: 46 },
+  logoutButtonText: { color: '#fff', fontSize: 14, fontWeight: '900' },
   metric: { alignItems: 'flex-end', borderRadius: 8, flex: 1, padding: 10 },
   metricBlue: { backgroundColor: colors.blueTint },
   metricGold: { backgroundColor: colors.goldTint },
