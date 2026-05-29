@@ -4,6 +4,8 @@ import {
   ActivityIndicator,
   Animated,
   FlatList,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -15,7 +17,6 @@ import {
 } from 'react-native';
 import { apiClient } from '../api/client';
 import { Card, EmptyState, Pill, Screen } from '../components/ui';
-import { HeroSection } from '../components/ui/HeroSection';
 import { colors } from '../theme/colors';
 
 type Tone = 'formal' | 'simple' | 'friendly';
@@ -217,6 +218,7 @@ export function AiChatScreen() {
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [intelligence, setIntelligence] = useState<any>(null);
   const iconPulse = useRef(new Animated.Value(0)).current;
+  const chatListRef = useRef<FlatList<Message>>(null);
 
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === activeSessionId) ?? sessions[0],
@@ -254,6 +256,12 @@ export function AiChatScreen() {
   useEffect(() => {
     setInputQuery(activeSession.query);
   }, [activeSession.id]);
+
+  useEffect(() => {
+    if (activeSession.workspaceTab !== 'chat') return;
+    const timer = setTimeout(() => chatListRef.current?.scrollToEnd({ animated: true }), 80);
+    return () => clearTimeout(timer);
+  }, [activeSession.messages.length, activeSession.workspaceTab, loading]);
 
   const updateSession = (sessionId: string, updater: Partial<ChatSession> | ((session: ChatSession) => ChatSession)) => {
     setSessions((current) =>
@@ -388,25 +396,28 @@ export function AiChatScreen() {
   };
 
   const renderHero = () => (
-    <HeroSection
-      icon="sparkles-outline"
-      title="المساعد الذكي"
-      subtitle={`${activeSession.name} · ${activeSession.messages.length} رسالة · ${activeSession.sources.length} مرجع`}
-      refreshing={loading}
-      rightElement={
-        <View style={styles.headerActions}>
-          <Pressable onPress={createNewSession} style={styles.headerButton}>
-            <Ionicons name="add" size={19} color={colors.navy} />
-          </Pressable>
-          <Pressable onPress={shareConversation} style={styles.headerButton}>
-            <Ionicons name="share-social-outline" size={18} color={colors.navy} />
-          </Pressable>
-          <Pressable onPress={exportConversation} style={styles.headerButton}>
-            <Ionicons name="download-outline" size={18} color={colors.navy} />
-          </Pressable>
+    <View style={styles.compactHeader}>
+      <View style={styles.headerActions}>
+        <Pressable onPress={createNewSession} style={styles.headerButton}>
+          <Ionicons name="add" size={19} color={colors.navy} />
+        </Pressable>
+        <Pressable onPress={shareConversation} style={styles.headerButton}>
+          <Ionicons name="share-social-outline" size={18} color={colors.navy} />
+        </Pressable>
+        <Pressable onPress={exportConversation} style={styles.headerButton}>
+          <Ionicons name="download-outline" size={18} color={colors.navy} />
+        </Pressable>
+      </View>
+      <View style={styles.headerTitleWrap}>
+        <View style={styles.headerTitleRow}>
+          {loading ? <ActivityIndicator color={colors.gold} size="small" /> : <Ionicons name="sparkles" size={18} color={colors.gold} />}
+          <Text style={styles.headerTitle}>المساعد الذكي</Text>
         </View>
-      }
-    />
+        <Text style={styles.headerSubtitle} numberOfLines={1}>
+          {activeSession.name} · {activeSession.messages.length} رسالة · {activeSession.sources.length} مرجع
+        </Text>
+      </View>
+    </View>
   );
 
   const renderSessions = () => (
@@ -427,7 +438,7 @@ export function AiChatScreen() {
                 {session.sources.length > 0 && <Text style={[styles.sessionChipMeta, selected && styles.sessionChipMetaActive]}>{session.sources.length} مرجع</Text>}
               </View>
             </View>
-            {selected ? (
+            {selected && sessions.length > 1 ? (
               <Pressable onPress={() => closeSession(session.id)} style={styles.sessionClose}>
                 <Ionicons name="close" size={13} color="#fff" />
               </Pressable>
@@ -484,35 +495,40 @@ export function AiChatScreen() {
   };
 
   const renderChat = () => {
-    const chatItems = useMemo(() => {
-      const items = [...activeSession.messages];
-      return items;
-    }, [activeSession.messages]);
+    const chatItems = [...activeSession.messages];
 
     return (
       <View style={styles.chatPanel}>
-        {errorMessage && (
-          <View style={styles.alert}>
-            <Pressable onPress={() => setErrorMessage(null)}>
-              <Ionicons name="close-circle-outline" size={20} color={colors.red} />
-            </Pressable>
-            <Text style={styles.alertText}>{errorMessage}</Text>
-          </View>
-        )}
-
-        {localOnlyMode && (
-          <View style={styles.notice}>
-            <Ionicons name="server-outline" size={18} color={colors.gold} />
-            <Text style={styles.noticeText}>تم استخدام القاعدة المحلية. راجع المراجع قبل الاعتماد.</Text>
-          </View>
-        )}
-
-        {renderStarter()}
-
         <FlatList
+          ref={chatListRef}
           data={chatItems}
-          scrollEnabled={false} // Container ScrollView handles scrolling
+          style={styles.chatList}
+          contentContainerStyle={styles.chatListContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadIntelligence} tintColor={colors.navy} />}
           keyExtractor={(item) => item.id}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <>
+              {errorMessage ? (
+                <View style={styles.alert}>
+                  <Pressable onPress={() => setErrorMessage(null)}>
+                    <Ionicons name="close-circle-outline" size={20} color={colors.red} />
+                  </Pressable>
+                  <Text style={styles.alertText}>{errorMessage}</Text>
+                </View>
+              ) : null}
+
+              {localOnlyMode ? (
+                <View style={styles.notice}>
+                  <Ionicons name="server-outline" size={18} color={colors.gold} />
+                  <Text style={styles.noticeText}>تم استخدام القاعدة المحلية. راجع المراجع قبل الاعتماد.</Text>
+                </View>
+              ) : null}
+
+              {renderStarter()}
+            </>
+          }
           renderItem={({ item }) => (
             <MessageBubble
               message={item}
@@ -607,43 +623,57 @@ export function AiChatScreen() {
   );
 
   const renderActivePanel = () => {
-    if (activeSession.workspaceTab === 'sources') return renderSources();
-    if (activeSession.workspaceTab === 'prompts') return renderPrompts();
-    if (activeSession.workspaceTab === 'overview') return renderOverview();
-    return renderChat();
+    if (activeSession.workspaceTab === 'chat') return renderChat();
+    const panel =
+      activeSession.workspaceTab === 'sources'
+        ? renderSources()
+        : activeSession.workspaceTab === 'prompts'
+          ? renderPrompts()
+          : renderOverview();
+
+    return (
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.panelScrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadIntelligence} tintColor={colors.navy} />}
+      >
+        {panel}
+      </ScrollView>
+    );
   };
 
   return (
     <Screen>
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={loadIntelligence} tintColor={colors.navy} />}
-        contentContainerStyle={styles.content}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.shell}>
         {renderHero()}
-        {renderSessions()}
-        {renderTabs()}
-        {renderActivePanel()}
-      </ScrollView>
-
-      <View style={styles.composerWrap}>
-        {renderTonePicker()}
-        <View style={styles.composer}>
-          <TextInput
-            value={inputQuery}
-            onChangeText={setInputQuery}
-            placeholder={loading ? "جاري المعالجة..." : "اكتب سؤالاً أو الصق نصاً..."}
-            placeholderTextColor={colors.subtle}
-            multiline
-            style={styles.input}
-            textAlign="right"
-          />
-          <Pressable disabled={!inputQuery.trim() || loading} onPress={() => sendChat()} style={[styles.sendButton, (!inputQuery.trim() || loading) && styles.sendButtonDisabled]}>
-            {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="paper-plane" size={19} color="#fff" />}
-          </Pressable>
+        <View style={styles.controlsBlock}>
+          {renderSessions()}
+          {renderTabs()}
         </View>
-        <Text style={styles.disclaimer}>قد يخطئ الذكاء الاصطناعي. راجع المراجع دائماً.</Text>
-      </View>
+
+        <View style={styles.workspace}>
+          {renderActivePanel()}
+        </View>
+
+        <View style={styles.composerWrap}>
+          {renderTonePicker()}
+          <View style={styles.composer}>
+            <TextInput
+              value={inputQuery}
+              onChangeText={setInputQuery}
+              placeholder={loading ? "جاري المعالجة..." : "اكتب سؤالاً أو الصق نصاً..."}
+              placeholderTextColor={colors.subtle}
+              multiline
+              style={styles.input}
+              textAlign="right"
+            />
+            <Pressable disabled={!inputQuery.trim() || loading} onPress={() => sendChat()} style={[styles.sendButton, (!inputQuery.trim() || loading) && styles.sendButtonDisabled]}>
+              {loading ? <ActivityIndicator color="#fff" /> : <Ionicons name="paper-plane" size={19} color="#fff" />}
+            </Pressable>
+          </View>
+          <Text style={styles.disclaimer}>قد يخطئ الذكاء الاصطناعي. راجع المراجع دائماً.</Text>
+        </View>
+      </KeyboardAvoidingView>
     </Screen>
   );
 }
@@ -782,26 +812,65 @@ const styles = StyleSheet.create({
   content: {
     paddingBottom: 14,
   },
+  shell: {
+    flex: 1,
+  },
+  compactHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 48,
+    paddingBottom: 8,
+  },
+  headerTitleWrap: {
+    alignItems: 'flex-end',
+    flex: 1,
+  },
+  headerTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 7,
+  },
+  headerTitle: {
+    color: colors.ink,
+    fontSize: 20,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  headerSubtitle: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 2,
+    textAlign: 'right',
+  },
   headerActions: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
   },
   headerButton: {
     alignItems: 'center',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 12,
+    borderRadius: 8,
     borderWidth: 1,
-    height: 40,
+    height: 36,
     justifyContent: 'center',
-    width: 40,
+    width: 36,
+  },
+  controlsBlock: {
+    paddingBottom: 8,
+  },
+  workspace: {
+    flex: 1,
+    minHeight: 0,
   },
   sessions: {
     gap: 8,
-    paddingBottom: 4,
+    paddingBottom: 2,
   },
   sessionScroll: {
-    marginTop: 12,
+    marginTop: 0,
   },
   sessionChip: {
     alignItems: 'center',
@@ -811,13 +880,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row-reverse',
     gap: 8,
-    minWidth: 130,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.5,
-    shadowRadius: 4,
+    minWidth: 118,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   sessionChipActive: {
     backgroundColor: colors.navy,
@@ -869,10 +934,10 @@ const styles = StyleSheet.create({
   },
   tabs: {
     backgroundColor: colors.tint,
-    borderRadius: 14,
+    borderRadius: 12,
     flexDirection: 'row-reverse',
     gap: 4,
-    marginTop: 14,
+    marginTop: 8,
     padding: 4,
   },
   tab: {
@@ -882,7 +947,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     gap: 4,
     justifyContent: 'center',
-    minHeight: 40,
+    minHeight: 34,
   },
   tabActive: {
     backgroundColor: colors.navy,
@@ -896,10 +961,21 @@ const styles = StyleSheet.create({
     color: '#fff',
   },
   chatPanel: {
-    marginTop: 12,
+    flex: 1,
+    minHeight: 0,
   },
   panel: {
-    marginTop: 12,
+    paddingTop: 4,
+  },
+  panelScrollContent: {
+    paddingBottom: 14,
+  },
+  chatList: {
+    flex: 1,
+  },
+  chatListContent: {
+    paddingBottom: 10,
+    paddingTop: 4,
   },
   starter: {
     marginBottom: 10,
@@ -1303,12 +1379,14 @@ const styles = StyleSheet.create({
   },
   composerWrap: {
     backgroundColor: colors.canvas,
-    paddingTop: 8,
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    paddingTop: 7,
   },
   toneRow: {
     flexDirection: 'row-reverse',
     gap: 7,
-    marginBottom: 8,
+    marginBottom: 7,
   },
   toneChip: {
     alignItems: 'center',
@@ -1318,7 +1396,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     gap: 5,
     justifyContent: 'center',
-    minHeight: 34,
+    minHeight: 30,
   },
   toneChipActive: {
     backgroundColor: colors.goldTint,
@@ -1335,22 +1413,22 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     backgroundColor: colors.paper,
     borderColor: colors.line,
-    borderRadius: 24,
+    borderRadius: 16,
     borderWidth: 1,
     flexDirection: 'row-reverse',
     gap: 9,
     padding: 8,
     shadowColor: colors.shadow,
-    shadowOffset: { width: 0, height: -6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 8,
   },
   input: {
     color: colors.ink,
     flex: 1,
     fontSize: 14,
-    maxHeight: 108,
-    minHeight: 46,
+    maxHeight: 92,
+    minHeight: 42,
     paddingHorizontal: 7,
     paddingVertical: 10,
   },
@@ -1358,9 +1436,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.navy,
     borderRadius: 8,
-    height: 44,
+    height: 42,
     justifyContent: 'center',
-    width: 44,
+    width: 42,
   },
   sendButtonDisabled: {
     opacity: 0.35,

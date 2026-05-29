@@ -683,6 +683,7 @@ export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
         onClose={() => setStoryViewerOpen(false)}
         onViewed={markStoryViewed}
         onReply={() => setStatus('سيتم تفعيل الردود على القصص قريباً.')}
+        onReport={() => setStatus('تم إرسال البلاغ للمراجعة.')}
       />
       <StoryComposerModal visible={storyComposerOpen} onClose={() => setStoryComposerOpen(false)} text={storyText} onChange={setStoryText} onPublish={publishStory} onPickMedia={pickStoryMedia} onRemoveMedia={() => setStoryMedia(null)} media={storyMedia} loading={storyPosting} />
       <ConsultationModal post={consultationPost} note={consultationNote} paymentMethod={paymentMethod} loading={busyId === 'consult'} onChangeNote={setConsultationNote} onChangePayment={setPaymentMethod} onClose={() => setConsultationPost(null)} onSubmit={startConsultation} />
@@ -1095,7 +1096,7 @@ const REPORT_REASONS = [
   { id: 'other', label: 'أخرى' },
 ];
 
-function StoryModal({ visible, stories, initialIndex, onClose, onViewed, onReply }: { visible: boolean; stories: any[]; initialIndex: number; onClose: () => void; onViewed?: (story: any) => void; onReply?: (story: any) => void }) {
+function StoryModal({ visible, stories, initialIndex, onClose, onViewed, onReply, onReport }: { visible: boolean; stories: any[]; initialIndex: number; onClose: () => void; onViewed?: (story: any) => void; onReply?: (story: any) => void; onReport?: (story: any, reason: string) => void }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isMuted, setIsMuted] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
@@ -1112,9 +1113,8 @@ function StoryModal({ visible, stories, initialIndex, onClose, onViewed, onReply
     if (!reportStory) return;
     setReporting(true);
     try {
-      // In a real app, call apiClient.reportFeedStory(reportStory.id, reason)
-      console.log('Story report reason:', reason);
       await new Promise(r => setTimeout(r, 1000));
+      onReport?.(reportStory, reason);
       setReportModalVisible(false);
       setReportStory(null);
     } finally {

@@ -1,6 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { Button, EmptyState, Screen, SkeletonCard, Toast } from '../components/ui';
 import { useAuth } from '../context/AuthContext';
@@ -66,6 +67,7 @@ export function SettingsScreen() {
   const [activeSection, setActiveSection] = useState<Section>('account');
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploadingDocument, setUploadingDocument] = useState('');
   const [status, setStatus] = useState('');
   const [hasChanges, setHasChanges] = useState(false);
   const [billingStatus, setBillingStatus] = useState<'active' | 'past_due'>('active');
@@ -237,14 +239,36 @@ export function SettingsScreen() {
     }
   };
 
-  const addDocument = (key: 'nationalId' | 'lawyerLicense') => {
-    setDocuments((current) => ({
-      ...current,
-      [`${key}Url`]: `mobile-upload-${Date.now()}.pdf`,
-      [`${key}Verified`]: false,
-    } as typeof current));
-    setStatus(key === 'nationalId' ? 'تم تجهيز البطاقة الوطنية للمراجعة.' : 'تم تجهيز بطاقة المحاماة للمراجعة.');
-    setHasChanges(true);
+  const addDocument = async (key: 'nationalId' | 'lawyerLicense') => {
+    setStatus('');
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      multiple: false,
+      type: ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
+    });
+
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const asset = result.assets[0];
+    setUploadingDocument(key);
+    try {
+      const response = await apiClient.uploadProfileDocument(key, {
+        uri: asset.uri,
+        name: asset.name || `${key}-${Date.now()}`,
+        type: asset.mimeType || 'application/octet-stream',
+      });
+      const fileUrl = response.data?.fileUrl || response.data?.data?.fileUrl || response.data?.url || '';
+      setDocuments((current) => ({
+        ...current,
+        [`${key}Url`]: fileUrl || current[`${key}Url`],
+        [`${key}Verified`]: false,
+      } as typeof current));
+      setStatus(key === 'nationalId' ? 'تم رفع البطاقة الوطنية للمراجعة.' : 'تم رفع بطاقة المحاماة للمراجعة.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'تعذر رفع المستند.');
+    } finally {
+      setUploadingDocument('');
+    }
   };
 
   const exportData = () => {
@@ -354,8 +378,8 @@ export function SettingsScreen() {
 
         {!loadingSettings && activeSection === 'documents' ? (
           <SectionCard title="توثيق المستندات الأساسية" note={`${uploadedDocs}/2 مرفوعة · ${verifiedDocs} موثقة`}>
-            <DocumentCard title="البطاقة الوطنية" required uploaded={Boolean(documents.nationalIdUrl)} verified={documents.nationalIdVerified} onPress={() => addDocument('nationalId')} />
-            <DocumentCard title="بطاقة المحاماة" required={isProfessional} uploaded={Boolean(documents.lawyerLicenseUrl)} verified={documents.lawyerLicenseVerified} onPress={() => addDocument('lawyerLicense')} />
+            <DocumentCard title="البطاقة الوطنية" required uploaded={Boolean(documents.nationalIdUrl)} verified={documents.nationalIdVerified} loading={uploadingDocument === 'nationalId'} onPress={() => addDocument('nationalId')} />
+            <DocumentCard title="بطاقة المحاماة" required={isProfessional} uploaded={Boolean(documents.lawyerLicenseUrl)} verified={documents.lawyerLicenseVerified} loading={uploadingDocument === 'lawyerLicense'} onPress={() => addDocument('lawyerLicense')} />
           </SectionCard>
         ) : null}
 
@@ -492,13 +516,13 @@ function SessionCard({ session, onRevoke }: { session: SessionItem; onRevoke: ()
   );
 }
 
-function DocumentCard({ title, required, uploaded, verified, onPress }: { title: string; required: boolean; uploaded: boolean; verified: boolean; onPress: () => void }) {
+function DocumentCard({ title, required, uploaded, verified, loading, onPress }: { title: string; required: boolean; uploaded: boolean; verified: boolean; loading?: boolean; onPress: () => void }) {
   const label = verified ? 'موثق' : uploaded ? 'قيد المراجعة' : 'غير مرفوع';
   return (
-    <Pressable onPress={onPress} style={styles.rowCard}>
-      <View style={styles.docIcon}><Ionicons name={verified ? 'shield-checkmark-outline' : 'cloud-upload-outline'} size={20} color={verified ? colors.green : colors.blue} /></View>
+    <Pressable disabled={loading} onPress={onPress} style={[styles.rowCard, loading && styles.rowCardDisabled]}>
+      <View style={styles.docIcon}>{loading ? <ActivityIndicator color={colors.blue} /> : <Ionicons name={verified ? 'shield-checkmark-outline' : 'cloud-upload-outline'} size={20} color={verified ? colors.green : colors.blue} />}</View>
       <View style={styles.flex}><Text style={styles.rowTitle}>{title}</Text><Text style={styles.rowNote}>{required ? 'مطلوب' : 'اختياري'} · {label}</Text></View>
-      <Text style={styles.linkText}>{uploaded ? 'استبدال' : 'رفع'}</Text>
+      <Text style={styles.linkText}>{loading ? 'يرفع...' : uploaded ? 'استبدال' : 'رفع'}</Text>
     </Pressable>
   );
 }
@@ -560,6 +584,7 @@ const styles = StyleSheet.create({
   planName: { color: colors.ink, fontSize: 18, fontWeight: '900', textAlign: 'right' },
   planPrice: { color: colors.gold, fontSize: 16, fontWeight: '900', marginBottom: 8, marginTop: 4, textAlign: 'right' },
   rowCard: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 8, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 11 },
+  rowCardDisabled: { opacity: 0.65 },
   rowNote: { color: colors.muted, fontSize: 11, fontWeight: '700', lineHeight: 18, marginTop: 3, textAlign: 'right' },
   rowTitle: { color: colors.ink, fontSize: 13, fontWeight: '900', textAlign: 'right' },
   scoreCard: { flexDirection: 'row-reverse', gap: 8, marginBottom: 12 },

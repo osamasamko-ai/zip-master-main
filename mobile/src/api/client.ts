@@ -171,6 +171,17 @@ class ApiClient {
     return this.request<any>(`/api/app/settings/sessions/${id}`, { method: 'DELETE' });
   }
 
+  uploadProfileDocument(kind: 'nationalId' | 'lawyerLicense', file: { uri: string; name: string; type: string }) {
+    const formData = new FormData();
+    formData.append('document', file as any);
+    const path = kind === 'nationalId' ? '/api/profile/documents/national-id' : '/api/profile/documents/lawyer-license';
+
+    return this.request<any>(path, {
+      method: 'POST',
+      body: formData as any,
+    });
+  }
+
   addCreditBalance(data: { amount: number; paymentMethod: string; note?: string }) {
     return this.request<any>('/api/app/billing/top-up', {
       method: 'POST',
