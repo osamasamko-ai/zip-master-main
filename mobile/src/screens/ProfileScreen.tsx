@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState, useRef } from 'react';
-import { ActivityIndicator, Animated, Image, Pressable, RefreshControl, ScrollView, Share, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Image, Pressable, RefreshControl, ScrollView, Share, StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 import { apiClient } from '../api/client';
 import { EmptyState, Screen, SkeletonCard } from '../components/ui';
 import { HeroSection } from '../components/ui/HeroSection';
@@ -595,9 +595,9 @@ function ActivityTab({ items }: { items: any[] }) {
   );
 }
 
-function Section({ title, action, children }: { title: string; action?: string; children: React.ReactNode }) {
+function Section({ title, action, children, style }: { title: string; action?: string; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return ( // Apply Card styling to Section
-    <View style={styles.section}>
+    <View style={[styles.section, style]}>
       <View style={styles.sectionHeader}>
         {action ? <Text style={styles.sectionAction}>{action}</Text> : <View />}
         <Text style={styles.sectionTitle}>{title}</Text>
@@ -633,7 +633,7 @@ function Stat({ label, value, note }: { label: string; value: string; note?: str
   );
 }
 
-function Credential({ label, value, tone }: { label: string; value: string; tone?: 'green' | 'gold' }) {
+function Credential({ label, value, tone }: { label: string; value: string | number; tone?: 'green' | 'gold' }) {
   return ( // Apply Card styling to Credential
     <View style={styles.credential}>
       <Text style={styles.credentialLabel}>{label}</Text>
@@ -642,10 +642,10 @@ function Credential({ label, value, tone }: { label: string; value: string; tone
   );
 }
 
-function TrustRow({ label, value }: { label: string; value: string }) {
+function TrustRow({ label, value, tone }: { label: string; value: string | number; tone?: 'green' | 'gold' }) {
   return ( // Apply Card styling to TrustRow
     <View style={styles.trustRow}>
-      <Text style={styles.trustValue}>{value}</Text>
+      <Text style={[styles.trustValue, tone === 'green' && styles.greenText, tone === 'gold' && styles.goldText]}>{value}</Text>
       <Text style={styles.trustLabel}>{label}</Text>
     </View>
   );
@@ -696,11 +696,6 @@ function Action({ label, icon, primary, loading, onPress }: { label: string; ico
 
 const styles = StyleSheet.create({
   content: {
-    paddingBottom: 18,
-  },
-  completionBarContainer: {
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
     paddingBottom: 18,
   },
   loadingState: {

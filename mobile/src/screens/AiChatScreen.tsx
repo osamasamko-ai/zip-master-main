@@ -737,7 +737,7 @@ const MessageBubble = React.memo(({ message, copied, onCopy, onSources }: { mess
           {!isUser && (message.sources?.length ?? 0) > 0 ? (
             <Pressable onPress={onSources} style={styles.sourcesButton}>
               <Ionicons name="book-outline" size={14} color={colors.navy} />
-              <Text style={styles.sourcesButtonText}>عرض {message.sources.length} مراجع</Text>
+              <Text style={styles.sourcesButtonText}>عرض {message.sources?.length ?? 0} مراجع</Text>
             </Pressable>
           ) : null}
         </View>
