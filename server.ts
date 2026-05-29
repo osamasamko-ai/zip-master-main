@@ -281,6 +281,12 @@ async function startServer() {
       'video/mp4',
       'video/webm',
       'video/quicktime',
+      'video/x-m4v',
+      'video/3gpp',
+      'video/3gpp2',
+      'video/mpeg',
+      'video/avi',
+      'video/x-msvideo',
     ];
 
     if (!allowedMimes.includes(file.mimetype)) {

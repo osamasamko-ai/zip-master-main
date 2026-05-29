@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, UIManager, View, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { VideoView, useVideoPlayer } from 'expo-video';
 import { apiClient } from '../api/client';
 import { BottomSheet, Button, EmptyState, Pill, Screen, SkeletonCard, Toast } from '../components/ui';
 import { HeroSection } from '../components/ui/HeroSection';
@@ -20,6 +21,28 @@ type FeedFilter = 'all' | 'videos' | 'articles' | 'admins' | 'popular';
 type SortMode = 'smart' | 'latest';
 type StoryMode = 'new' | 'seen' | 'archive';
 type PickedMedia = ImagePicker.ImagePickerAsset;
+type RouteKey =
+  | 'lawyers'
+  | 'cases'
+  | 'ai'
+  | 'messages'
+  | 'legal'
+  | 'contract'
+  | 'billing'
+  | 'following'
+  | 'support'
+  | 'settings'
+  | 'intelligence'
+  | 'pro'
+  | 'admin'
+  | 'profile'
+  | 'feed'
+  | 'home'
+  | 'more';
+
+type FeedScreenProps = {
+  onOpen?: (route: RouteKey) => void;
+};
 
 const filters: Array<{ id: FeedFilter; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { id: 'all', label: 'الكل', icon: 'layers-outline' },
@@ -55,6 +78,8 @@ const POST_FEATURED_BOOST = 1.5;
 const POST_PINNED_BOOST = 1;
 const POST_SAVED_BOOST = 0.5;
 const POST_LIKED_BOOST = 0.25;
+const STORY_VIEW_DURATION = 6000;
+const STORY_VIDEO_VIEW_DURATION = 12000;
 // Story Scoring
 const STORY_AUTHOR_AFFINITY_WEIGHT = 1.2;
 const STORY_RECENCY_DECAY_HOURS = 24; // Story loses all recency score after 24 hours
@@ -66,14 +91,26 @@ function getPickedMediaKind(media?: PickedMedia | null) {
 }
 
 function getMediaMimeType(media: PickedMedia) {
-  if (media.mimeType) return media.mimeType;
+  const mimeType = String(media.mimeType || '').toLowerCase();
+  if (mimeType) return mimeType;
+
+  const extension = String(media.fileName || media.uri || '').split('?')[0].split('.').pop()?.toLowerCase();
+  if (extension === 'mov') return 'video/quicktime';
+  if (extension === 'm4v') return 'video/x-m4v';
+  if (extension === 'webm') return 'video/webm';
+  if (extension === '3gp' || extension === '3gpp') return 'video/3gpp';
+  if (extension === 'png') return 'image/png';
+  if (extension === 'webp') return 'image/webp';
+
   return getPickedMediaKind(media) === 'video' ? 'video/mp4' : 'image/jpeg';
 }
 
 function getMediaFileName(media: PickedMedia, fallback: string) {
   if (media.fileName) return media.fileName;
-  const extension = getMediaMimeType(media).split('/')[1]?.split(';')[0] || (getPickedMediaKind(media) === 'video' ? 'mp4' : 'jpg');
-  return `${fallback}.${extension === 'jpeg' ? 'jpg' : extension}`;
+  const uriExtension = String(media.uri || '').split('?')[0].split('.').pop()?.toLowerCase();
+  const mimeExtension = getMediaMimeType(media).split('/')[1]?.split(';')[0];
+  const extension = uriExtension || mimeExtension || (getPickedMediaKind(media) === 'video' ? 'mp4' : 'jpg');
+  return `${fallback}-${Date.now()}.${extension === 'jpeg' ? 'jpg' : extension === 'quicktime' ? 'mov' : extension === 'x-m4v' ? 'm4v' : extension}`;
 }
 
 function assetToUpload(media: PickedMedia, fallbackName: string) {
@@ -88,7 +125,7 @@ function mediaUrl(value?: string | null) {
   return apiClient.getMediaUrl(value);
 }
 
-export function FeedScreen() {
+export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
   const { user } = useAuth();
   const [posts, setPosts] = useState<any[]>([]);
   const [stories, setStories] = useState<any[]>([]);
@@ -229,7 +266,9 @@ export function FeedScreen() {
       {canCreate ? (
         <View style={styles.composer}>
           <View style={styles.composerTop}>
-            <View style={styles.avatar}><Text style={styles.avatarText}>{String(user?.name || 'م').charAt(0)}</Text></View>
+            <Pressable onPress={() => onOpen?.('profile')} style={styles.avatar}>
+              <Text style={styles.avatarText}>{String(user?.name || 'م').charAt(0)}</Text>
+            </Pressable>
             <Pressable onPress={() => setComposerOpen((current) => !current)} style={styles.composerPrompt}>
               <Text style={styles.composerPromptText}>{content || 'بماذا تفكر قانونياً؟'}</Text>
             </Pressable>
@@ -366,6 +405,7 @@ export function FeedScreen() {
         onPin={() => adminUpdate(item, { pinned: !item.pinned })}
         onFeature={() => adminUpdate(item, { featured: !item.featured })}
         onHide={() => adminUpdate(item, { status: 'hidden' })}
+        onOpenProfile={() => onOpen?.('profile')}
       />
       {index === 1 && suggestedLawyers.length > 0 ? (
         <View style={styles.inlineLawyers}>
@@ -437,9 +477,8 @@ export function FeedScreen() {
       return null;
     }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      allowsEditing: true,
-      aspect: [9, 16],
+    const pickerOptions: ImagePicker.ImagePickerOptions = {
+      allowsEditing: kind === 'image',
       mediaTypes:
         kind === 'image'
           ? ImagePicker.MediaTypeOptions.Images
@@ -448,7 +487,11 @@ export function FeedScreen() {
             : ImagePicker.MediaTypeOptions.All,
       quality: 0.82,
       videoMaxDuration: 60,
-    });
+    };
+
+    if (kind === 'image') pickerOptions.aspect = [9, 16];
+
+    const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
 
     if (!result.canceled && result.assets?.[0]) {
       return result.assets[0];
@@ -482,6 +525,13 @@ export function FeedScreen() {
       void apiClient.markFeedStoryViewed(story.id).catch(() => undefined);
     }
   };
+
+  const markStoryViewed = useCallback((story: any) => {
+    if (!story?.id || story.seenByMe) return;
+    setStories((current) => current.map((item) => item.id === story.id ? { ...item, seenByMe: true } : item));
+    setStoryViewerStories((current) => current.map((item) => item.id === story.id ? { ...item, seenByMe: true } : item));
+    void apiClient.markFeedStoryViewed(story.id).catch(() => undefined);
+  }, []);
 
   const react = async (id: string, action: 'like' | 'save' | 'share') => {
     setBusyId(`${action}-${id}`);
@@ -625,7 +675,14 @@ export function FeedScreen() {
         }
       />
       <EditModal post={editingPost} content={editContent} loading={busyId === `edit-${editingPost?.id}`} onChange={setEditContent} onClose={() => setEditingPost(null)} onSubmit={saveEdit} />
-      <StoryModal visible={storyViewerOpen} stories={storyViewerStories} initialIndex={activeStoryIndex} onClose={() => setStoryViewerOpen(false)} />
+      <StoryModal
+        visible={storyViewerOpen}
+        stories={storyViewerStories}
+        initialIndex={activeStoryIndex}
+        onClose={() => setStoryViewerOpen(false)}
+        onViewed={markStoryViewed}
+        onReply={() => setStatus('سيتم تفعيل الردود على القصص قريباً.')}
+      />
       <StoryComposerModal visible={storyComposerOpen} onClose={() => setStoryComposerOpen(false)} text={storyText} onChange={setStoryText} onPublish={publishStory} onPickMedia={pickStoryMedia} onRemoveMedia={() => setStoryMedia(null)} media={storyMedia} loading={storyPosting} />
       <ConsultationModal post={consultationPost} note={consultationNote} paymentMethod={paymentMethod} loading={busyId === 'consult'} onChangeNote={setConsultationNote} onChangePayment={setPaymentMethod} onClose={() => setConsultationPost(null)} onSubmit={startConsultation} />
     </Screen>
@@ -684,8 +741,11 @@ function MediaPreview({ media, variant, onRemove }: { media: PickedMedia; varian
         <Image source={{ uri: media.uri }} style={styles.mediaPreviewImage} resizeMode="cover" />
       ) : (
         <View style={styles.videoPreview}>
-          <Ionicons name="play-circle" size={44} color="#fff" />
-          <Text style={styles.videoPreviewText}>فيديو جاهز للنشر</Text>
+          <FeedVideo uri={media.uri} style={styles.mediaPreviewImage} contentFit="cover" nativeControls={false} muted autoPlay loop />
+          <View style={styles.videoPreviewShade}>
+            <Ionicons name="play-circle" size={44} color="#fff" />
+            <Text style={styles.videoPreviewText}>فيديو جاهز للنشر</Text>
+          </View>
         </View>
       )}
       <View style={styles.mediaPreviewBadge}>
@@ -696,6 +756,49 @@ function MediaPreview({ media, variant, onRemove }: { media: PickedMedia; varian
         <Ionicons name="close" size={18} color="#fff" />
       </Pressable>
     </View>
+  );
+}
+
+function FeedVideo({
+  uri,
+  style,
+  contentFit = 'cover',
+  nativeControls = true,
+  autoPlay = false,
+  loop = false,
+  muted = false,
+}: {
+  uri: string;
+  style: any;
+  contentFit?: 'contain' | 'cover' | 'fill';
+  nativeControls?: boolean;
+  autoPlay?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+}) {
+  const player = useVideoPlayer(uri, (playerInstance) => {
+    playerInstance.loop = loop;
+    playerInstance.muted = muted;
+    playerInstance.staysActiveInBackground = false;
+    if (autoPlay) playerInstance.play();
+  });
+
+  useEffect(() => {
+    player.loop = loop;
+    player.muted = muted;
+    if (autoPlay) player.play();
+    else player.pause();
+  }, [autoPlay, loop, muted, player]);
+
+  return (
+    <VideoView
+      player={player}
+      style={style}
+      contentFit={contentFit}
+      nativeControls={nativeControls}
+      allowsPictureInPicture={false}
+      playsInline
+    />
   );
 }
 
@@ -723,7 +826,7 @@ function CreateStoryCard({ user, onPress }: { user: any; onPress: () => void }) 
 
 const PostCardMemo = React.memo(PostCard);
 
-function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide }: any) {
+function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide, onOpenProfile }: any) {
   const [expanded, setExpanded] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const heartAnim = useRef(new Animated.Value(0)).current;
@@ -779,7 +882,9 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
           </View>
         ) : null}
         <View style={styles.authorInfo}>
-          <Avatar source={post.author?.avatar || post.author?.img} name={post.author?.name || 'م'} />
+          <Pressable onPress={onOpenProfile} hitSlop={8}>
+            <Avatar source={post.author?.avatar || post.author?.img} name={post.author?.name || 'م'} />
+          </Pressable>
           <View style={styles.flex}>
             <View style={styles.authorLine}>
               {post.author?.verified ? <Ionicons name="shield-checkmark" size={16} color={colors.blue} /> : null}
@@ -795,21 +900,20 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
       {isLong ? <Pressable onPress={toggleExpand}><Text style={styles.readMore}>{expanded ? 'عرض أقل' : 'قراءة المزيد'}</Text></Pressable> : null}
       <View style={styles.tagRow}><Text style={styles.tag}>#{post.category || 'عام'}</Text><Text style={styles.tag}>{post.readingTime || 1} دقيقة قراءة</Text></View>
       {post.mediaUrl ? (
-        <Pressable onPress={handleImagePress} style={[styles.mediaBox, post.mediaType === 'image' && styles.imageMediaBox]}>
-          {post.mediaType === 'image' ? (
+        post.mediaType === 'image' ? (
+          <Pressable onPress={handleImagePress} style={[styles.mediaBox, styles.imageMediaBox]}>
             <>
               <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={styles.postImage} resizeMode="cover" />
               <Animated.View style={[styles.heartOverlay, { transform: [{ scale: heartAnim }], opacity: heartAnim }]}>
                 <Ionicons name="heart" size={80} color="#fff" />
               </Animated.View>
             </>
-          ) : (
-            <View style={styles.feedVideoBox}>
-              <Ionicons name="play-circle" size={48} color="#fff" />
-              <Text style={styles.feedVideoText}>فيديو مرفق</Text>
-            </View>
-          )}
-        </Pressable>
+          </Pressable>
+        ) : (
+          <View style={[styles.mediaBox, styles.imageMediaBox]}>
+            <FeedVideo uri={mediaUrl(post.mediaUrl)} style={styles.postImage} contentFit="contain" nativeControls />
+          </View>
+        )
       ) : null}
       <View style={styles.countRow}><Text style={styles.countText}>{(post.likesCount || 0).toLocaleString('ar-IQ')} إعجاب</Text><Text style={styles.countText}>{post.commentsCount || 0} تعليق · {post.shareCount || 0} مشاركة · {post.savesCount || 0} حفظ</Text></View>
       <View style={styles.actionRow}>
@@ -852,7 +956,10 @@ function StoryBubble({ story, onPress }: { story: any; onPress: () => void }) {
       {hasMedia && story.mediaType === 'image' ? <Image source={{ uri: mediaUrl(story.mediaUrl) }} style={styles.storyCardMedia} resizeMode="cover" /> : null}
       {isVideo ? (
         <View style={styles.storyCardVideo}>
-          <Ionicons name="play-circle" size={42} color="#fff" />
+          <FeedVideo uri={mediaUrl(story.mediaUrl)} style={styles.storyCardMedia} contentFit="cover" nativeControls={false} muted autoPlay loop />
+          <View style={styles.storyVideoBadge}>
+            <Ionicons name="play-circle" size={42} color="#fff" />
+          </View>
         </View>
       ) : null}
       {!hasMedia ? (
@@ -935,8 +1042,11 @@ function StoryComposerModal({ visible, onClose, text, onChange, onPublish, onPic
                 <Image source={{ uri: media.uri }} style={StyleSheet.absoluteFill} resizeMode="cover" />
               ) : (
                 <View style={styles.storyVideoDraft}>
-                  <Ionicons name="play-circle" size={56} color="#fff" />
-                  <Text style={styles.videoPreviewText}>فيديو قصة جاهز</Text>
+                  <FeedVideo uri={media.uri} style={styles.mediaPreviewImage} contentFit="cover" nativeControls={false} muted autoPlay loop />
+                  <View style={styles.videoPreviewShade}>
+                    <Ionicons name="play-circle" size={56} color="#fff" />
+                    <Text style={styles.videoPreviewText}>فيديو قصة جاهز</Text>
+                  </View>
                 </View>
               )
             ) : null}
@@ -984,14 +1094,18 @@ const REPORT_REASONS = [
   { id: 'other', label: 'أخرى' },
 ];
 
-function StoryModal({ visible, stories, initialIndex, onClose }: { visible: boolean; stories: any[]; initialIndex: number; onClose: () => void }) {
+function StoryModal({ visible, stories, initialIndex, onClose, onViewed, onReply }: { visible: boolean; stories: any[]; initialIndex: number; onClose: () => void; onViewed?: (story: any) => void; onReply?: (story: any) => void }) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const [isMuted, setIsMuted] = useState(false);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [reportStory, setReportStory] = useState<any>(null);
   const [reporting, setReporting] = useState(false);
+  const [pressedControl, setPressedControl] = useState(false);
   const progress = useRef(new Animated.Value(0)).current;
+  const progressValue = useRef(0);
   const listRef = useRef<FlatList>(null);
+  const currentStory = stories[currentIndex];
+  const isProgressPaused = reportModalVisible || pressedControl;
 
   const handleReport = async (reason: string) => {
     if (!reportStory) return;
@@ -1012,59 +1126,112 @@ function StoryModal({ visible, stories, initialIndex, onClose }: { visible: bool
     if (nextIndex !== currentIndex) setCurrentIndex(nextIndex);
   };
 
+  const goToStory = useCallback((index: number) => {
+    const nextIndex = Math.max(0, Math.min(index, stories.length - 1));
+    if (nextIndex === currentIndex) return;
+    setCurrentIndex(nextIndex);
+    listRef.current?.scrollToIndex({ index: nextIndex, animated: true });
+  }, [currentIndex, stories.length]);
+
+  const goNext = useCallback(() => {
+    if (currentIndex < stories.length - 1) {
+      goToStory(currentIndex + 1);
+    } else {
+      onClose();
+    }
+  }, [currentIndex, goToStory, onClose, stories.length]);
+
+  const goPrevious = useCallback(() => {
+    if (progressValue.current > 0.22) {
+      progress.setValue(0);
+      progressValue.current = 0;
+      return;
+    }
+    goToStory(currentIndex - 1);
+  }, [currentIndex, goToStory, progress]);
+
   useEffect(() => {
-    if (visible) setCurrentIndex(Math.min(initialIndex, Math.max(stories.length - 1, 0)));
+    if (!visible) return;
+    const nextIndex = Math.min(initialIndex, Math.max(stories.length - 1, 0));
+    setCurrentIndex(nextIndex);
+    setTimeout(() => listRef.current?.scrollToIndex({ index: nextIndex, animated: false }), 40);
   }, [visible, initialIndex, stories.length]);
 
   useEffect(() => {
-    if (!visible || !stories[currentIndex]) return;
+    const subscription = progress.addListener(({ value }) => {
+      progressValue.current = value;
+    });
+
+    return () => progress.removeListener(subscription);
+  }, [progress]);
+
+  useEffect(() => {
     progress.setValue(0);
+    progressValue.current = 0;
+    if (visible && currentStory) onViewed?.(currentStory);
+  }, [currentIndex, currentStory?.id, onViewed, progress, visible]);
+
+  useEffect(() => {
+    if (!visible || !currentStory || isProgressPaused) return;
+    const storyDuration = currentStory.mediaType === 'video' ? STORY_VIDEO_VIEW_DURATION : STORY_VIEW_DURATION;
+    const remainingDuration = Math.max(350, storyDuration * (1 - progressValue.current));
     const anim = Animated.timing(progress, {
       toValue: 1,
-      duration: 6000,
+      duration: remainingDuration,
       useNativeDriver: false,
     });
 
     anim.start(({ finished }) => {
-      if (finished) {
-        if (currentIndex < stories.length - 1) {
-          listRef.current?.scrollToIndex({ index: currentIndex + 1, animated: true });
-        } else {
-          onClose();
-        }
-      }
+      if (finished) goNext();
     });
     return () => anim.stop();
-  }, [currentIndex, visible, stories]);
+  }, [currentStory?.id, goNext, isProgressPaused, progress, visible]);
+
+  useEffect(() => {
+    if (!visible) {
+      progress.stopAnimation();
+      progress.setValue(0);
+      progressValue.current = 0;
+      setReportModalVisible(false);
+      setReportStory(null);
+      setPressedControl(false);
+    }
+  }, [progress, visible]);
 
   const renderItem = ({ item }: { item: any, index: number }) => (
     <View style={styles.storyViewerContainer}>
       {item.mediaUrl && item.mediaType === 'image' ? <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={styles.storyViewerMedia} resizeMode="cover" /> : null}
       {item.mediaUrl && item.mediaType === 'video' ? (
         <View style={styles.storyVideoViewer}>
-          <Ionicons name="play-circle" size={72} color="#fff" />
-          <Text style={styles.storyDraftText}>فيديو قصة</Text>
+          <FeedVideo uri={mediaUrl(item.mediaUrl)} style={styles.storyViewerMedia} contentFit="contain" nativeControls autoPlay muted={isMuted} />
         </View>
       ) : null}
       <View style={styles.storyOverlay} />
       <View style={styles.storyProgressRail}>
-        {stories.map((story, progressIndex) => (
-          <View key={story.id || progressIndex} style={styles.storyProgressBar}>
+        {stories.map((story, progressIndex) => {
+          const isCurrent = currentIndex === progressIndex;
+          const isComplete = progressIndex < currentIndex;
+          return (
+          <View key={story.id || progressIndex} style={[styles.storyProgressBar, isCurrent && styles.storyProgressBarActive]}>
             <Animated.View
               style={[
                 styles.storyProgressFill,
+                isComplete && styles.storyProgressFillComplete,
                 {
                   width:
-                    currentIndex === progressIndex
+                    isCurrent
                       ? progress.interpolate({ inputRange: [0, 1], outputRange: ['0%', '100%'] })
-                      : progressIndex < currentIndex
+                      : isComplete
                         ? '100%'
                         : '0%',
                 },
               ]}
             />
           </View>
-        ))}
+        )})}
+      </View>
+      <View style={styles.storyCounter}>
+        <Text style={styles.storyCounterText}>{`${(currentIndex + 1).toLocaleString('ar-IQ')} / ${stories.length.toLocaleString('ar-IQ')}`}</Text>
       </View>
       <View style={styles.storyViewerHeader}>
         <View style={styles.authorInfo}>
@@ -1086,11 +1253,25 @@ function StoryModal({ visible, stories, initialIndex, onClose }: { visible: bool
           <Pressable onPress={onClose} style={styles.viewerClose}><Ionicons name="close" size={30} color="#fff" /></Pressable>
         </View>
       </View>
+      <View pointerEvents="box-none" style={styles.storyTapLayer}>
+        <Pressable
+          onPress={goPrevious}
+          onPressIn={() => setPressedControl(true)}
+          onPressOut={() => setPressedControl(false)}
+          style={styles.storyTapZone}
+        />
+        <Pressable
+          onPress={goNext}
+          onPressIn={() => setPressedControl(true)}
+          onPressOut={() => setPressedControl(false)}
+          style={styles.storyTapZone}
+        />
+      </View>
       <View style={styles.viewerContent}>
-        <View style={styles.viewerTextContainer}><Text style={styles.viewerText}>{item.text}</Text></View>
+        {item.text ? <View style={styles.viewerTextContainer}><Text style={styles.viewerText}>{item.text}</Text></View> : null}
       </View>
       <View style={styles.viewerFooter}>
-        <Pressable style={styles.viewerReply}><Ionicons name="chatbubble-outline" size={18} color="#fff" /><Text style={styles.viewerReplyText}>أرسل رداً مهنياً...</Text></Pressable>
+        <Pressable onPress={() => onReply?.(item)} style={styles.viewerReply}><Ionicons name="chatbubble-outline" size={18} color="#fff" /><Text style={styles.viewerReplyText}>أرسل رداً مهنياً...</Text></Pressable>
       </View>
     </View>
   );
@@ -1222,17 +1403,23 @@ const styles = StyleSheet.create({
   storyViewerList: { backgroundColor: colors.navy, flex: 1, height },
   storyViewerMedia: { ...StyleSheet.absoluteFillObject, height, width },
   storyViewerTrack: { minHeight: height },
-  storyProgressRail: { flexDirection: 'row-reverse', gap: 4, marginBottom: 16 },
-  storyProgressBar: { backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 999, flex: 1, height: 3, overflow: 'hidden' },
-  storyProgressFill: { backgroundColor: '#fff', height: '100%' },
-  storyViewerHeader: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between' },
+  storyProgressRail: { flexDirection: 'row-reverse', gap: 5, marginBottom: 12, zIndex: 4 },
+  storyProgressBar: { backgroundColor: 'rgba(255,255,255,0.24)', borderRadius: 999, flex: 1, height: 5, overflow: 'hidden' },
+  storyProgressBarActive: { backgroundColor: 'rgba(255,255,255,0.34)' },
+  storyProgressFill: { backgroundColor: '#fff', height: '100%', shadowColor: '#fff', shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 5 },
+  storyProgressFillComplete: { backgroundColor: 'rgba(255,255,255,0.92)' },
+  storyCounter: { alignItems: 'center', alignSelf: 'center', backgroundColor: 'rgba(15,23,42,0.38)', borderRadius: 999, marginBottom: 12, paddingHorizontal: 10, paddingVertical: 4, zIndex: 4 },
+  storyCounterText: { color: '#fff', fontSize: 11, fontWeight: '900' },
+  storyViewerHeader: { alignItems: 'center', flexDirection: 'row-reverse', justifyContent: 'space-between', zIndex: 4 },
+  storyTapLayer: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', zIndex: 3 },
+  storyTapZone: { flex: 1 },
   viewerAuthorName: { color: '#fff', fontSize: 14, fontWeight: '900' },
   viewerMeta: { color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: '700', marginTop: 2 },
   viewerClose: { padding: 4 },
-  viewerContent: { flex: 1, justifyContent: 'center' },
+  viewerContent: { flex: 1, justifyContent: 'center', zIndex: 2 },
   viewerTextContainer: { alignItems: 'center', justifyContent: 'center', padding: 24 },
   viewerText: { color: '#fff', fontSize: 24, fontWeight: '900', lineHeight: 36, textAlign: 'center' },
-  viewerFooter: { alignItems: 'center', borderTopColor: 'rgba(255,255,255,0.1)', borderTopWidth: 1, flexDirection: 'row-reverse', paddingVertical: 20, marginBottom: Platform.OS === 'ios' ? 30 : 10 },
+  viewerFooter: { alignItems: 'center', borderTopColor: 'rgba(255,255,255,0.1)', borderTopWidth: 1, flexDirection: 'row-reverse', paddingVertical: 20, marginBottom: Platform.OS === 'ios' ? 30 : 10, zIndex: 4 },
   viewerReply: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 999, flex: 1, flexDirection: 'row-reverse', gap: 8, height: 44, justifyContent: 'center', paddingHorizontal: 16 },
   viewerReplyText: { color: '#fff', fontSize: 13, fontWeight: '800' },
   composerInput: {
@@ -1378,6 +1565,7 @@ const styles = StyleSheet.create({
   storyCardTextOnly: { alignItems: 'center', backgroundColor: colors.navy, flex: 1, gap: 8, justifyContent: 'center', padding: 12 },
   storyCardTextOnlyText: { color: '#fff', fontSize: 12, fontWeight: '900', lineHeight: 18, textAlign: 'center' },
   storyCardVideo: { alignItems: 'center', backgroundColor: '#101828', flex: 1, justifyContent: 'center' },
+  storyVideoBadge: { ...StyleSheet.absoluteFillObject, alignItems: 'center', justifyContent: 'center', zIndex: 2 },
   storyComposer: { alignItems: 'center', flexDirection: 'row', gap: 8, marginTop: 10 },
   storyCoverImage: { borderRadius: 12, height: 70, marginBottom: 8, width: '100%' },
   storyInput: { backgroundColor: colors.tint, borderRadius: 999, color: colors.ink, flex: 1, minHeight: 42, paddingHorizontal: 12, textAlign: 'right' },
@@ -1406,6 +1594,7 @@ const styles = StyleSheet.create({
   topicPill: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   topicText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   videoPreview: { alignItems: 'center', backgroundColor: '#101828', flex: 1, justifyContent: 'center' },
+  videoPreviewShade: { ...StyleSheet.absoluteFillObject, alignItems: 'center', backgroundColor: 'rgba(15,23,42,0.26)', justifyContent: 'center' },
   videoPreviewText: { color: '#fff', fontSize: 13, fontWeight: '900', marginTop: 8 },
   viewerNotice: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 12, padding: 12 },
 });

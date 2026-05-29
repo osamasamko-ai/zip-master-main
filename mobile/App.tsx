@@ -209,7 +209,7 @@ function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKe
     case 'more':
       return <MoreScreen user={user} onOpen={setRoute} />;
     case 'feed':
-      return <FeedScreen />;
+      return <FeedScreen onOpen={setRoute} />;
     case 'legal':
       return <LegalDocsScreen />;
     case 'contract':
