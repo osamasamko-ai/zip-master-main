@@ -69,19 +69,22 @@ export function Heading({ title, subtitle }: { title: string; subtitle?: string 
 export function Button({
   title,
   onPress,
+  disabled,
   loading,
   variant = 'primary',
 }: {
   title: string;
   onPress: () => void;
+  disabled?: boolean;
   loading?: boolean;
   variant?: 'primary' | 'secondary';
 }) {
+  const isDisabled = Boolean(disabled || loading);
   return (
     <Pressable
-      disabled={loading}
+      disabled={isDisabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.button, variant === 'secondary' && styles.secondaryButton, pressed && !loading && styles.pressed]}
+      style={({ pressed }) => [styles.button, variant === 'secondary' && styles.secondaryButton, isDisabled && styles.disabledButton, pressed && !isDisabled && styles.pressed]}
     >
       {loading ? <ActivityIndicator color={variant === 'primary' ? '#fff' : colors.blue} /> : <Text style={[styles.buttonText, variant === 'secondary' && styles.secondaryButtonText]}>{title}</Text>}
     </Pressable>
@@ -310,6 +313,9 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.blueTint,
     elevation: 0,
     shadowOpacity: 0,
+  },
+  disabledButton: {
+    opacity: 0.45,
   },
   buttonText: {
     color: '#fff',

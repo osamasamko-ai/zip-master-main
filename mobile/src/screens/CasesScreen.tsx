@@ -77,6 +77,7 @@ export function CasesScreen() {
   const [collaboratorEmail, setCollaboratorEmail] = useState('');
   const [collaboratorName, setCollaboratorName] = useState('');
   const [selectedPaymentPlan, setSelectedPaymentPlan] = useState<1 | 2 | 3>(1);
+  const [paymentStatus, setPaymentStatus] = useState('');
 
   const load = async (preferredId?: string) => {
     setRefreshing(true);
@@ -389,12 +390,17 @@ export function CasesScreen() {
     if (!selectedCase) return;
     setLoading('casePayment');
     setStatus('');
+    setPaymentStatus('جارٍ إرسال الدفعة...');
     try {
       const response = await apiClient.payCaseInstallment(selectedCase.id, selectedPaymentPlan);
       if (response.data) replaceCase(response.data);
-      setStatus(response.message || 'تم تسجيل الدفعة بنجاح.');
+      const nextMessage = response.message || 'تم تسجيل الدفعة بنجاح.';
+      setStatus(nextMessage);
+      setPaymentStatus(nextMessage);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : 'تعذر تنفيذ الدفع.');
+      const nextMessage = error instanceof Error ? error.message : 'تعذر تنفيذ الدفع.';
+      setStatus(nextMessage);
+      setPaymentStatus(nextMessage);
     } finally {
       setLoading('');
     }
@@ -636,7 +642,7 @@ export function CasesScreen() {
                 const amount = plan.installments === 1 ? due : Math.ceil(due / plan.installments);
                 const active = selectedPaymentPlan === plan.installments;
                 return (
-                  <Pressable key={plan.installments} onPress={() => setSelectedPaymentPlan(plan.installments)} style={[styles.paymentPlanCard, active && styles.paymentPlanCardActive]}>
+                  <Pressable key={plan.installments} onPress={() => { setSelectedPaymentPlan(plan.installments); setPaymentStatus(''); }} style={[styles.paymentPlanCard, active && styles.paymentPlanCardActive]}>
                     <Text style={[styles.paymentPlanTitle, active && styles.paymentPlanTextActive]}>{plan.title}</Text>
                     <Text style={[styles.paymentPlanAmount, active && styles.paymentPlanTextActive]}>{formatValue(amount)} د.ع</Text>
                     <Text style={[styles.paymentPlanNote, active && styles.paymentPlanTextActive]}>{plan.note}</Text>
@@ -648,7 +654,8 @@ export function CasesScreen() {
               <Text style={styles.infoValue}>{formatValue(currentInstallmentAmount)} د.ع</Text>
               <Text style={styles.infoLabel}>{currentPlan.installments === 1 ? 'سيتم سداد المتبقي بالكامل' : `دفعة حالية ضمن خطة ${currentPlan.title}`}</Text>
             </View>
-            <Button title={loading === 'casePayment' ? 'جارٍ الدفع...' : 'ادفع من المحفظة'} onPress={paySelectedInstallment} loading={loading === 'casePayment'} />
+            {paymentStatus ? <Text style={[styles.paymentStatus, paymentStatus.includes('تعذر') || paymentStatus.includes('غير') || paymentStatus.includes('فشل') ? styles.paymentStatusError : styles.paymentStatusSuccess]}>{paymentStatus}</Text> : null}
+            <Button title={loading === 'casePayment' ? 'جارٍ الدفع...' : 'ادفع من المحفظة'} onPress={paySelectedInstallment} loading={loading === 'casePayment'} disabled={currentInstallmentAmount <= 0} />
           </View>
         ) : (
           <View style={styles.paymentComplete}>
@@ -1310,6 +1317,19 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     marginVertical: 10,
     padding: 12,
+  },
+  paymentStatus: {
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 19,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  paymentStatusError: {
+    color: colors.red,
+  },
+  paymentStatusSuccess: {
+    color: colors.navy,
   },
   primaryTiny: {
     alignItems: 'center',
