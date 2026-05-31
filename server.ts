@@ -117,6 +117,7 @@ import {
   getCaseWorkspace,
   getLawyerWorkspace,
   getProWorkspace,
+  requestProWithdrawal,
   moveCaseDocuments,
   removeCaseCollaborator,
   signCaseDocument,
@@ -1367,6 +1368,20 @@ async function startServer() {
     } catch (error) {
       console.error('Pro workspace error:', error);
       res.status(500).json({ error: 'Failed to fetch pro workspace' });
+    }
+  });
+
+  app.post('/api/app/pro/workspace/withdrawals', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const data = await requestProWithdrawal(currentUser.userId, {
+        amount: Number(req.body.amount),
+        payoutMethod: req.body.payoutMethod,
+      });
+      res.json({ data, message: 'تم تنفيذ طلب السحب بنجاح.' });
+    } catch (error) {
+      console.error('Pro withdrawal error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر تنفيذ السحب.' });
     }
   });
 

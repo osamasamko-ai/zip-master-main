@@ -366,6 +366,10 @@ export default function ProDashboard() {
   const [vaultDocs, setVaultDocs] = useState<VaultDoc[]>([]);
   const [caseTimeline, setCaseTimeline] = useState<CaseTimelineEntry[]>([]);
   const [deadlineReminders, setDeadlineReminders] = useState<DeadlineReminder[]>([]);
+  const [withdrawAmount, setWithdrawAmount] = useState(0);
+  const [selectedPayoutMethod, setSelectedPayoutMethod] = useState('');
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawStatus, setWithdrawStatus] = useState('');
 
   const fetchWorkspaceData = async (showLoader = false) => {
     if (showLoader) {
@@ -619,6 +623,11 @@ export default function ProDashboard() {
   const reviewCount = summary?.reviewCount ?? 0;
   const ratingValue = summary?.rating ?? 0;
   const subscriptionTier = summary?.subscriptionTier ?? 'basic';
+
+  useEffect(() => {
+    const recommendedMethod = summary?.payoutMethods.find((method) => method.recommended) || summary?.payoutMethods[0];
+    setSelectedPayoutMethod((current) => current || recommendedMethod?.label || '');
+  }, [summary?.payoutMethods]);
 
   const searchableCases = cases.filter(caseItem => {
     const query = workspaceSearch.trim().toLowerCase();
@@ -1143,8 +1152,36 @@ export default function ProDashboard() {
       return;
     }
     setActiveTab('earnings');
+    setWithdrawAmount(availableToWithdraw);
+    setWithdrawStatus('');
     setQuickActionNote(`طلب السحب جاهز للمراجعة بقيمة ${availableToWithdraw.toLocaleString()} د.ع.`);
     showToast('طلب السحب جاهز', 'راجع وسيلة التحويل ثم أكد الطلب من قسم الأرباح.');
+  };
+
+  const confirmWithdrawal = async () => {
+    if (withdrawAmount <= 0) {
+      showToast('لا يوجد مبلغ محدد', 'اختر مبلغ السحب أولاً.');
+      return;
+    }
+
+    setIsWithdrawing(true);
+    setWithdrawStatus('جارٍ تنفيذ طلب السحب...');
+    try {
+      const response = await apiClient.requestProWithdrawal({
+        amount: withdrawAmount,
+        payoutMethod: selectedPayoutMethod || summary?.payoutMethods[0]?.label,
+      });
+      applyWorkspaceData(response.data);
+      setWithdrawAmount(0);
+      setWithdrawStatus(response.message || 'تم تنفيذ طلب السحب بنجاح.');
+      showToast('تم تنفيذ السحب', `${withdrawAmount.toLocaleString()} د.ع تم تسجيلها في سجل المعاملات.`);
+    } catch (error: any) {
+      const message = error.response?.data?.error || error.message || 'تعذر تنفيذ السحب.';
+      setWithdrawStatus(message);
+      showToast('تعذر تنفيذ السحب', message);
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
   const handleOpenVaultDocument = () => {
@@ -2236,26 +2273,49 @@ export default function ProDashboard() {
                           showToast('لا يوجد رصيد متاح', 'لا يمكن تجهيز طلب سحب بقيمة صفر.');
                           return;
                         }
+                        setWithdrawAmount(amount);
+                        setWithdrawStatus('');
                         setQuickActionNote(`تم اختيار مبلغ سحب: ${amount.toLocaleString()} د.ع.`);
-                        showToast('تم اختيار مبلغ السحب', `${amount.toLocaleString()} د.ع جاهزة للمراجعة قبل الإرسال.`);
+                        showToast('تم اختيار مبلغ السحب', `${amount.toLocaleString()} د.ع جاهزة للتأكيد.`);
                       }}
-                      className="rounded-2xl border border-gray-200 bg-gray-50 px-4 py-4 text-center text-sm font-bold text-brand-dark transition hover:border-brand-navy hover:bg-white"
+                      className={`rounded-2xl border px-4 py-4 text-center text-sm font-bold transition ${withdrawAmount === amount ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/10' : 'border-gray-200 bg-gray-50 text-brand-dark hover:border-brand-navy hover:bg-white'}`}
                     >
                       {amount.toLocaleString()} د.ع
                     </button>
                   );
                 })}
               </div>
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
-                <span className="font-bold text-brand-dark">ملاحظة:</span> تم تجهيز واجهة السحب لتكون مباشرة وواضحة. تنفيذ التحويل الفعلي ما يزال يحتاج نقطة API مخصصة للسحب حتى لا يتم عرض حركة مالية غير حقيقية.
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-right">
+                <p className="text-[11px] font-black text-slate-400">مبلغ السحب المحدد</p>
+                <p className="mt-1 text-2xl font-black text-brand-dark">{withdrawAmount.toLocaleString()} د.ع</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">سيتم خصمه من الأرباح المتاحة وتسجيله في سجل المعاملات.</p>
               </div>
+              {withdrawStatus ? (
+                <p className={`rounded-2xl px-4 py-3 text-center text-xs font-black ${withdrawStatus.includes('تعذر') || withdrawStatus.includes('غير') ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-brand-navy'}`}>
+                  {withdrawStatus}
+                </p>
+              ) : null}
+              <ActionButton
+                variant="primary"
+                className="w-full"
+                onClick={confirmWithdrawal}
+                disabled={isWithdrawing || withdrawAmount <= 0 || availableToWithdraw <= 0}
+              >
+                <i className="fa-solid fa-money-bill-transfer"></i>
+                {isWithdrawing ? 'جارٍ تنفيذ السحب...' : 'تأكيد السحب'}
+              </ActionButton>
             </div>
 
             <div className="rounded-3xl border border-slate-200 bg-slate-50 p-4">
               <h4 className="text-sm font-black text-brand-dark">وسائل التحويل</h4>
               <div className="mt-4 space-y-3">
                 {(summary?.payoutMethods || []).map((method) => (
-                  <div key={method.id} className="rounded-2xl border border-white bg-white px-4 py-4 text-right shadow-sm">
+                  <button
+                    key={method.id}
+                    type="button"
+                    onClick={() => setSelectedPayoutMethod(method.label)}
+                    className={`w-full rounded-2xl border px-4 py-4 text-right shadow-sm transition ${selectedPayoutMethod === method.label ? 'border-brand-navy bg-white ring-2 ring-brand-navy/10' : 'border-white bg-white hover:border-brand-navy/30'}`}
+                  >
                     <div className="flex items-center justify-between gap-3">
                       {method.recommended && (
                         <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700">مفضلة</span>
@@ -2265,7 +2325,7 @@ export default function ProDashboard() {
                         <p className="mt-1 text-xs font-bold text-slate-500">{method.value}</p>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>

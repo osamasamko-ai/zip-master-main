@@ -77,7 +77,7 @@ interface CaseTimelineEvent {
   date: string;
   title: string;
   detail: string;
-  type: 'hearing' | 'filing' | 'meeting' | 'system';
+  type: 'hearing' | 'filing' | 'meeting' | 'system' | 'billing';
 }
 
 interface CaseFinancials {
@@ -116,6 +116,12 @@ interface AvailableLawyer {
 }
 
 const QUICK_REPLIES = ['نعم، أوافق على ذلك', 'هل هناك تحديث جديد؟', 'تم تجهيز المستندات', 'أحتاج توضيحاً أكثر'];
+
+const PAYMENT_PLANS: Array<{ installments: 1 | 2 | 3; title: string; note: string; icon: string }> = [
+  { installments: 1, title: 'دفع كامل', note: 'سداد المتبقي مرة واحدة', icon: 'fa-circle-check' },
+  { installments: 2, title: 'دفعتان', note: 'تقسيم المتبقي على مرتين', icon: 'fa-circle-half-stroke' },
+  { installments: 3, title: 'ثلاث دفعات', note: 'تقسيم المتبقي على ثلاث مرات', icon: 'fa-layer-group' },
+];
 
 const CASE_TYPES = [
   { id: 'civil', label: 'مدنية' },
@@ -220,6 +226,7 @@ const getTimelineEventMeta = (type: CaseTimelineEvent['type']) => {
   if (type === 'hearing') return { label: 'جلسة', icon: 'fa-building-columns', tone: 'bg-red-50 text-red-700 border-red-100' };
   if (type === 'filing') return { label: 'إيداع', icon: 'fa-file-circle-check', tone: 'bg-blue-50 text-blue-700 border-blue-100' };
   if (type === 'meeting') return { label: 'اجتماع', icon: 'fa-handshake', tone: 'bg-amber-50 text-amber-700 border-amber-100' };
+  if (type === 'billing') return { label: 'دفعة', icon: 'fa-wallet', tone: 'bg-emerald-50 text-emerald-700 border-emerald-100' };
   return { label: 'تحديث', icon: 'fa-circle-info', tone: 'bg-slate-100 text-slate-600 border-slate-200' };
 };
 
@@ -852,78 +859,188 @@ const SummaryTab = ({
   );
 };
 
-const FinancialsTab = ({ activeCase }: { activeCase: LegalCase }) => (
-  <div className="flex-1 overflow-y-auto p-5 bg-slate-50/30 space-y-6 custom-scrollbar">
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm text-center">
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">إجمالي الأتعاب</p>
-        <p className="text-2xl font-black text-brand-dark">{activeCase.financials.totalAgreed.toLocaleString()} د.ع</p>
-      </div>
-      <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 shadow-sm text-center">
-        <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">المبلغ المسدد</p>
-        <p className="text-2xl font-black text-emerald-700">{activeCase.financials.paid.toLocaleString()} د.ع</p>
-      </div>
-      <div className="bg-amber-50 p-6 rounded-[2rem] border border-amber-100 shadow-sm text-center">
-        <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">المتبقي</p>
-        <p className="text-2xl font-black text-amber-700">{(activeCase.financials.totalAgreed - activeCase.financials.paid).toLocaleString()} د.ع</p>
-        <div className="w-full bg-amber-200/30 h-1.5 rounded-full mt-4 overflow-hidden">
-          <div
-            className="bg-amber-500 h-full rounded-full transition-all duration-1000"
-            style={{ width: `${(activeCase.financials.paid / activeCase.financials.totalAgreed) * 100}%` }}
-          ></div>
+const FinancialsTab = ({
+  activeCase,
+  isReadOnlyView,
+  onCaseUpdated,
+}: {
+  activeCase: LegalCase;
+  isReadOnlyView: boolean;
+  onCaseUpdated: (nextCase: LegalCase) => void;
+}) => {
+  const [selectedPaymentPlan, setSelectedPaymentPlan] = useState<1 | 2 | 3>(1);
+  const [isPaying, setIsPaying] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState('');
+  const remainingBalance = Math.max(0, activeCase.financials.totalAgreed - activeCase.financials.paid);
+  const paidPercent = activeCase.financials.totalAgreed > 0
+    ? Math.min(100, Math.round((activeCase.financials.paid / activeCase.financials.totalAgreed) * 100))
+    : 0;
+  const selectedPlan = PAYMENT_PLANS.find((plan) => plan.installments === selectedPaymentPlan) || PAYMENT_PLANS[0];
+  const installmentAmount = remainingBalance <= 0
+    ? 0
+    : selectedPaymentPlan === 1
+      ? remainingBalance
+      : Math.ceil(remainingBalance / selectedPaymentPlan);
+
+  const handlePayment = async () => {
+    if (isReadOnlyView || installmentAmount <= 0) return;
+    setIsPaying(true);
+    setPaymentStatus('جارٍ إرسال الدفعة...');
+    try {
+      const response = await apiClient.payCaseInstallment(activeCase.id, selectedPaymentPlan);
+      if (response.data) {
+        onCaseUpdated(response.data);
+      }
+      setPaymentStatus(response.message || 'تم تسجيل الدفعة بنجاح.');
+    } catch (error: any) {
+      setPaymentStatus(error.response?.data?.error || error.message || 'تعذر تنفيذ الدفع.');
+    } finally {
+      setIsPaying(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 overflow-y-auto p-5 bg-slate-50/30 space-y-6 custom-scrollbar">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm text-center">
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">إجمالي الأتعاب</p>
+          <p className="text-2xl font-black text-brand-dark">{activeCase.financials.totalAgreed.toLocaleString()} د.ع</p>
+        </div>
+        <div className="bg-emerald-50 p-6 rounded-[2rem] border border-emerald-100 shadow-sm text-center">
+          <p className="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">المبلغ المسدد</p>
+          <p className="text-2xl font-black text-emerald-700">{activeCase.financials.paid.toLocaleString()} د.ع</p>
+        </div>
+        <div className="bg-amber-50 p-6 rounded-[2rem] border border-amber-100 shadow-sm text-center">
+          <p className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-1">المتبقي</p>
+          <p className="text-2xl font-black text-amber-700">{remainingBalance.toLocaleString()} د.ع</p>
+          <div className="w-full bg-amber-200/30 h-1.5 rounded-full mt-4 overflow-hidden">
+            <div className="bg-amber-500 h-full rounded-full transition-all duration-1000" style={{ width: `${paidPercent}%` }}></div>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm md:col-span-3 xl:col-span-2">
+          <div className="flex flex-col gap-2 text-right sm:flex-row sm:flex-row-reverse sm:items-start sm:justify-between">
+            <div>
+              <h4 className="text-lg font-black text-brand-dark flex items-center justify-end gap-2">
+                <i className="fa-solid fa-wallet text-brand-gold"></i> طرق دفع القضية
+              </h4>
+              <p className="mt-2 text-xs font-bold leading-6 text-slate-500">اختر السداد الكامل أو قسّم المتبقي على دفعتين أو ثلاث دفعات من المحفظة.</p>
+            </div>
+            {remainingBalance <= 0 ? (
+              <span className="inline-flex items-center justify-center gap-2 rounded-full bg-emerald-50 px-4 py-2 text-[11px] font-black text-emerald-700">
+                <i className="fa-solid fa-circle-check"></i>
+                مسددة بالكامل
+              </span>
+            ) : null}
+          </div>
+
+          {remainingBalance > 0 ? (
+            <>
+              <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+                {PAYMENT_PLANS.map((plan) => {
+                  const amount = plan.installments === 1 ? remainingBalance : Math.ceil(remainingBalance / plan.installments);
+                  const active = selectedPaymentPlan === plan.installments;
+                  return (
+                    <button
+                      key={plan.installments}
+                      type="button"
+                      onClick={() => {
+                        setSelectedPaymentPlan(plan.installments);
+                        setPaymentStatus('');
+                      }}
+                      className={`rounded-2xl border p-4 text-right transition-all ${active ? 'border-brand-navy bg-brand-navy text-white shadow-lg shadow-brand-navy/10' : 'border-slate-100 bg-slate-50 text-brand-dark hover:border-brand-navy/30 hover:bg-white'}`}
+                    >
+                      <i className={`fa-solid ${plan.icon} text-sm ${active ? 'text-brand-gold' : 'text-brand-navy'}`}></i>
+                      <p className="mt-3 text-sm font-black">{plan.title}</p>
+                      <p className={`mt-2 text-lg font-black ${active ? 'text-white' : 'text-brand-navy'}`}>{amount.toLocaleString()} د.ع</p>
+                      <p className={`mt-2 text-[11px] font-bold leading-5 ${active ? 'text-blue-100' : 'text-slate-500'}`}>{plan.note}</p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-slate-100 bg-slate-50 p-4 text-right">
+                <p className="text-[11px] font-black text-slate-400">الدفعة الحالية</p>
+                <p className="mt-1 text-2xl font-black text-brand-dark">{installmentAmount.toLocaleString()} د.ع</p>
+                <p className="mt-1 text-xs font-bold text-slate-500">
+                  {selectedPlan.installments === 1 ? 'سيتم سداد المتبقي بالكامل.' : `دفعة حالية ضمن خطة ${selectedPlan.title}.`}
+                </p>
+              </div>
+
+              {paymentStatus ? (
+                <p className={`mt-4 rounded-2xl px-4 py-3 text-center text-xs font-black ${paymentStatus.includes('تعذر') || paymentStatus.includes('غير') || paymentStatus.includes('فشل') ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-brand-navy'}`}>
+                  {paymentStatus}
+                </p>
+              ) : null}
+
+              {!isReadOnlyView ? (
+                <ActionButton onClick={handlePayment} disabled={isPaying || installmentAmount <= 0} variant="primary" className="mt-4 w-full">
+                  <i className="fa-solid fa-wallet"></i>
+                  {isPaying ? 'جارٍ الدفع...' : 'ادفع من المحفظة'}
+                </ActionButton>
+              ) : null}
+            </>
+          ) : (
+            <div className="mt-6 rounded-2xl border border-emerald-100 bg-emerald-50 p-5 text-center text-sm font-black text-emerald-700">
+              تم سداد هذه القضية بالكامل.
+            </div>
+          )}
+        </div>
+
+        <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
+          <h4 className="text-lg font-black text-brand-dark mb-6 flex items-center gap-2">
+            <i className="fa-solid fa-user-shield text-emerald-500"></i> سجل الوصول (Audit)
+          </h4>
+          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+            {activeCase.accessLogs?.map((log) => (
+              <div key={log.id} className="flex flex-row-reverse items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+                <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-brand-navy">
+                  <i className="fa-solid fa-eye text-xs"></i>
+                </div>
+                <div className="text-right flex-1 min-w-0">
+                  <p className="text-xs font-black text-brand-dark truncate">{log.userName}</p>
+                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">{log.action} • {log.time}</p>
+                </div>
+              </div>
+            )) || <p className="text-center text-xs text-slate-400 py-10 font-bold">لا توجد سجلات دخول حتى الآن</p>}
+          </div>
         </div>
       </div>
 
       <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
-        <h4 className="text-lg font-black text-brand-dark mb-6 flex items-center gap-2">
-          <i className="fa-solid fa-user-shield text-emerald-500"></i> سجل الوصول (Audit)
-        </h4>
-        <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
-          {activeCase.accessLogs?.map((log) => (
-            <div key={log.id} className="flex flex-row-reverse items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="w-8 h-8 rounded-lg bg-white shadow-sm flex items-center justify-center text-brand-navy">
-                <i className="fa-solid fa-eye text-xs"></i>
+        <div className="flex justify-between items-center mb-6">
+          <h4 className="text-lg font-black text-brand-dark flex items-center gap-2">
+            <i className="fa-solid fa-file-invoice-dollar text-brand-navy"></i> سجل الفواتير
+          </h4>
+        </div>
+        <div className="space-y-3">
+          {activeCase.financials.invoices.length === 0 ? (
+            <EmptyState icon="file-invoice-dollar" title="لا توجد فواتير بعد" description="عند تنفيذ أول دفعة ستظهر هنا تفاصيل الفاتورة والحالة." />
+          ) : (
+            activeCase.financials.invoices.map((inv) => (
+              <div key={inv.id} className="flex items-center justify-between p-5 rounded-2xl border border-slate-50 bg-slate-50/50 hover:bg-white transition-all group">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-brand-navy">
+                    <i className="fa-solid fa-money-check-dollar"></i>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-black text-brand-dark">فاتورة رقم {inv.id}</p>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1">{inv.date}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-6">
+                  <p className="text-sm font-black text-brand-dark">{inv.amount.toLocaleString()} د.ع</p>
+                  <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>{inv.status === 'paid' ? 'تم التسديد' : 'معلقة'}</span>
+                  <button className="text-slate-300 group-hover:text-brand-navy transition"><i className="fa-solid fa-download"></i></button>
+                </div>
               </div>
-              <div className="text-right flex-1 min-w-0">
-                <p className="text-xs font-black text-brand-dark truncate">{log.userName}</p>
-                <p className="text-[10px] font-bold text-slate-400 mt-0.5">{log.action} • {log.time}</p>
-              </div>
-            </div>
-          )) || <p className="text-center text-xs text-slate-400 py-10 font-bold">لا توجد سجلات دخول حتى الآن</p>}
+            ))
+          )}
         </div>
       </div>
     </div>
-
-    <div className="bg-white rounded-[2.5rem] border border-slate-100 p-8 shadow-sm">
-      <div className="flex justify-between items-center mb-6">
-        <h4 className="text-lg font-black text-brand-dark flex items-center gap-2">
-          <i className="fa-solid fa-file-invoice-dollar text-brand-navy"></i> سجل الفواتير
-        </h4>
-        <button className="text-[10px] font-black bg-slate-50 text-brand-navy px-4 py-2 rounded-xl border border-slate-200">طلب دفعة جديدة</button>
-      </div>
-      <div className="space-y-3">
-        {activeCase.financials.invoices.map((inv) => (
-          <div key={inv.id} className="flex items-center justify-between p-5 rounded-2xl border border-slate-50 bg-slate-50/50 hover:bg-white transition-all group">
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-brand-navy">
-                <i className="fa-solid fa-money-check-dollar"></i>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-black text-brand-dark">فاتورة رقم {inv.id}</p>
-                <p className="text-[10px] font-bold text-slate-400 mt-1">{inv.date}</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-6">
-              <p className="text-sm font-black text-brand-dark">{inv.amount.toLocaleString()} د.ع</p>
-              <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>{inv.status === 'paid' ? 'تم التسديد' : 'معلقة'}</span>
-              <button className="text-slate-300 group-hover:text-brand-navy transition"><i className="fa-solid fa-download"></i></button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  </div>
-);
+  );
+};
 
 const ResolutionTab = ({
   activeCase,
@@ -2565,7 +2682,7 @@ export default function MyCases() {
                       isReadOnlyView={isReadOnlyView}
                     />
                   ) : activeTab === 'financials' ? (
-                    <FinancialsTab activeCase={activeCase} />
+                    <FinancialsTab activeCase={activeCase} isReadOnlyView={isReadOnlyView} onCaseUpdated={replaceCaseInState} />
                   ) : (
                     <ResolutionTab
                       activeCase={activeCase}

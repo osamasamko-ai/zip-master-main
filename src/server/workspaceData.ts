@@ -1212,6 +1212,69 @@ export async function getProWorkspace(lawyerId: string) {
   };
 }
 
+export async function requestProWithdrawal(lawyerId: string, payload: { amount: number; payoutMethod?: string }) {
+  const amount = Number(payload.amount);
+  const payoutMethod = String(payload.payoutMethod || 'وسيلة السحب الافتراضية').trim();
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('أدخل مبلغ سحب صحيح.');
+  }
+
+  const lawyer = await prisma.user.findFirst({
+    where: {
+      id: lawyerId,
+      role: { in: ['pro', 'admin'] },
+    },
+    select: {
+      id: true,
+      name: true,
+      accountBalance: true,
+    },
+  });
+
+  if (!lawyer) {
+    throw new Error('السحب متاح لحسابات المحامين فقط.');
+  }
+
+  if (lawyer.accountBalance < amount) {
+    throw new Error('رصيدك المتاح غير كافٍ لهذا السحب.');
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: lawyerId },
+      data: {
+        accountBalance: {
+          decrement: amount,
+        },
+      },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId: lawyerId,
+        amount,
+        label: `سحب أرباح - ${lawyer.name}`,
+        source: payoutMethod,
+        type: 'debit',
+        status: 'completed',
+      },
+    });
+
+    await tx.activityLog.create({
+      data: {
+        userId: lawyerId,
+        title: 'تم تنفيذ طلب سحب',
+        description: `تم سحب ${formatCurrencyAmount(amount)} عبر ${payoutMethod}.`,
+        type: 'billing',
+        timeLabel: 'الآن',
+      },
+    });
+  });
+
+  return getProWorkspace(lawyerId);
+}
+
 export async function createProAppointment(lawyerId: string, payload: { title: string; time: string; client: string; type: string; caseId?: string | null }) {
   await prisma.appointment.create({
     data: {

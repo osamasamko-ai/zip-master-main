@@ -236,6 +236,11 @@ class ApiClient {
         return response.data;
     }
 
+    async payCaseInstallment(caseId: string, installments: 1 | 2 | 3): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/workspace/cases/${caseId}/payments`, { installments });
+        return response.data;
+    }
+
     async signCaseDocument(caseId: string, documentId: string): Promise<ApiResponse<any>> {
         const response = await this.client.post(`/api/app/workspace/cases/${caseId}/documents/${documentId}/sign`);
         return response.data;
@@ -258,6 +263,11 @@ class ApiClient {
 
     async getProWorkspace(): Promise<ApiResponse<any>> {
         const response = await this.client.get('/api/app/pro/workspace');
+        return response.data;
+    }
+
+    async requestProWithdrawal(data: { amount: number; payoutMethod?: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/app/pro/workspace/withdrawals', data);
         return response.data;
     }
 
