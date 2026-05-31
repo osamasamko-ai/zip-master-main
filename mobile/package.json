@@ -2,7 +2,7 @@
   "name": "qistas-mobile",
   "version": "0.1.0",
   "private": true,
-  "main": "node_modules/expo/AppEntry.js",
+  "main": "index.ts",
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
@@ -21,6 +21,7 @@
     "doctor": "^0.1.26",
     "expo": "^56.0.6",
     "expo-asset": "^56.0.15",
+    "expo-document-picker": "^56.0.4",
     "expo-font": "~13.0.4",
     "expo-haptics": "~56.0.3",
     "expo-image": "~56.0.9",
