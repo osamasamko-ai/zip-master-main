@@ -654,6 +654,122 @@ export async function getCaseWorkspace(caseId: string) {
   return mapWorkspaceCase(item);
 }
 
+export async function payCaseInstallment(userId: string, caseId: string, installments: number) {
+  if (![1, 2, 3].includes(installments)) {
+    throw new Error('اختر الدفع مرة واحدة أو على دفعتين أو ثلاث دفعات.');
+  }
+
+  const existingCase = await prisma.case.findUnique({
+    where: { id: caseId },
+    include: {
+      client: { select: { id: true, accountBalance: true, name: true } },
+      lawyer: { select: { id: true, name: true } },
+      invoices: true,
+    },
+  });
+
+  if (!existingCase || existingCase.clientId !== userId) {
+    throw new Error('القضية غير متاحة لهذا الحساب.');
+  }
+
+  const total = Number(existingCase.totalAgreedFee || 0);
+  const paid = Number(existingCase.paidAmount || 0);
+  const due = Math.max(0, total - paid);
+
+  if (total <= 0) {
+    throw new Error('لا يوجد مبلغ متفق عليه لهذه القضية.');
+  }
+
+  if (due <= 0) {
+    throw new Error('تم سداد هذه القضية بالكامل.');
+  }
+
+  const installmentAmount = Math.min(due, installments === 1 ? due : Math.ceil(due / installments));
+
+  if (existingCase.client.accountBalance < installmentAmount) {
+    throw new Error('رصيد المحفظة غير كافٍ. اشحن الرصيد ثم حاول مرة أخرى.');
+  }
+
+  const paidCaseInvoices = existingCase.invoices.filter((invoice) => invoice.status === 'paid').length;
+  const installmentLabel = installments === 1
+    ? `سداد كامل - ${existingCase.title}`
+    : `دفعة ${paidCaseInvoices + 1} من ${installments} - ${existingCase.title}`;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { accountBalance: { decrement: installmentAmount } },
+    });
+
+    await tx.user.update({
+      where: { id: existingCase.lawyerId },
+      data: { accountBalance: { increment: installmentAmount } },
+    });
+
+    await tx.case.update({
+      where: { id: caseId },
+      data: {
+        paidAmount: { increment: installmentAmount },
+        status: paid + installmentAmount >= total ? 'active' : existingCase.status,
+      },
+    });
+
+    await tx.invoice.create({
+      data: {
+        userId,
+        caseId,
+        label: installmentLabel,
+        amount: formatCurrencyAmount(installmentAmount),
+        dateLabel: 'اليوم',
+        status: 'paid',
+      },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId,
+        amount: installmentAmount,
+        label: installmentLabel,
+        source: 'Wallet',
+        type: 'debit',
+        status: 'completed',
+      },
+    });
+
+    await tx.transaction.create({
+      data: {
+        userId: existingCase.lawyerId,
+        amount: installmentAmount,
+        label: `تحصيل قضية - ${existingCase.title}`,
+        source: 'Wallet',
+        type: 'credit',
+        status: 'completed',
+      },
+    });
+
+    await tx.caseTimelineEntry.create({
+      data: {
+        caseId,
+        dateLabel: 'اليوم',
+        title: 'تسجيل دفعة',
+        detail: `تم دفع ${formatCurrencyAmount(installmentAmount)} من محفظة العميل.`,
+        type: 'billing',
+      },
+    });
+
+    await tx.caseAccessLog.create({
+      data: {
+        caseId,
+        userName: existingCase.client.name || 'العميل',
+        action: `دفع ${formatCurrencyAmount(installmentAmount)}`,
+        timeLabel: 'الآن',
+      },
+    });
+  });
+
+  return getCaseWorkspace(caseId);
+}
+
 export async function toggleCaseArchive(caseId: string) {
   const current = await prisma.case.findUnique({ where: { id: caseId } });
   if (!current) return null;

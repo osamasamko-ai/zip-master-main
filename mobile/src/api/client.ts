@@ -338,6 +338,13 @@ class ApiClient {
     });
   }
 
+  payCaseInstallment(caseId: string, installments: 1 | 2 | 3) {
+    return this.request<any>(`/api/app/workspace/cases/${caseId}/payments`, {
+      method: 'POST',
+      body: JSON.stringify({ installments }),
+    });
+  }
+
   signCaseDocument(caseId: string, documentId: string) {
     return this.request<any>(`/api/app/workspace/cases/${caseId}/documents/${documentId}/sign`, {
       method: 'POST',

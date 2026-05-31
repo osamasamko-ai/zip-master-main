@@ -124,6 +124,7 @@ import {
   clearDocumentAction,
   finalizeContract,
   startLawyerConsultation,
+  payCaseInstallment,
   toggleCaseArchive,
   updateCaseProgress,
   markCaseMessagesAsRead,
@@ -1071,6 +1072,17 @@ async function startServer() {
     } catch (error) {
       console.error('Create workspace case error:', error);
       res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر إنشاء القضية.' });
+    }
+  });
+
+  app.post('/api/app/workspace/cases/:id/payments', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const data = await payCaseInstallment(currentUser.userId, req.params.id, Number(req.body.installments));
+      res.json({ data, message: 'تم تسجيل الدفعة بنجاح.' });
+    } catch (error) {
+      console.error('Case payment error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر تنفيذ الدفع.' });
     }
   });
 

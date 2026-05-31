@@ -42,6 +42,11 @@ const caseTypes = [
 ];
 
 const quickReplies = ['هل هناك تحديث جديد؟', 'تم تجهيز المستندات', 'أحتاج توضيحاً أكثر', 'نعم، أوافق على ذلك'];
+const paymentPlans: Array<{ installments: 1 | 2 | 3; title: string; note: string }> = [
+  { installments: 1, title: 'دفع كامل', note: 'سداد المتبقي مرة واحدة' },
+  { installments: 2, title: 'دفعتان', note: 'تقسيم المتبقي على مرتين' },
+  { installments: 3, title: 'ثلاث دفعات', note: 'تقسيم المتبقي على ثلاث مرات' },
+];
 
 export function CasesScreen() {
   const [cases, setCases] = useState<any[]>([]);
@@ -71,6 +76,7 @@ export function CasesScreen() {
   const [docType, setDocType] = useState('pdf');
   const [collaboratorEmail, setCollaboratorEmail] = useState('');
   const [collaboratorName, setCollaboratorName] = useState('');
+  const [selectedPaymentPlan, setSelectedPaymentPlan] = useState<1 | 2 | 3>(1);
 
   const load = async (preferredId?: string) => {
     setRefreshing(true);
@@ -379,6 +385,21 @@ export function CasesScreen() {
     setModal('document');
   };
 
+  const paySelectedInstallment = async () => {
+    if (!selectedCase) return;
+    setLoading('casePayment');
+    setStatus('');
+    try {
+      const response = await apiClient.payCaseInstallment(selectedCase.id, selectedPaymentPlan);
+      if (response.data) replaceCase(response.data);
+      setStatus(response.message || 'تم تسجيل الدفعة بنجاح.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'تعذر تنفيذ الدفع.');
+    } finally {
+      setLoading('');
+    }
+  };
+
   const statusTone = selectedCase?.status === 'closed' ? 'green' : selectedCase?.status === 'pending' ? 'gold' : selectedCase?.status === 'review' ? 'blue' : 'neutral';
 
   return (
@@ -592,6 +613,8 @@ export function CasesScreen() {
     const total = financials.totalAgreed || 0;
     const paid = financials.paid || 0;
     const due = Math.max(0, total - paid);
+    const currentPlan = paymentPlans.find((plan) => plan.installments === selectedPaymentPlan) || paymentPlans[0];
+    const currentInstallmentAmount = due <= 0 ? 0 : selectedPaymentPlan === 1 ? due : Math.ceil(due / selectedPaymentPlan);
     return (
       <Section title="المالية">
         <View style={styles.insightGrid}>
@@ -599,6 +622,40 @@ export function CasesScreen() {
           <Stat label="المدفوع" value={paid} tone="green" />
           <Stat label="المتبقي" value={due} tone={due > 0 ? 'gold' : 'green'} />
         </View>
+        {due > 0 ? (
+          <View style={styles.paymentPlanner}>
+            <View style={styles.rowBetween}>
+              <Ionicons name="wallet-outline" size={22} color={colors.gold} />
+              <View style={styles.flex}>
+                <Text style={styles.cardTitle}>طرق دفع القضية</Text>
+                <Text style={styles.mutedText}>اختر السداد الكامل أو قسّم المتبقي على دفعتين أو ثلاث دفعات من المحفظة.</Text>
+              </View>
+            </View>
+            <View style={styles.paymentPlanGrid}>
+              {paymentPlans.map((plan) => {
+                const amount = plan.installments === 1 ? due : Math.ceil(due / plan.installments);
+                const active = selectedPaymentPlan === plan.installments;
+                return (
+                  <Pressable key={plan.installments} onPress={() => setSelectedPaymentPlan(plan.installments)} style={[styles.paymentPlanCard, active && styles.paymentPlanCardActive]}>
+                    <Text style={[styles.paymentPlanTitle, active && styles.paymentPlanTextActive]}>{plan.title}</Text>
+                    <Text style={[styles.paymentPlanAmount, active && styles.paymentPlanTextActive]}>{formatValue(amount)} د.ع</Text>
+                    <Text style={[styles.paymentPlanNote, active && styles.paymentPlanTextActive]}>{plan.note}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={styles.paymentSummary}>
+              <Text style={styles.infoValue}>{formatValue(currentInstallmentAmount)} د.ع</Text>
+              <Text style={styles.infoLabel}>{currentPlan.installments === 1 ? 'سيتم سداد المتبقي بالكامل' : `دفعة حالية ضمن خطة ${currentPlan.title}`}</Text>
+            </View>
+            <Button title={loading === 'casePayment' ? 'جارٍ الدفع...' : 'ادفع من المحفظة'} onPress={paySelectedInstallment} loading={loading === 'casePayment'} />
+          </View>
+        ) : (
+          <View style={styles.paymentComplete}>
+            <Ionicons name="checkmark-circle-outline" size={24} color={colors.green} />
+            <Text style={styles.cardTitle}>تم سداد القضية بالكامل</Text>
+          </View>
+        )}
         {(financials.invoices || []).length === 0 ? <EmptyState title="لا توجد فواتير" note="ستظهر الدفعات والفواتير هنا." /> : null}
         {(financials.invoices || []).map((invoice: any) => <InfoRow key={invoice.id} label={`${invoice.amount} IQD`} value={`${invoice.date} · ${invoice.status}`} />)}
       </Section>
@@ -1189,6 +1246,70 @@ const styles = StyleSheet.create({
     lineHeight: 19,
     marginTop: 5,
     textAlign: 'right',
+  },
+  paymentComplete: {
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    gap: 8,
+    marginTop: 12,
+    padding: 14,
+  },
+  paymentPlanAmount: {
+    color: colors.navy,
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 7,
+    textAlign: 'right',
+  },
+  paymentPlanCard: {
+    backgroundColor: '#fff',
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexBasis: '31%',
+    flexGrow: 1,
+    minHeight: 112,
+    padding: 10,
+  },
+  paymentPlanCardActive: {
+    backgroundColor: colors.navy,
+    borderColor: colors.navy,
+  },
+  paymentPlanGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  paymentPlanNote: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 16,
+    marginTop: 5,
+    textAlign: 'right',
+  },
+  paymentPlanTextActive: {
+    color: '#fff',
+  },
+  paymentPlanTitle: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  paymentPlanner: {
+    backgroundColor: colors.goldTint,
+    borderRadius: 18,
+    marginTop: 12,
+    padding: 12,
+  },
+  paymentSummary: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    marginVertical: 10,
+    padding: 12,
   },
   primaryTiny: {
     alignItems: 'center',
