@@ -27,5 +27,6 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "extends": "expo/tsconfig.base"
+  "extends": "expo/tsconfig.base",
+  "exclude": ["dist", "mobile/dist", ".expo", "mobile/.expo", "node_modules", "mobile/node_modules"]
 }

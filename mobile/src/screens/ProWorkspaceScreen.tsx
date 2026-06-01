@@ -62,6 +62,8 @@ export function ProWorkspaceScreen() {
   const [appointmentTime, setAppointmentTime] = useState('');
   const [status, setStatus] = useState('');
   const [busy, setBusy] = useState('');
+  const [withdrawAmount, setWithdrawAmount] = useState(0);
+  const [selectedPayoutMethod, setSelectedPayoutMethod] = useState('');
 
   const load = async (initial = false) => {
     if (initial) setInitialLoading(true);
@@ -86,6 +88,13 @@ export function ProWorkspaceScreen() {
   useEffect(() => {
     load(true);
   }, []);
+
+  useEffect(() => {
+    const recommendedMethod = workspace?.summary?.payoutMethods?.find((item: any) => item.recommended) || workspace?.summary?.payoutMethods?.[0];
+    if (recommendedMethod && !selectedPayoutMethod) {
+      setSelectedPayoutMethod(recommendedMethod.label);
+    }
+  }, [selectedPayoutMethod, workspace?.summary?.payoutMethods]);
 
   useEffect(() => {
     if (!timerRunning) return undefined;
@@ -401,7 +410,30 @@ export function ProWorkspaceScreen() {
       return;
     }
     setActiveTab('earnings');
+    setWithdrawAmount(summary.availableToWithdraw || 0);
     setStatus(`طلب السحب جاهز بقيمة ${(summary.availableToWithdraw || 0).toLocaleString('ar-IQ')}.`);
+  };
+
+  const confirmWithdrawal = async () => {
+    if (withdrawAmount <= 0) {
+      setStatus('اختر مبلغ السحب أولاً.');
+      return;
+    }
+    setBusy('withdraw');
+    setStatus('جارٍ تنفيذ طلب السحب...');
+    try {
+      const response = await apiClient.requestProWithdrawal({
+        amount: withdrawAmount,
+        payoutMethod: selectedPayoutMethod || summary.payoutMethods?.[0]?.label,
+      });
+      setWorkspace(response.data);
+      setWithdrawAmount(0);
+      setStatus(response.message || 'تم تنفيذ طلب السحب بنجاح.');
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : 'تعذر تنفيذ السحب.');
+    } finally {
+      setBusy('');
+    }
   };
 
   const accountAction = (action: 'subscription' | 'payout' | 'profile' | 'invoices') => {
@@ -714,16 +746,47 @@ export function ProWorkspaceScreen() {
 
   function renderEarnings() {
     const transactions = summary.recentTransactions || [];
+    const available = summary.availableToWithdraw || 0;
+    const withdrawalOptions = [0.25, 0.5, 0.75, 1].map((ratio) => Math.round(available * ratio));
     return (
       <>
         <View style={styles.statsGrid}>
-          <Metric label="متاح" value={summary.availableToWithdraw || 0} tone="green" />
+          <Metric label="متاح" value={available} tone="green" />
           <Metric label="معلق" value={summary.pendingRevenue || 0} tone="gold" />
           <Metric label="الشهر" value={summary.monthlyEarnings || 0} tone="blue" />
         </View>
-        <Card title="وسائل السحب" note="اختيار وسيلة التحويل المفضلة.">
-          {(summary.payoutMethods || []).map((item: any) => <InfoRow key={item.id} icon={item.recommended ? 'checkmark-circle-outline' : 'wallet-outline'} title={item.label} note={`${item.value}${item.recommended ? ' · مفضل' : ''}`} />)}
-          <Button title="طلب سحب" onPress={requestWithdrawal} />
+        <Card title="سحب الأموال" note="اختر مبلغاً ووسيلة تحويل ثم أكد السحب.">
+          <View style={styles.withdrawGrid}>
+            {withdrawalOptions.map((amount, index) => (
+              <Pressable
+                key={`${amount}-${index}`}
+                disabled={amount <= 0}
+                onPress={() => {
+                  setWithdrawAmount(amount);
+                  setStatus(`تم اختيار مبلغ سحب: ${amount.toLocaleString('ar-IQ')} د.ع.`);
+                }}
+                style={[styles.withdrawOption, withdrawAmount === amount && styles.withdrawOptionActive, amount <= 0 && styles.disabled]}
+              >
+                <Text style={[styles.withdrawAmount, withdrawAmount === amount && styles.withdrawTextActive]}>{amount.toLocaleString('ar-IQ')}</Text>
+                <Text style={[styles.withdrawLabel, withdrawAmount === amount && styles.withdrawTextActive]}>د.ع</Text>
+              </Pressable>
+            ))}
+          </View>
+          <View style={styles.withdrawSummary}>
+            <Text style={styles.cardTitle}>مبلغ السحب المحدد</Text>
+            <Text style={styles.withdrawSummaryAmount}>{withdrawAmount.toLocaleString('ar-IQ')} د.ع</Text>
+            <Text style={styles.mutedText}>سيتم خصمه من الأرباح المتاحة وتسجيله في آخر العمليات.</Text>
+          </View>
+          {(summary.payoutMethods || []).map((item: any) => (
+            <Pressable key={item.id} onPress={() => setSelectedPayoutMethod(item.label)} style={[styles.payoutOption, selectedPayoutMethod === item.label && styles.payoutOptionActive]}>
+              <Ionicons name={item.recommended ? 'checkmark-circle-outline' : 'wallet-outline'} size={18} color={selectedPayoutMethod === item.label ? colors.green : colors.navy} />
+              <View style={styles.flex}>
+                <Text style={styles.infoTitle}>{item.label}</Text>
+                <Text style={styles.infoNote}>{item.value}{item.recommended ? ' · مفضل' : ''}</Text>
+              </View>
+            </Pressable>
+          ))}
+          <Button title={busy === 'withdraw' ? 'جارٍ تنفيذ السحب...' : 'تأكيد السحب'} onPress={confirmWithdrawal} loading={busy === 'withdraw'} disabled={withdrawAmount <= 0 || available <= 0} />
           <View style={styles.inlineActions}>
             <Button title="قضايا مالية" variant="secondary" onPress={() => { setActiveTab('cases'); setCaseFilter('billing'); }} />
             <Button title="الحساب" variant="secondary" onPress={() => setActiveTab('account')} />
@@ -911,6 +974,7 @@ const styles = StyleSheet.create({
   docCard: { backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 8, borderWidth: 1, marginBottom: 10, padding: 12 },
   docActions: { marginTop: 10 },
   documentSummary: { flexDirection: 'row-reverse', gap: 8, marginBottom: 10 },
+  disabled: { opacity: 0.45 },
   filterChip: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 999, borderWidth: 1, flexDirection: 'row-reverse', gap: 6, minHeight: 36, paddingHorizontal: 11 },
   filterChipActive: { backgroundColor: colors.navy, borderColor: colors.navy },
   filterCount: { color: colors.muted, fontSize: 11, fontWeight: '900' },
@@ -940,6 +1004,8 @@ const styles = StyleSheet.create({
   metricValue: { color: colors.ink, fontSize: 17, fontWeight: '900' },
   multiline: { minHeight: 92, paddingTop: 12, textAlignVertical: 'top' },
   mutedText: { color: colors.muted, fontSize: 12, fontWeight: '700', lineHeight: 19, marginTop: 5, textAlign: 'right' },
+  payoutOption: { alignItems: 'center', backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 8, borderWidth: 1, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 10 },
+  payoutOptionActive: { backgroundColor: colors.greenTint, borderColor: colors.green },
   progressFill: { backgroundColor: colors.blue, borderRadius: 999, height: '100%' },
   progressPanel: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 8, borderWidth: 1, marginTop: 10, padding: 10 },
   progressTrack: { backgroundColor: colors.tint, borderRadius: 999, height: 7, marginVertical: 10, overflow: 'hidden' },
@@ -984,4 +1050,12 @@ const styles = StyleSheet.create({
   timerButton: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, flexDirection: 'row-reverse', gap: 4, paddingHorizontal: 10, paddingVertical: 7 },
   timerText: { color: colors.blue, fontSize: 11, fontWeight: '900' },
   title: { color: colors.ink, fontSize: 25, fontWeight: '900', textAlign: 'right' },
+  withdrawAmount: { color: colors.ink, fontSize: 14, fontWeight: '900', textAlign: 'center' },
+  withdrawGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
+  withdrawLabel: { color: colors.muted, fontSize: 10, fontWeight: '900', marginTop: 2, textAlign: 'center' },
+  withdrawOption: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 8, borderWidth: 1, flexBasis: '47%', flexGrow: 1, minHeight: 64, justifyContent: 'center', padding: 8 },
+  withdrawOptionActive: { backgroundColor: colors.navy, borderColor: colors.navy },
+  withdrawSummary: { backgroundColor: colors.surface, borderRadius: 8, marginBottom: 10, padding: 10 },
+  withdrawSummaryAmount: { color: colors.navy, fontSize: 22, fontWeight: '900', marginTop: 4, textAlign: 'right' },
+  withdrawTextActive: { color: '#fff' },
 });

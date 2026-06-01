@@ -426,6 +426,13 @@ class ApiClient {
     return this.request<any>('/api/app/pro/workspace');
   }
 
+  requestProWithdrawal(data: { amount: number; payoutMethod?: string }) {
+    return this.request<any>('/api/app/pro/workspace/withdrawals', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   createProCase(data: { title: string; client: string; matter: string; priority: string }) {
     return this.request<any>('/api/app/pro/workspace/cases', {
       method: 'POST',
