@@ -174,6 +174,35 @@ const buildQrImageUrl = (data: string, size = 190) => {
   return `https://api.qrserver.com/v1/create-qr-code/?${params.toString()}`;
 };
 
+const downloadTextFile = (content: string, filename: string, type = 'text/plain;charset=utf-8') => {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
+
+const copyTextToClipboard = async (text: string) => {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'true');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand('copy');
+  textarea.remove();
+};
+
 const getCaseStatusTone = (status: CaseStatus) => {
   if (status === 'closed') return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
   if (status === 'review') return 'bg-amber-50 text-amber-700 ring-amber-100';
@@ -882,6 +911,18 @@ const FinancialsTab = ({
       ? remainingBalance
       : Math.ceil(remainingBalance / selectedPaymentPlan);
 
+  const downloadInvoice = (invoice: CaseFinancials['invoices'][number]) => {
+    const content = [
+      `Case: ${activeCase.title}`,
+      `Invoice: ${invoice.id}`,
+      `Amount: ${invoice.amount.toLocaleString('ar-IQ')} IQD`,
+      `Date: ${invoice.date}`,
+      `Status: ${invoice.status === 'paid' ? 'Paid' : 'Pending'}`,
+    ].join('\n');
+
+    downloadTextFile(content, `${activeCase.title.replace(/\s+/g, '_')}-invoice-${invoice.id}.txt`);
+  };
+
   const handlePayment = async () => {
     if (isReadOnlyView || installmentAmount <= 0) return;
     setIsPaying(true);
@@ -1031,7 +1072,14 @@ const FinancialsTab = ({
                 <div className="flex items-center gap-6">
                   <p className="text-sm font-black text-brand-dark">{inv.amount.toLocaleString()} د.ع</p>
                   <span className={`px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${inv.status === 'paid' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>{inv.status === 'paid' ? 'تم التسديد' : 'معلقة'}</span>
-                  <button className="text-slate-300 group-hover:text-brand-navy transition"><i className="fa-solid fa-download"></i></button>
+                  <button
+                    type="button"
+                    onClick={() => downloadInvoice(inv)}
+                    className="text-slate-300 transition group-hover:text-brand-navy"
+                    title="تحميل الفاتورة"
+                  >
+                    <i className="fa-solid fa-download"></i>
+                  </button>
                 </div>
               </div>
             ))
@@ -1331,6 +1379,7 @@ export default function MyCases() {
   const [isRecording, setIsRecording] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isCreatingAgencyDocument, setIsCreatingAgencyDocument] = useState(false);
+  const [isTogglingArchive, setIsTogglingArchive] = useState(false);
   const [isNewCaseModalOpen, setIsNewCaseModalOpen] = useState(false);
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseType, setNewCaseType] = useState('civil');
@@ -1452,15 +1501,7 @@ export default function MyCases() {
       `Type: ${doc.type}`,
       `Status: ${doc.isSigned ? 'signed' : doc.actionRequired || 'uploaded'}`,
     ].join('\n');
-    const blob = new Blob([manifest], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${doc.name.replace(/\.[^/.]+$/, '') || 'document'}-details.txt`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
+    downloadTextFile(manifest, `${doc.name.replace(/\.[^/.]+$/, '') || 'document'}-details.txt`);
   };
 
   // Keyboard Shortcuts
@@ -1513,6 +1554,38 @@ export default function MyCases() {
       alert('فشل تصدير الوثائق. يرجى المحاولة مرة أخرى.');
     } finally {
       setIsExporting(false);
+    }
+  };
+
+  const handleArchiveToggle = async () => {
+    if (!activeCase || isReadOnlyView || isTogglingArchive) return;
+
+    setIsTogglingArchive(true);
+    try {
+      const response = await apiClient.toggleWorkspaceCaseArchive(activeCase.id);
+      if (response.data) {
+        replaceCaseInState(response.data);
+        if (showArchived !== !!response.data.isArchived) {
+          setShowArchived(!!response.data.isArchived);
+        }
+      } else {
+        await refreshCases(activeCase.id);
+      }
+    } catch (error: any) {
+      console.error('Failed to toggle archive state', error);
+      alert(error.response?.data?.error || 'تعذر تحديث حالة الأرشفة. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsTogglingArchive(false);
+    }
+  };
+
+  const handleCopyMessage = async (text: string) => {
+    try {
+      await copyTextToClipboard(text);
+      alert('تم نسخ الرسالة.');
+    } catch (error) {
+      console.error('Failed to copy message', error);
+      alert('تعذر نسخ الرسالة.');
     }
   };
 
@@ -2272,13 +2345,11 @@ export default function MyCases() {
                 <ActionButton
                   variant="ghost"
                   size="sm"
-                  onClick={async () => {
-                    const response = await apiClient.toggleWorkspaceCaseArchive(activeCaseId);
-                    setCases(prev => prev.map(c => c.id === activeCaseId ? response.data : c));
-                  }}
+                  onClick={handleArchiveToggle}
+                  disabled={isTogglingArchive}
                   title={activeCase.isArchived ? 'إعادة من الأرشيف' : 'نقل للأرشيف'}
                 >
-                  <i className={`fa-solid ${activeCase.isArchived ? 'fa-box-open' : 'fa-box-archive'}`}></i>
+                  <i className={`fa-solid ${isTogglingArchive ? 'fa-spinner fa-spin' : activeCase.isArchived ? 'fa-box-open' : 'fa-box-archive'}`}></i>
                 </ActionButton>
               )}
               {!isReadOnlyView && nextAction && (
@@ -2549,7 +2620,12 @@ export default function MyCases() {
 
                               {/* Message Actions Hover Overlay */}
                               <div className={`absolute top-2 opacity-0 group-hover:opacity-100 transition flex gap-1 ${msg.sender === 'user' ? '-left-10' : '-right-10'}`}>
-                                <button className="w-8 h-8 rounded-xl bg-white shadow-md border border-slate-100 text-slate-400 hover:text-brand-navy flex items-center justify-center transition">
+                                <button
+                                  type="button"
+                                  onClick={() => handleCopyMessage(msg.text)}
+                                  className="flex h-8 w-8 items-center justify-center rounded-xl border border-slate-100 bg-white text-slate-400 shadow-md transition hover:text-brand-navy"
+                                  title="نسخ الرسالة"
+                                >
                                   <i className="fa-regular fa-copy text-[10px]"></i>
                                 </button>
                               </div>
