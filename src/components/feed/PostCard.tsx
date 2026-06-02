@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthUser } from '../../context/AuthContext';
 import type { FeedPost } from './types';
@@ -48,9 +48,23 @@ export default function PostCard({
   const visibleText = expanded || !isLong ? post.content : `${post.content.slice(0, 280)}...`;
   const canManage = user?.role === 'admin' || user?.id === post.author.id;
   const canEdit = user?.id === post.author.id;
+  const handleDoubleClick = (event: MouseEvent<HTMLElement>) => {
+    const target = event.target as HTMLElement;
+    if (target.closest('button, a, input, textarea, select, video')) {
+      return;
+    }
+
+    event.preventDefault();
+    window.getSelection()?.removeAllRanges();
+  };
 
   return (
-    <article id={post.id} className={`group overflow-hidden rounded-lg border bg-white shadow-sm transition duration-200 ${post.pinned ? 'border-[#1877f2]/30 ring-1 ring-[#1877f2]/10' : 'border-slate-200'}`}>
+    <article
+      id={post.id}
+      onDoubleClick={handleDoubleClick}
+      style={{ touchAction: 'manipulation' }}
+      className={`group overflow-hidden rounded-lg border bg-white shadow-sm transition duration-200 ${post.pinned ? 'border-[#1877f2]/30 ring-1 ring-[#1877f2]/10' : 'border-slate-200'}`}
+    >
       {(post.pinned || post.author.role === 'admin') && (
         <div className="flex items-center justify-between bg-slate-50 px-4 py-2 text-slate-600">
           <span className="text-xs font-black">{post.pinned ? 'منشور مثبت' : 'إعلان رسمي'}</span>
