@@ -36,13 +36,23 @@ export default function PostComposer({
   if (!canCreate) {
     return (
       <section className="rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e7f3ff] text-[#1877f2]">
             <i className="fa-solid fa-eye"></i>
           </div>
           <div>
             <p className="text-sm font-black text-slate-900">تابع، علّق، واحفظ المحتوى المهم</p>
             <p className="mt-1 text-xs font-bold text-slate-500">النشر متاح فقط للمحامين الموثقين وإدارة المنصة.</p>
+          </div>
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <a href="/lawyers" className="rounded-md bg-[#1877f2] px-4 py-2 text-xs font-black text-white transition hover:bg-[#166fe5]">
+              ابدأ استشارة
+            </a>
+            <a href="/following" className="rounded-md border border-slate-200 px-4 py-2 text-xs font-black text-slate-600 transition hover:bg-slate-50">
+              تابع محامين
+            </a>
           </div>
         </div>
       </section>

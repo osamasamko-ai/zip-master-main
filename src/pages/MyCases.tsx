@@ -1,10 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
 import apiClient from '../api/client';
+import { useAuth } from '../context/AuthContext';
 
 type DocumentType = 'pdf' | 'image' | 'other';
 type CaseStatus = 'pending' | 'review' | 'active' | 'closed';
@@ -90,6 +91,7 @@ interface LegalCase {
   client: string;
   id: string;
   title: string;
+  matter?: string;
   lawyer: CaseLawyer;
   status: CaseStatus;
   statusText: string;
@@ -699,9 +701,50 @@ const SummaryTab = ({
   const completedSteps = roadmapSteps.filter((step) => step.state === 'completed').length;
   const sortedTimeline = [...activeCase.timeline];
   const hasAgencyDocument = activeCase.documents.some(isAgencyDocument);
+  const isConsultation = activeCase.customFields.some((field) => field.label === 'نوع القضية' && field.value === 'استشارة')
+    || activeCase.matter === 'استشارة قانونية خاصة';
+  const nextSteps = isConsultation
+    ? [
+      'تم إنشاء قناة الاستشارة مع المحامي.',
+      'أرسل السؤال أو المستندات الداعمة بوضوح.',
+      'راجع رد المحامي واعتمد الخلاصة.',
+      'قيّم التجربة بعد إغلاق الاستشارة.',
+    ]
+    : [
+      'تم إنشاء ملف القضية وتعيين المحامي.',
+      'ارفع الوكالة أو المستندات المطلوبة.',
+      'تابع رسائل المحامي وسدد الأتعاب المتفق عليها.',
+      'اطلب الإغلاق عند اكتمال الوثائق والدفع.',
+    ];
 
   return (
     <div className="flex-1 overflow-y-auto p-5 bg-slate-50/30 space-y-6 custom-scrollbar">
+      {!isReadOnlyView && activeCase.status !== 'closed' && activeCase.progress <= 20 && (
+        <section className="rounded-[2rem] border border-brand-navy/10 bg-white p-5 text-right shadow-sm">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">الخطوات التالية</p>
+              <h3 className="mt-1 text-lg font-black text-brand-dark">
+                {isConsultation ? 'ابدأ الاستشارة بثقة' : 'ابدأ ملف القضية بدون ارتباك'}
+              </h3>
+            </div>
+            <span className="rounded-full bg-brand-navy/5 px-3 py-1.5 text-[10px] font-black text-brand-navy">
+              {isConsultation ? 'استشارة جديدة' : 'ملف جديد'}
+            </span>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-4">
+            {nextSteps.map((step, index) => (
+              <div key={step} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-xs font-black text-brand-navy shadow-sm">
+                  {index + 1}
+                </span>
+                <p className="mt-3 text-xs font-black leading-6 text-slate-600">{step}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">نسبة الإنجاز</p>
@@ -924,7 +967,7 @@ const FinancialsTab = ({
   };
 
   const handlePayment = async () => {
-    if (isReadOnlyView || installmentAmount <= 0) return;
+    if (isReadOnlyView || activeCase.status === 'closed' || installmentAmount <= 0) return;
     setIsPaying(true);
     setPaymentStatus('جارٍ إرسال الدفعة...');
     try {
@@ -975,7 +1018,11 @@ const FinancialsTab = ({
             ) : null}
           </div>
 
-          {remainingBalance > 0 ? (
+          {activeCase.status === 'closed' ? (
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5 text-center text-sm font-black text-slate-600">
+              هذا الملف مكتمل. لا يمكن تسجيل دفعات جديدة بعد الإغلاق.
+            </div>
+          ) : remainingBalance > 0 ? (
             <>
               <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {PAYMENT_PLANS.map((plan) => {
@@ -1094,10 +1141,22 @@ const ResolutionTab = ({
   activeCase,
   setActiveTab,
   sendMessage,
+  userRole,
+  isClosingCase,
+  closeStatus,
+  onOpenCloseModal,
+  onOpenReviewModal,
+  onOpenNewCaseWithLawyer,
 }: {
   activeCase: LegalCase;
   setActiveTab: (tab: WorkspaceTab) => void;
   sendMessage: (text?: string, optimisticId?: string) => void;
+  userRole?: string;
+  isClosingCase: boolean;
+  closeStatus: string;
+  onOpenCloseModal: () => void;
+  onOpenReviewModal: () => void;
+  onOpenNewCaseWithLawyer: () => void;
 }) => {
   const pendingDocuments = activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
   const remainingBalance = Math.max(0, activeCase.financials.totalAgreed - activeCase.financials.paid);
@@ -1129,6 +1188,9 @@ const ResolutionTab = ({
     },
   ];
   const readyToClose = checklist.every((item) => item.done);
+  const canCloseDirectly = userRole === 'pro' || userRole === 'admin';
+  const isConsultation = activeCase.customFields.some((field) => field.label === 'نوع القضية' && field.value === 'استشارة')
+    || activeCase.matter === 'استشارة قانونية خاصة';
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/30 p-5 custom-scrollbar">
@@ -1178,26 +1240,60 @@ const ResolutionTab = ({
             <h4 className="text-base font-black text-brand-dark">الإجراء التالي</h4>
             <p className="mt-2 text-xs font-bold leading-6 text-slate-500">
               {activeCase.status === 'closed'
-                ? 'القضية مغلقة. يمكنك حفظ الملخص أو الرجوع للوثائق في أي وقت.'
+                ? `${isConsultation ? 'الاستشارة' : 'القضية'} مكتملة. يمكنك حفظ الملخص أو الرجوع للوثائق في أي وقت.`
                 : readyToClose
-                  ? 'أرسل طلب اعتماد الإغلاق للمحامي ليؤكد النتيجة النهائية.'
+                  ? canCloseDirectly ? 'كل المتطلبات مكتملة. يمكنك اعتماد الإغلاق الآن.' : 'أرسل طلب اعتماد الإغلاق للمحامي ليؤكد النتيجة النهائية.'
                   : 'ابدأ بالعناصر غير المكتملة في قائمة الإغلاق.'}
             </p>
             <div className="mt-4 grid gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  const message = readyToClose
-                    ? 'أرغب بمراجعة القضية للإغلاق النهائي. هل يمكنك تأكيد النتيجة والخطوات الختامية؟'
-                    : 'أريد معرفة ما المتبقي قبل إغلاق القضية بشكل نهائي.';
-                  sendMessage(message);
-                  setActiveTab('chat');
-                }}
-                disabled={activeCase.status === 'closed'}
-                className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                مراسلة المحامي للإغلاق
-              </button>
+              {activeCase.status === 'closed' ? (
+                <>
+                  {userRole === 'user' && (
+                    <button
+                      type="button"
+                      onClick={onOpenReviewModal}
+                      className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark"
+                    >
+                      تقييم المحامي
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={onOpenNewCaseWithLawyer}
+                    className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-brand-navy transition hover:border-brand-navy"
+                  >
+                    فتح ملف جديد مع نفس المحامي
+                  </button>
+                </>
+              ) : canCloseDirectly ? (
+                <button
+                  type="button"
+                  onClick={onOpenCloseModal}
+                  disabled={!readyToClose || isClosingCase}
+                  className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isClosingCase ? 'جارٍ الإغلاق...' : `إغلاق ${isConsultation ? 'الاستشارة' : 'القضية'} الآن`}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const message = readyToClose
+                      ? `أرغب بمراجعة ${isConsultation ? 'الاستشارة' : 'القضية'} للإغلاق النهائي. هل يمكنك تأكيد النتيجة والخطوات الختامية؟`
+                      : `أريد معرفة ما المتبقي قبل إغلاق ${isConsultation ? 'الاستشارة' : 'القضية'} بشكل نهائي.`;
+                    sendMessage(message);
+                    setActiveTab('chat');
+                  }}
+                  className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark"
+                >
+                  مراسلة المحامي للإغلاق
+                </button>
+              )}
+              {closeStatus && (
+                <p className={`rounded-2xl px-4 py-3 text-center text-xs font-black ${closeStatus.includes('تعذر') || closeStatus.includes('لا يمكن') ? 'bg-red-50 text-red-600' : 'bg-emerald-50 text-emerald-700'}`}>
+                  {closeStatus}
+                </p>
+              )}
             </div>
           </section>
 
@@ -1226,6 +1322,8 @@ const ResolutionTab = ({
 
 export default function MyCases() {
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [activeCaseId, setActiveCaseId] = useState<string>('');
   const [cases, setCases] = useState<LegalCase[]>([]);
@@ -1241,6 +1339,15 @@ export default function MyCases() {
 
   const [replyModalDoc, setReplyModalDoc] = useState<LegalDocument | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [isCloseCaseModalOpen, setIsCloseCaseModalOpen] = useState(false);
+  const [closeCaseSummary, setCloseCaseSummary] = useState('');
+  const [isClosingCase, setIsClosingCase] = useState(false);
+  const [closeCaseStatus, setCloseCaseStatus] = useState('');
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState('');
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [reviewStatus, setReviewStatus] = useState('');
 
   const mergeCasesWithPendingMessages = useCallback((serverCases: LegalCase[], localCases: LegalCase[]) => {
     return serverCases.map((serverCase) => {
@@ -1577,6 +1684,71 @@ export default function MyCases() {
     } finally {
       setIsTogglingArchive(false);
     }
+  };
+
+  const openCloseCaseModal = () => {
+    if (!activeCase) return;
+    setCloseCaseStatus('');
+    setCloseCaseSummary(`تم إغلاق ${activeCase.title} بعد اكتمال المتطلبات النهائية.`);
+    setIsCloseCaseModalOpen(true);
+  };
+
+  const handleCloseCase = async () => {
+    if (!activeCase) return;
+
+    setIsClosingCase(true);
+    setCloseCaseStatus('جارٍ إغلاق الملف...');
+    try {
+      const response = await apiClient.closeWorkspaceCase(activeCase.id, closeCaseSummary);
+      if (response.data) {
+        replaceCaseInState(response.data);
+      } else {
+        await refreshCases(activeCase.id);
+      }
+      setCloseCaseStatus(response.message || 'تم إغلاق الملف بنجاح.');
+      setIsCloseCaseModalOpen(false);
+      setActiveTab('resolution');
+    } catch (error: any) {
+      setCloseCaseStatus(error.response?.data?.error || error.message || 'تعذر إغلاق الملف.');
+    } finally {
+      setIsClosingCase(false);
+    }
+  };
+
+  const openReviewModal = () => {
+    setReviewRating(5);
+    setReviewText('');
+    setReviewStatus('');
+    setIsReviewModalOpen(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (!activeCase) return;
+
+    setIsSubmittingReview(true);
+    setReviewStatus('جارٍ إرسال التقييم...');
+    try {
+      const response = await apiClient.submitCaseReview(activeCase.id, {
+        rating: reviewRating,
+        text: reviewText,
+      });
+      setReviewStatus(response.message || 'تم إرسال تقييمك بنجاح.');
+      setIsReviewModalOpen(false);
+    } catch (error: any) {
+      setReviewStatus(error.response?.data?.error || error.message || 'تعذر إرسال التقييم.');
+    } finally {
+      setIsSubmittingReview(false);
+    }
+  };
+
+  const openNewCaseWithActiveLawyer = () => {
+    if (!activeCase?.lawyer.id) return;
+    setNewCaseLawyerId(activeCase.lawyer.id);
+    setNewCaseTitle('');
+    setNewCaseAmount('');
+    setNewCaseType('civil');
+    setCreateCaseError('');
+    setIsNewCaseModalOpen(true);
   };
 
   const handleCopyMessage = async (text: string) => {
@@ -2764,6 +2936,12 @@ export default function MyCases() {
                       activeCase={activeCase}
                       setActiveTab={setActiveTab}
                       sendMessage={sendMessage}
+                      userRole={user?.role}
+                      isClosingCase={isClosingCase}
+                      closeStatus={closeCaseStatus}
+                      onOpenCloseModal={openCloseCaseModal}
+                      onOpenReviewModal={openReviewModal}
+                      onOpenNewCaseWithLawyer={openNewCaseWithActiveLawyer}
                     />
                   )}
                 </div>
@@ -3503,6 +3681,160 @@ export default function MyCases() {
           </div>
         )
       }
+
+      {/* Close Case Confirmation Modal */}
+      <AnimatePresence>
+        {!isReadOnlyView && isCloseCaseModalOpen && activeCase && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[160] flex items-center justify-center bg-brand-dark/40 px-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 16 }}
+              className="w-full max-w-lg rounded-[2rem] bg-white p-6 text-right shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => !isClosingCase && setIsCloseCaseModalOpen(false)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 transition hover:bg-red-50 hover:text-red-500"
+                >
+                  <i className="fa-solid fa-times"></i>
+                </button>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">تأكيد الإغلاق</p>
+                  <h3 className="mt-1 text-xl font-black text-brand-dark">إغلاق الملف نهائياً</h3>
+                  <p className="mt-2 text-sm font-bold leading-7 text-slate-500">
+                    سيتم تحويل الحالة إلى مكتملة وإرسال إشعار للعميل. راجع المؤشرات قبل الاعتماد.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                {[
+                  { label: 'الدفع', value: activeCase.financials.totalAgreed === 0 || activeCase.financials.paid >= activeCase.financials.totalAgreed ? 'مكتمل' : 'متبقي', done: activeCase.financials.totalAgreed === 0 || activeCase.financials.paid >= activeCase.financials.totalAgreed },
+                  { label: 'الوثائق', value: activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length === 0 ? 'جاهزة' : 'مطلوبة', done: activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length === 0 },
+                  { label: 'التقدم', value: `${activeCase.progress}%`, done: activeCase.progress >= 80 },
+                ].map((item) => (
+                  <div key={item.label} className={`rounded-2xl border p-4 ${item.done ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
+                    <p className="text-[10px] font-black">{item.label}</p>
+                    <p className="mt-1 text-sm font-black">{item.value}</p>
+                  </div>
+                ))}
+              </div>
+
+              <label className="mt-5 block text-xs font-black text-slate-500">خلاصة الإغلاق</label>
+              <textarea
+                value={closeCaseSummary}
+                onChange={(event) => setCloseCaseSummary(event.target.value)}
+                rows={4}
+                className="mt-2 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white"
+              />
+
+              {closeCaseStatus && (
+                <p className={`mt-4 rounded-2xl px-4 py-3 text-center text-xs font-black ${closeCaseStatus.includes('تعذر') || closeCaseStatus.includes('لا يمكن') ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-brand-navy'}`}>
+                  {closeCaseStatus}
+                </p>
+              )}
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCloseCaseModalOpen(false)}
+                  disabled={isClosingCase}
+                  className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCloseCase}
+                  disabled={isClosingCase}
+                  className="flex-[1.5] rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/20 transition hover:bg-brand-dark disabled:opacity-50"
+                >
+                  {isClosingCase ? 'جارٍ الإغلاق...' : 'اعتماد الإغلاق'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Closed Case Review Modal */}
+      <AnimatePresence>
+        {!isReadOnlyView && isReviewModalOpen && activeCase && (
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[160] flex items-center justify-center bg-brand-dark/40 px-4 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.92, y: 16 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.92, y: 16 }}
+              className="w-full max-w-md rounded-[2rem] bg-white p-6 text-right shadow-2xl"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <button
+                  type="button"
+                  onClick={() => !isSubmittingReview && setIsReviewModalOpen(false)}
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-500 transition hover:bg-red-50 hover:text-red-500"
+                >
+                  <i className="fa-solid fa-times"></i>
+                </button>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">تقييم التجربة</p>
+                  <h3 className="mt-1 text-xl font-black text-brand-dark">كيف كانت تجربتك مع {activeCase.lawyer.name}؟</h3>
+                </div>
+              </div>
+
+              <div className="mt-5 flex justify-center gap-2" dir="ltr">
+                {[1, 2, 3, 4, 5].map((star) => (
+                  <button
+                    key={star}
+                    type="button"
+                    onClick={() => setReviewRating(star)}
+                    className={`flex h-11 w-11 items-center justify-center rounded-2xl transition ${star <= reviewRating ? 'bg-brand-gold text-brand-dark' : 'bg-slate-100 text-slate-300 hover:bg-slate-200'}`}
+                    aria-label={`تقييم ${star}`}
+                  >
+                    <i className="fa-solid fa-star"></i>
+                  </button>
+                ))}
+              </div>
+
+              <textarea
+                value={reviewText}
+                onChange={(event) => setReviewText(event.target.value)}
+                rows={4}
+                placeholder="اكتب تعليقاً قصيراً عن سرعة الرد، وضوح النصيحة، وسهولة التعامل..."
+                className="mt-5 w-full resize-none rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy focus:bg-white"
+              />
+
+              {reviewStatus && (
+                <p className={`mt-4 rounded-2xl px-4 py-3 text-center text-xs font-black ${reviewStatus.includes('تعذر') || reviewStatus.includes('لا يمكنك') ? 'bg-red-50 text-red-600' : 'bg-blue-50 text-brand-navy'}`}>
+                  {reviewStatus}
+                </p>
+              )}
+
+              <div className="mt-6 flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsReviewModalOpen(false)}
+                  disabled={isSubmittingReview}
+                  className="flex-1 rounded-2xl border border-slate-200 px-4 py-3 text-sm font-black text-slate-500 transition hover:bg-slate-50 disabled:opacity-50"
+                >
+                  لاحقاً
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSubmitReview}
+                  disabled={isSubmittingReview}
+                  className="flex-[1.5] rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/20 transition hover:bg-brand-dark disabled:opacity-50"
+                >
+                  {isSubmittingReview ? 'جارٍ الإرسال...' : 'إرسال التقييم'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* New Case Modal */}
       <AnimatePresence>

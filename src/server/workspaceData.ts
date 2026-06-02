@@ -229,6 +229,7 @@ export function mapWorkspaceCase(item: any) {
     clientImg: item.client.img || '',
     lawyerId: item.lawyer.id,
     title: item.title,
+    matter: item.matter,
     lawyer: {
       id: item.lawyer.id,
       name: item.lawyer.name,
@@ -1358,6 +1359,149 @@ export async function updateCaseProgress(caseId: string, progress: number) {
     where: { id: caseId },
     data: { progress },
   });
+}
+
+export async function closeCaseWorkspace(userId: string, role: string, caseId: string, summary?: string) {
+  const existingCase = await prisma.case.findUnique({
+    where: { id: caseId },
+    include: {
+      client: { select: { id: true, name: true } },
+      lawyer: { select: { id: true, name: true } },
+      documents: true,
+    },
+  });
+
+  if (!existingCase) {
+    throw new Error('القضية غير موجودة.');
+  }
+
+  const canClose = role === 'admin' || (role === 'pro' && existingCase.lawyerId === userId);
+  if (!canClose) {
+    throw new Error('إغلاق القضية متاح فقط للمحامي المسؤول أو الإدارة.');
+  }
+
+  const remainingBalance = Math.max(0, Number(existingCase.totalAgreedFee || 0) - Number(existingCase.paidAmount || 0));
+  if (remainingBalance > 0) {
+    throw new Error('لا يمكن إغلاق الملف قبل توضيح أو سداد المبلغ المتبقي.');
+  }
+
+  const pendingDocuments = existingCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
+  if (pendingDocuments.length > 0) {
+    throw new Error('لا يمكن إغلاق الملف قبل معالجة الوثائق المطلوبة.');
+  }
+
+  const closeSummary = summary?.trim() || 'تم إغلاق الملف بعد اكتمال المتطلبات النهائية.';
+
+  await prisma.$transaction(async (tx) => {
+    await tx.case.update({
+      where: { id: caseId },
+      data: {
+        status: 'closed',
+        progress: 100,
+      },
+    });
+
+    await tx.caseTimelineEntry.create({
+      data: {
+        caseId,
+        dateLabel: 'اليوم',
+        title: 'إغلاق الملف',
+        detail: closeSummary,
+        type: 'system',
+      },
+    });
+
+    await tx.caseAccessLog.create({
+      data: {
+        caseId,
+        userName: existingCase.lawyer.name || 'المحامي',
+        action: 'إغلاق الملف',
+        timeLabel: 'الآن',
+      },
+    });
+
+    await tx.notification.create({
+      data: {
+        userId: existingCase.clientId,
+        title: 'تم إغلاق الملف',
+        message: `تم إغلاق ${existingCase.title}. يمكنك تقييم التجربة من صفحة القضايا.`,
+        type: 'success',
+        link: '/cases',
+      },
+    });
+  });
+
+  return getCaseWorkspace(caseId);
+}
+
+export async function submitCaseReview(userId: string, caseId: string, rating: number, text?: string) {
+  const normalizedRating = Math.max(1, Math.min(5, Math.round(Number(rating))));
+  if (!Number.isFinite(normalizedRating)) {
+    throw new Error('اختر تقييماً من 1 إلى 5.');
+  }
+
+  const existingCase = await prisma.case.findUnique({
+    where: { id: caseId },
+    select: {
+      id: true,
+      title: true,
+      clientId: true,
+      lawyerId: true,
+      status: true,
+    },
+  });
+
+  if (!existingCase || existingCase.clientId !== userId) {
+    throw new Error('لا يمكنك تقييم هذا الملف.');
+  }
+
+  if (existingCase.status !== 'closed') {
+    throw new Error('يمكن تقييم المحامي بعد إغلاق الملف فقط.');
+  }
+
+  const reviewText = `[case:${caseId}] ${(text?.trim() || `تقييم تجربة ${existingCase.title}`).slice(0, 800)}`;
+  const existingReview = await prisma.review.findFirst({
+    where: {
+      authorId: userId,
+      lawyerId: existingCase.lawyerId,
+      text: { contains: `[case:${caseId}]` },
+    },
+  });
+
+  const review = existingReview
+    ? await prisma.review.update({
+      where: { id: existingReview.id },
+      data: {
+        rating: normalizedRating,
+        text: reviewText,
+      },
+    })
+    : await prisma.review.create({
+      data: {
+        authorId: userId,
+        lawyerId: existingCase.lawyerId,
+        rating: normalizedRating,
+        text: reviewText,
+      },
+    });
+
+  const aggregate = await prisma.review.aggregate({
+    where: { lawyerId: existingCase.lawyerId },
+    _avg: { rating: true },
+  });
+
+  await prisma.lawyerProfile.update({
+    where: { userId: existingCase.lawyerId },
+    data: {
+      rating: Number((aggregate._avg.rating || normalizedRating).toFixed(2)),
+    },
+  });
+
+  return {
+    id: review.id,
+    rating: review.rating,
+    text: review.text.replace(`[case:${caseId}]`, '').trim(),
+  };
 }
 
 export async function updateProMessageState(messageId: string, data: { unread?: boolean; awaitingResponse?: boolean }) {

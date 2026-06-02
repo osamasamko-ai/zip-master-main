@@ -241,6 +241,16 @@ class ApiClient {
         return response.data;
     }
 
+    async closeWorkspaceCase(caseId: string, summary?: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/workspace/cases/${caseId}/close`, { summary });
+        return response.data;
+    }
+
+    async submitCaseReview(caseId: string, data: { rating: number; text?: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/workspace/cases/${caseId}/review`, data);
+        return response.data;
+    }
+
     async signCaseDocument(caseId: string, documentId: string): Promise<ApiResponse<any>> {
         const response = await this.client.post(`/api/app/workspace/cases/${caseId}/documents/${documentId}/sign`);
         return response.data;

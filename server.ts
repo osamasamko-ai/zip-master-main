@@ -108,6 +108,7 @@ import {
   addCaseDocument,
   addCaseFolder,
   addCaseMessage,
+  closeCaseWorkspace,
   createClientCase,
   createProAppointment,
   createProCase,
@@ -121,6 +122,7 @@ import {
   moveCaseDocuments,
   removeCaseCollaborator,
   signCaseDocument,
+  submitCaseReview,
   reviewCaseDocument,
   clearDocumentAction,
   finalizeContract,
@@ -1127,6 +1129,28 @@ async function startServer() {
     } catch (error) {
       console.error('Update progress error:', error);
       res.status(500).json({ error: 'Failed to update progress' });
+    }
+  });
+
+  app.post('/api/app/workspace/cases/:id/close', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const data = await closeCaseWorkspace(currentUser.userId, currentUser.role, req.params.id, req.body.summary);
+      res.json({ data, message: 'تم إغلاق الملف بنجاح.' });
+    } catch (error) {
+      console.error('Close case error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر إغلاق الملف.' });
+    }
+  });
+
+  app.post('/api/app/workspace/cases/:id/review', authenticateToken, async (req, res) => {
+    try {
+      const currentUser = (req as any).user;
+      const data = await submitCaseReview(currentUser.userId, req.params.id, Number(req.body.rating), req.body.text);
+      res.status(201).json({ data, message: 'تم إرسال تقييمك بنجاح.' });
+    } catch (error) {
+      console.error('Case review error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر إرسال التقييم.' });
     }
   });
 

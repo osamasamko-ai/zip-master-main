@@ -223,7 +223,7 @@ export async function listFeedStories(viewerId: string, mode: 'active' | 'archiv
 export async function createFeedStory(userId: string, payload: { text?: string; mediaUrl?: string | null; mediaType?: string | null }) {
   const user = await getCurrentUser(userId);
   if (!canPublish(user)) {
-    throw new Error('only verified lawyers and admins can create stories');
+    throw new Error('إنشاء القصص متاح فقط للمحامين الموثقين وإدارة المنصة.');
   }
 
   const text = cleanContent(payload.text, 240);
@@ -335,7 +335,7 @@ export async function listFeedPosts(
 export async function createFeedPost(userId: string, payload: { content?: string; category?: string; mediaUrl?: string | null; mediaType?: string | null }) {
   const user = await getCurrentUser(userId);
   if (!canPublish(user)) {
-    throw new Error('only verified lawyers and admins can create posts');
+    throw new Error('النشر في المجتمع متاح فقط للمحامين الموثقين وإدارة المنصة.');
   }
 
   const content = cleanContent(payload.content);
