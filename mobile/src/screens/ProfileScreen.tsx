@@ -793,7 +793,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   coverOverlay: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: 'rgba(16,42,67,0.28)',
   },
   coverActions: {
