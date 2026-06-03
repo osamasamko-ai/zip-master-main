@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { ActivityIndicator, Animated, Dimensions, Image, KeyboardAvoidingView, LayoutAnimation, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TextInput, UIManager, View, FlatList } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { Image as ExpoImage } from 'expo-image';
 import * as ImagePicker from 'expo-image-picker';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { apiClient } from '../api/client';
@@ -126,6 +127,19 @@ function assetToUpload(media: PickedMedia, fallbackName: string) {
 
 function mediaUrl(value?: string | null) {
   return apiClient.getMediaUrl(value);
+}
+
+function CachedImage({ uri, style, contentFit = 'cover' }: { uri?: string | null; style: any; contentFit?: 'cover' | 'contain' }) {
+  if (!uri) return null;
+  return (
+    <ExpoImage
+      source={{ uri }}
+      style={style}
+      contentFit={contentFit}
+      cachePolicy="memory-disk"
+      transition={160}
+    />
+  );
 }
 
 export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
@@ -488,8 +502,8 @@ export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
           : kind === 'video'
             ? ImagePicker.MediaTypeOptions.Videos
             : ImagePicker.MediaTypeOptions.All,
-      quality: 0.82,
-      videoMaxDuration: 60,
+      quality: 0.72,
+      videoMaxDuration: 45,
     };
 
     const result = await ImagePicker.launchImageLibraryAsync(pickerOptions);
@@ -778,6 +792,39 @@ function FeedVideo({
   loop?: boolean;
   muted?: boolean;
 }) {
+  const [shouldLoad, setShouldLoad] = useState(autoPlay);
+
+  if (!shouldLoad && nativeControls) {
+    return (
+      <Pressable onPress={() => setShouldLoad(true)} style={[style, styles.videoLazyPoster]}>
+        <View style={styles.videoLazyButton}>
+          <Ionicons name="play" size={24} color={colors.blue} />
+        </View>
+        <Text style={styles.videoLazyText}>اضغط لتشغيل الفيديو</Text>
+      </Pressable>
+    );
+  }
+
+  return <FeedVideoPlayer uri={uri} style={style} contentFit={contentFit} nativeControls={nativeControls} autoPlay={autoPlay} loop={loop} muted={muted} />;
+}
+
+function FeedVideoPlayer({
+  uri,
+  style,
+  contentFit = 'cover',
+  nativeControls = true,
+  autoPlay = false,
+  loop = false,
+  muted = false,
+}: {
+  uri: string;
+  style: any;
+  contentFit?: 'contain' | 'cover' | 'fill';
+  nativeControls?: boolean;
+  autoPlay?: boolean;
+  loop?: boolean;
+  muted?: boolean;
+}) {
   const player = useVideoPlayer(uri, (playerInstance) => {
     playerInstance.loop = loop;
     playerInstance.muted = muted;
@@ -809,7 +856,7 @@ function CreateStoryCard({ user, onPress }: { user: any; onPress: () => void }) 
     <InteractiveCard onPress={onPress} style={styles.createStoryCard}>
       <View style={styles.createStoryMedia}>
         {user?.img || user?.avatar ? (
-          <Image source={{ uri: mediaUrl(user.img || user.avatar) }} style={styles.createStoryImage} resizeMode="cover" />
+          <CachedImage uri={mediaUrl(user.img || user.avatar)} style={styles.createStoryImage} contentFit="cover" />
         ) : (
           <View style={styles.createStoryFallback}>
             <Text style={styles.createStoryInitial}>{String(user?.name || 'م').charAt(0)}</Text>
@@ -905,7 +952,7 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
         post.mediaType === 'image' ? (
           <Pressable onPress={handleImagePress} style={[styles.mediaBox, styles.imageMediaBox]}>
             <>
-              <Image source={{ uri: mediaUrl(post.mediaUrl) }} style={styles.postImage} resizeMode="contain" />
+              <CachedImage uri={mediaUrl(post.mediaUrl)} style={styles.postImage} contentFit="contain" />
               <Animated.View style={[styles.heartOverlay, { transform: [{ scale: heartAnim }], opacity: heartAnim }]}>
                 <Ionicons name="heart" size={80} color="#fff" />
               </Animated.View>
@@ -955,7 +1002,7 @@ function StoryBubble({ story, onPress }: { story: any; onPress: () => void }) {
 
   return (
     <InteractiveCard onPress={onPress} style={styles.storyBubble}>
-      {hasMedia && story.mediaType === 'image' ? <Image source={{ uri: mediaUrl(story.mediaUrl) }} style={styles.storyCardMedia} resizeMode="contain" /> : null}
+      {hasMedia && story.mediaType === 'image' ? <CachedImage uri={mediaUrl(story.mediaUrl)} style={styles.storyCardMedia} contentFit="contain" /> : null}
       {isVideo ? (
         <View style={styles.storyCardVideo}>
           <FeedVideo uri={mediaUrl(story.mediaUrl)} style={styles.storyCardMedia} contentFit="cover" nativeControls={false} muted autoPlay loop />
@@ -1013,7 +1060,7 @@ function IconButton({ icon, onPress, danger }: { icon: keyof typeof Ionicons.gly
 
 function Avatar({ source, name, small }: { source?: string | null; name: string; small?: boolean }) {
   const sizeStyle = small ? styles.avatarSmall : styles.avatar;
-  if (source) return <Image source={{ uri: mediaUrl(source) }} style={sizeStyle} />;
+  if (source) return <CachedImage uri={mediaUrl(source)} style={sizeStyle} contentFit="cover" />;
   return <View style={sizeStyle}><Text style={styles.avatarText}>{String(name || 'م').charAt(0)}</Text></View>;
 }
 
@@ -1201,7 +1248,7 @@ function StoryModal({ visible, stories, initialIndex, onClose, onViewed, onReply
 
   const renderItem = ({ item }: { item: any, index: number }) => (
     <View style={styles.storyViewerContainer}>
-      {item.mediaUrl && item.mediaType === 'image' ? <Image source={{ uri: mediaUrl(item.mediaUrl) }} style={styles.storyViewerMedia} resizeMode="contain" /> : null}
+      {item.mediaUrl && item.mediaType === 'image' ? <CachedImage uri={mediaUrl(item.mediaUrl)} style={styles.storyViewerMedia} contentFit="contain" /> : null}
       {item.mediaUrl && item.mediaType === 'video' ? (
         <View style={styles.storyVideoViewer}>
           <FeedVideo uri={mediaUrl(item.mediaUrl)} style={styles.storyViewerMedia} contentFit="contain" nativeControls autoPlay muted={isMuted} />
@@ -1595,6 +1642,9 @@ const styles = StyleSheet.create({
   topicPill: { backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 999, paddingHorizontal: 11, paddingVertical: 7 },
   topicText: { color: colors.navy, fontSize: 12, fontWeight: '900' },
   videoPreview: { alignItems: 'center', backgroundColor: '#101828', flex: 1, justifyContent: 'center' },
+  videoLazyButton: { alignItems: 'center', backgroundColor: '#fff', borderRadius: 999, height: 58, justifyContent: 'center', width: 58 },
+  videoLazyPoster: { alignItems: 'center', backgroundColor: '#101828', gap: 10, justifyContent: 'center' },
+  videoLazyText: { color: '#fff', fontSize: 12, fontWeight: '900' },
   videoPreviewShade: { ...StyleSheet.absoluteFillObject, alignItems: 'center', backgroundColor: 'rgba(15,23,42,0.26)', justifyContent: 'center' },
   videoPreviewText: { color: '#fff', fontSize: 13, fontWeight: '900', marginTop: 8 },
   viewerNotice: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderWidth: 1, borderRadius: 16, flexDirection: 'row-reverse', gap: 10, marginBottom: 12, padding: 12 },

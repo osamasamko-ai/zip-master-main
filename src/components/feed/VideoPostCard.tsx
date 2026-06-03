@@ -1,4 +1,5 @@
 import type { FeedPost } from './types';
+import LazyVideo from './LazyVideo';
 
 export default function VideoPostCard({ post, onOpen }: { post?: FeedPost; onOpen?: (id: string) => void }) {
   if (!post) {
@@ -17,7 +18,7 @@ export default function VideoPostCard({ post, onOpen }: { post?: FeedPost; onOpe
     >
       <div className="aspect-video w-full bg-black">
         {post.mediaUrl ? (
-          <video src={post.mediaUrl} muted className="h-full w-full object-cover opacity-80 transition duration-500 group-hover:scale-105" />
+          <LazyVideo src={post.mediaUrl} controls={false} muted fit="cover" className="opacity-80 transition duration-500 group-hover:scale-105" />
         ) : (
           <div className="h-full w-full bg-[#1877f2]" />
         )}

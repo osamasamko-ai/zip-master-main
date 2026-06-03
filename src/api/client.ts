@@ -1,4 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
+import { optimizeImageForUpload } from '../utils/mediaOptimization';
 
 interface ApiResponse<T> {
     data: T;
@@ -8,6 +9,9 @@ interface ApiResponse<T> {
 class ApiClient {
     private client: AxiosInstance;
     private token: string | null = null;
+    private cache = new Map<string, { timestamp: number; payload: any }>();
+    private inflight = new Map<string, Promise<any>>();
+    private cacheTtlMs = 20_000;
 
     constructor(baseURL: string = '') {
         this.client = axios.create({
@@ -26,6 +30,15 @@ class ApiClient {
             return config;
         });
 
+        this.client.interceptors.response.use((response) => {
+            const method = String(response.config.method || 'get').toLowerCase();
+            if (method !== 'get') {
+                this.cache.clear();
+                this.inflight.clear();
+            }
+            return response;
+        });
+
         // Load token from localStorage on initialization
         if (typeof window !== 'undefined') {
             this.token = localStorage.getItem('auth_token');
@@ -34,6 +47,8 @@ class ApiClient {
 
     setToken(token: string | null) {
         this.token = token;
+        this.cache.clear();
+        this.inflight.clear();
         if (token) {
             localStorage.setItem('auth_token', token);
         } else {
@@ -43,6 +58,22 @@ class ApiClient {
 
     getToken(): string | null {
         return this.token;
+    }
+
+    private async cachedGet<T>(url: string, params?: Record<string, unknown>): Promise<T> {
+        const cacheKey = `${this.token || 'guest'}:${url}:${JSON.stringify(params || {})}`;
+        const cached = this.cache.get(cacheKey);
+        const now = Date.now();
+        if (cached && now - cached.timestamp < this.cacheTtlMs) return cached.payload as T;
+        const pending = this.inflight.get(cacheKey);
+        if (pending) return pending as Promise<T>;
+
+        const request = this.client.get(url, { params }).then((response) => {
+            this.cache.set(cacheKey, { timestamp: Date.now(), payload: response.data });
+            return response.data as T;
+        }).finally(() => this.inflight.delete(cacheKey));
+        this.inflight.set(cacheKey, request);
+        return request;
     }
 
     async login(email: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> {
@@ -97,8 +128,7 @@ class ApiClient {
     }
 
     async getDashboard(): Promise<ApiResponse<any>> {
-        const response = await this.client.get('/api/app/dashboard');
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>('/api/app/dashboard');
     }
 
     async trackEvent(event: { name: string; page: string; resourceId?: string | null; metadata?: any }): Promise<ApiResponse<any>> {
@@ -112,8 +142,7 @@ class ApiClient {
     }
 
     async getIntelligence(): Promise<ApiResponse<any>> {
-        const response = await this.client.get('/api/app/intelligence');
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>('/api/app/intelligence');
     }
 
     async addCreditBalance(data: { amount: number; paymentMethod: string; note?: string }): Promise<ApiResponse<any>> {
@@ -122,8 +151,7 @@ class ApiClient {
     }
 
     async getSettings(): Promise<ApiResponse<any>> {
-        const response = await this.client.get('/api/app/settings');
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>('/api/app/settings');
     }
 
     async updateSettingsProfile(data: any): Promise<ApiResponse<any>> {
@@ -132,9 +160,10 @@ class ApiClient {
     }
 
     async uploadProfileMedia(kind: 'avatar' | 'cover', file: File): Promise<ApiResponse<any>> {
+        const uploadFile = await optimizeImageForUpload(file);
         const formData = new FormData();
         formData.append('kind', kind);
-        formData.append('image', file);
+        formData.append('image', uploadFile);
         const response = await this.client.post('/api/app/profile/media', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -157,18 +186,15 @@ class ApiClient {
     }
 
     async getLawyers(search?: string): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/app/lawyers', { params: { search } });
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]>>('/api/app/lawyers', { search });
     }
 
     async getFollowing(): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/app/following');
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]>>('/api/app/following');
     }
 
     async getLawyerProfile(id: string): Promise<ApiResponse<any>> {
-        const response = await this.client.get(`/api/app/lawyers/${id}`);
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>(`/api/app/lawyers/${id}`);
     }
 
     async followLawyer(id: string): Promise<ApiResponse<any>> {
@@ -391,13 +417,11 @@ class ApiClient {
     }
 
     async getFeedPosts(filter: string = 'all', options: { limit?: number; offset?: number } = {}): Promise<ApiResponse<any[]> & { meta?: any }> {
-        const response = await this.client.get('/api/app/feed', { params: { filter, ...options } });
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]> & { meta?: any }>('/api/app/feed', { filter, ...options });
     }
 
     async getFeedStories(mode: 'active' | 'archive' | 'all' = 'all'): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/app/feed/stories', { params: { mode } });
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]>>('/api/app/feed/stories', { mode });
     }
 
     async markFeedStoryViewed(storyId: string): Promise<ApiResponse<any>> {
@@ -408,7 +432,7 @@ class ApiClient {
     async createFeedStory(data: { text: string; media?: File | null }): Promise<ApiResponse<any>> {
         const formData = new FormData();
         formData.append('text', data.text);
-        if (data.media) formData.append('media', data.media);
+        if (data.media) formData.append('media', await optimizeImageForUpload(data.media));
         const response = await this.client.post('/api/app/feed/stories', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });
@@ -419,7 +443,7 @@ class ApiClient {
         const formData = new FormData();
         formData.append('content', data.content);
         if (data.category) formData.append('category', data.category);
-        if (data.media) formData.append('media', data.media);
+        if (data.media) formData.append('media', await optimizeImageForUpload(data.media));
         const response = await this.client.post('/api/app/feed', formData, {
             headers: { 'Content-Type': 'multipart/form-data' },
         });

@@ -2,6 +2,7 @@ import { useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { AuthUser } from '../../context/AuthContext';
 import type { FeedPost } from './types';
+import LazyVideo from './LazyVideo';
 
 const formatDate = (value: string) => new Intl.DateTimeFormat('ar-IQ', {
   month: 'short',
@@ -150,7 +151,7 @@ export default function PostCard({
           <div className="-mx-4 mt-4 overflow-hidden border-y border-slate-100 bg-slate-100">
             {post.mediaType === 'video' ? (
               <div className="relative aspect-square max-h-[680px] w-full bg-black sm:aspect-[4/3]">
-                <video src={post.mediaUrl} controls preload="metadata" poster="" className="h-full w-full bg-black object-contain" />
+                <LazyVideo src={post.mediaUrl} className="bg-black object-contain" />
                 <div className="pointer-events-none absolute right-4 top-4 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-black text-white backdrop-blur">
                   <i className="fa-solid fa-play ml-1 text-brand-gold"></i>
                   متابعة المشاهدة

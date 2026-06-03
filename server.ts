@@ -3019,8 +3019,19 @@ ${additionalConditions}
     }
   });
 
-  // Serve uploaded files
-  app.use('/uploads', express.static(uploadsDir));
+  // Serve uploaded files with long-lived cache headers. Filenames are unique, so immutable caching is safe.
+  app.use('/uploads', express.static(uploadsDir, {
+    maxAge: '30d',
+    immutable: true,
+    setHeaders: (res, filePath) => {
+      const extension = path.extname(filePath).toLowerCase();
+      if (['.mp4', '.webm', '.mov', '.m4v'].includes(extension)) {
+        res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+      } else if (['.jpg', '.jpeg', '.png', '.webp', '.heic', '.heif', '.pdf'].includes(extension)) {
+        res.setHeader('Cache-Control', 'public, max-age=2592000, immutable');
+      }
+    },
+  }));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
