@@ -108,8 +108,12 @@ export function SettingsScreen() {
   const [invoices, setInvoices] = useState<InvoiceItem[]>(fallbackInvoices);
   const [documents, setDocuments] = useState({
     nationalIdUrl: '',
+    nationalIdFrontUrl: '',
+    nationalIdBackUrl: '',
     nationalIdVerified: false,
     lawyerLicenseUrl: '',
+    lawyerLicenseFrontUrl: '',
+    lawyerLicenseBackUrl: '',
     lawyerLicenseVerified: false,
   });
   const [connectedApps, setConnectedApps] = useState([
@@ -133,8 +137,8 @@ export function SettingsScreen() {
 
   const securityScore = prefs.twoFactor ? 92 : 71;
   const requiredDocumentItems = isProfessional
-    ? [documents.nationalIdUrl, documents.lawyerLicenseUrl]
-    : [documents.nationalIdUrl];
+    ? [documents.nationalIdFrontUrl, documents.nationalIdBackUrl, documents.lawyerLicenseFrontUrl, documents.lawyerLicenseBackUrl]
+    : [documents.nationalIdFrontUrl, documents.nationalIdBackUrl];
   const verifiedDocumentItems = isProfessional
     ? [documents.nationalIdVerified, documents.lawyerLicenseVerified]
     : [documents.nationalIdVerified];
@@ -156,11 +160,11 @@ export function SettingsScreen() {
       {
         id: 'national-id',
         title: 'البطاقة الوطنية',
-        note: documents.nationalIdVerified ? 'تم اعتماد الهوية الوطنية.' : documents.nationalIdUrl ? 'مرفوعة وتنتظر مراجعة الإدارة.' : 'ارفع صورة واضحة أو ملف PDF للبطاقة الوطنية.',
+        note: documents.nationalIdVerified ? 'تم اعتماد الهوية الوطنية.' : documents.nationalIdFrontUrl && documents.nationalIdBackUrl ? 'الوجهان مرفوعان وينتظران مراجعة الإدارة.' : 'ارفع الوجه الأمامي والخلفي للبطاقة الوطنية.',
         section: 'documents',
         weight: 20,
         done: documents.nationalIdVerified,
-        status: documents.nationalIdVerified ? 'done' : documents.nationalIdUrl ? 'review' : 'missing',
+        status: documents.nationalIdVerified ? 'done' : documents.nationalIdFrontUrl && documents.nationalIdBackUrl ? 'review' : 'missing',
         icon: 'document-lock-outline',
       },
       {
@@ -217,17 +221,17 @@ export function SettingsScreen() {
       {
         id: 'lawyer-license',
         title: 'بطاقة المحاماة',
-        note: documents.lawyerLicenseVerified ? 'تم اعتماد بطاقة المحاماة.' : documents.lawyerLicenseUrl ? 'مرفوعة وتنتظر مراجعة الإدارة.' : 'ارفع بطاقة المحاماة لتفعيل استقبال العملاء.',
+        note: documents.lawyerLicenseVerified ? 'تم اعتماد بطاقة المحاماة.' : documents.lawyerLicenseFrontUrl && documents.lawyerLicenseBackUrl ? 'الوجهان مرفوعان وينتظران مراجعة الإدارة.' : 'ارفع وجهي بطاقة المحاماة لتفعيل استقبال العملاء.',
         section: 'documents',
         weight: 20,
         done: documents.lawyerLicenseVerified,
-        status: documents.lawyerLicenseVerified ? 'done' : documents.lawyerLicenseUrl ? 'review' : 'missing',
+        status: documents.lawyerLicenseVerified ? 'done' : documents.lawyerLicenseFrontUrl && documents.lawyerLicenseBackUrl ? 'review' : 'missing',
         icon: 'briefcase-outline',
       },
       baseSteps[2],
       baseSteps[3],
     ];
-  }, [billingStatus, bio, consultationFee, documents.lawyerLicenseUrl, documents.lawyerLicenseVerified, documents.nationalIdUrl, documents.nationalIdVerified, email, highlights, isProfessional, name, phone, prefs.pushNotifications, prefs.securityAlerts, prefs.twoFactor, specialty]);
+  }, [billingStatus, bio, consultationFee, documents.lawyerLicenseBackUrl, documents.lawyerLicenseFrontUrl, documents.lawyerLicenseVerified, documents.nationalIdBackUrl, documents.nationalIdFrontUrl, documents.nationalIdVerified, email, highlights, isProfessional, name, phone, prefs.pushNotifications, prefs.securityAlerts, prefs.twoFactor, specialty]);
   const profileCompletion = useMemo(() => {
     return readinessSteps.reduce((total, step) => total + (step.done ? step.weight : 0), 0);
   }, [readinessSteps]);
@@ -264,8 +268,12 @@ export function SettingsScreen() {
       setActivityItems(data.activityItems?.length ? data.activityItems : activitySeed);
       setDocuments({
         nationalIdUrl: profile.nationalIdUrl || '',
+        nationalIdFrontUrl: profile.nationalIdFrontUrl || profile.nationalIdUrl || '',
+        nationalIdBackUrl: profile.nationalIdBackUrl || '',
         nationalIdVerified: Boolean(profile.nationalIdVerified),
         lawyerLicenseUrl: profile.lawyerLicenseUrl || '',
+        lawyerLicenseFrontUrl: profile.lawyerLicenseFrontUrl || profile.lawyerLicenseUrl || '',
+        lawyerLicenseBackUrl: profile.lawyerLicenseBackUrl || '',
         lawyerLicenseVerified: Boolean(profile.lawyerLicenseVerified),
       });
     }).catch(() => setStatus('تعذر تحميل الإعدادات. يتم عرض نسخة محفوظة.')).finally(() => mounted && setLoadingSettings(false));
@@ -345,7 +353,7 @@ export function SettingsScreen() {
     }
   };
 
-  const addDocument = async (key: 'nationalId' | 'lawyerLicense') => {
+  const addDocument = async (key: 'nationalId' | 'lawyerLicense', side: 'front' | 'back' = 'front') => {
     setStatus('');
     const result = await DocumentPicker.getDocumentAsync({
       copyToCacheDirectory: true,
@@ -356,20 +364,24 @@ export function SettingsScreen() {
     if (result.canceled || !result.assets?.[0]) return;
 
     const asset = result.assets[0];
-    setUploadingDocument(key);
+    setUploadingDocument(`${key}-${side}`);
     try {
       const response = await apiClient.uploadProfileDocument(key, {
         uri: asset.uri,
         name: asset.name || `${key}-${Date.now()}`,
         type: asset.mimeType || 'application/octet-stream',
-      });
+      }, side);
       const fileUrl = response.data?.fileUrl || response.data?.data?.fileUrl || response.data?.url || '';
       setDocuments((current) => ({
         ...current,
-        [`${key}Url`]: fileUrl || current[`${key}Url`],
+        ...(key === 'nationalId' && side === 'front' ? { nationalIdUrl: fileUrl || current.nationalIdUrl, nationalIdFrontUrl: fileUrl || current.nationalIdFrontUrl } : {}),
+        ...(key === 'nationalId' && side === 'back' ? { nationalIdBackUrl: fileUrl || current.nationalIdBackUrl } : {}),
+        ...(key === 'lawyerLicense' && side === 'front' ? { lawyerLicenseUrl: fileUrl || current.lawyerLicenseUrl, lawyerLicenseFrontUrl: fileUrl || current.lawyerLicenseFrontUrl } : {}),
+        ...(key === 'lawyerLicense' && side === 'back' ? { lawyerLicenseBackUrl: fileUrl || current.lawyerLicenseBackUrl } : {}),
         [`${key}Verified`]: false,
       } as typeof current));
-      setStatus(key === 'nationalId' ? 'تم رفع البطاقة الوطنية للمراجعة.' : 'تم رفع بطاقة المحاماة للمراجعة.');
+      const sideLabel = side === 'front' ? 'الوجه الأمامي' : 'الوجه الخلفي';
+      setStatus(key === 'nationalId' ? `تم رفع ${sideLabel} للبطاقة الوطنية.` : `تم رفع ${sideLabel} لبطاقة المحاماة.`);
     } catch (error) {
       setStatus(error instanceof Error ? error.message : 'تعذر رفع المستند.');
     } finally {
@@ -518,9 +530,17 @@ export function SettingsScreen() {
         ) : null}
 
         {!loadingSettings && activeSection === 'documents' ? (
-          <SectionCard title="توثيق المستندات الأساسية" note={`${uploadedDocs}/${requiredDocumentItems.length} مرفوعة · ${verifiedDocs} موثقة`}>
-            <DocumentCard title="البطاقة الوطنية" required uploaded={Boolean(documents.nationalIdUrl)} verified={documents.nationalIdVerified} loading={uploadingDocument === 'nationalId'} onPress={() => addDocument('nationalId')} />
-            <DocumentCard title="بطاقة المحاماة" required={isProfessional} uploaded={Boolean(documents.lawyerLicenseUrl)} verified={documents.lawyerLicenseVerified} loading={uploadingDocument === 'lawyerLicense'} onPress={() => addDocument('lawyerLicense')} />
+          <SectionCard title="توثيق المستندات الأساسية" note={`${uploadedDocs}/${requiredDocumentItems.length} وجوه مرفوعة · ${verifiedDocs} موثقة`}>
+            <View style={styles.documentGroup}>
+              <Text style={styles.documentGroupTitle}>البطاقة الوطنية</Text>
+              <DocumentCard title="الوجه الأمامي" required uploaded={Boolean(documents.nationalIdFrontUrl)} verified={documents.nationalIdVerified} loading={uploadingDocument === 'nationalId-front'} onPress={() => addDocument('nationalId', 'front')} />
+              <DocumentCard title="الوجه الخلفي" required uploaded={Boolean(documents.nationalIdBackUrl)} verified={documents.nationalIdVerified} loading={uploadingDocument === 'nationalId-back'} onPress={() => addDocument('nationalId', 'back')} />
+            </View>
+            <View style={styles.documentGroup}>
+              <Text style={styles.documentGroupTitle}>بطاقة المحاماة</Text>
+              <DocumentCard title="الوجه الأمامي" required={isProfessional} uploaded={Boolean(documents.lawyerLicenseFrontUrl)} verified={documents.lawyerLicenseVerified} loading={uploadingDocument === 'lawyerLicense-front'} onPress={() => addDocument('lawyerLicense', 'front')} />
+              <DocumentCard title="الوجه الخلفي" required={isProfessional} uploaded={Boolean(documents.lawyerLicenseBackUrl)} verified={documents.lawyerLicenseVerified} loading={uploadingDocument === 'lawyerLicense-back'} onPress={() => addDocument('lawyerLicense', 'back')} />
+            </View>
           </SectionCard>
         ) : null}
 
@@ -754,6 +774,8 @@ const styles = StyleSheet.create({
   dangerTitle: { color: colors.red, fontSize: 14, fontWeight: '900', textAlign: 'right' },
   dangerText: { color: colors.ink, fontSize: 12, fontWeight: '700', lineHeight: 20, marginTop: 5, textAlign: 'right' },
   docIcon: { alignItems: 'center', backgroundColor: colors.blueTint, borderRadius: 999, height: 40, justifyContent: 'center', width: 40 },
+  documentGroup: { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: 8, borderWidth: 1, marginBottom: 10, padding: 10 },
+  documentGroupTitle: { color: colors.ink, fontSize: 14, fontWeight: '900', marginBottom: 8, textAlign: 'right' },
   fieldBlock: { marginBottom: 10 },
   flex: { flex: 1 },
   header: { alignItems: 'center', flexDirection: 'row-reverse', gap: 12, marginBottom: 12 },

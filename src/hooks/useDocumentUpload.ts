@@ -5,7 +5,7 @@ export const useDocumentUpload = () => {
     const [uploading, setUploading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const uploadDocument = async (file: File, endpoint: string, fallbackError: string): Promise<string> => {
+    const uploadDocument = async (file: File, endpoint: string, fallbackError: string, side: 'front' | 'back' = 'front'): Promise<string> => {
         setUploading(true);
         setError(null);
 
@@ -18,6 +18,7 @@ export const useDocumentUpload = () => {
                 body: (() => {
                     const formData = new FormData();
                     formData.append('document', file);
+                    formData.append('side', side);
                     return formData;
                 })(),
             });
@@ -38,12 +39,12 @@ export const useDocumentUpload = () => {
         }
     };
 
-    const uploadNationalId = async (file: File): Promise<string> => {
-        return uploadDocument(file, '/api/profile/documents/national-id', 'فشل رفع البطاقة الوطنية');
+    const uploadNationalId = async (file: File, side: 'front' | 'back' = 'front'): Promise<string> => {
+        return uploadDocument(file, '/api/profile/documents/national-id', 'فشل رفع البطاقة الوطنية', side);
     };
 
-    const uploadLawyerLicense = async (file: File): Promise<string> => {
-        return uploadDocument(file, '/api/profile/documents/lawyer-license', 'فشل رفع بطاقة المحاماة');
+    const uploadLawyerLicense = async (file: File, side: 'front' | 'back' = 'front'): Promise<string> => {
+        return uploadDocument(file, '/api/profile/documents/lawyer-license', 'فشل رفع بطاقة المحاماة', side);
     };
 
     return {

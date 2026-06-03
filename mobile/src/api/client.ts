@@ -171,9 +171,10 @@ class ApiClient {
     return this.request<any>(`/api/app/settings/sessions/${id}`, { method: 'DELETE' });
   }
 
-  uploadProfileDocument(kind: 'nationalId' | 'lawyerLicense', file: { uri: string; name: string; type: string }) {
+  uploadProfileDocument(kind: 'nationalId' | 'lawyerLicense', file: { uri: string; name: string; type: string }, side: 'front' | 'back' = 'front') {
     const formData = new FormData();
     formData.append('document', file as any);
+    formData.append('side', side);
     const path = kind === 'nationalId' ? '/api/profile/documents/national-id' : '/api/profile/documents/lawyer-license';
 
     return this.request<any>(path, {

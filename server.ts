@@ -2934,13 +2934,15 @@ ${additionalConditions}
       const user = (req as any).user;
       const ownerId = user.userId || user.id;
       const fileUrl = `/uploads/${req.file.filename}`;
+      const side = req.body?.side === 'back' ? 'back' : 'front';
+      const purpose = side === 'back' ? 'national_id_back' : 'national_id_front';
 
       const lawyerProfile = await prisma.lawyerProfile.upsert({
         where: { userId: ownerId },
-        update: { nationalIdUrl: fileUrl, nationalIdVerified: false },
+        update: side === 'front' ? { nationalIdUrl: fileUrl, nationalIdVerified: false } : { nationalIdVerified: false },
         create: {
           userId: ownerId,
-          nationalIdUrl: fileUrl,
+          ...(side === 'front' ? { nationalIdUrl: fileUrl } : {}),
           nationalIdVerified: false,
         },
       });
@@ -2949,7 +2951,7 @@ ${additionalConditions}
         ownerId,
         resourceType: 'lawyer_profile',
         resourceId: lawyerProfile.userId,
-        purpose: 'national_id',
+        purpose,
         originalName: req.file.originalname,
         filename: req.file.filename,
         url: fileUrl,
@@ -2959,8 +2961,9 @@ ${additionalConditions}
 
       res.json({
         success: true,
-        message: 'تم رفع البطاقة الوطنية بنجاح',
+        message: side === 'back' ? 'تم رفع الوجه الخلفي للبطاقة الوطنية بنجاح' : 'تم رفع الوجه الأمامي للبطاقة الوطنية بنجاح',
         fileUrl,
+        side,
         lawyerProfile,
       });
     } catch (error) {
@@ -2978,13 +2981,15 @@ ${additionalConditions}
       const user = (req as any).user;
       const ownerId = user.userId || user.id;
       const fileUrl = `/uploads/${req.file.filename}`;
+      const side = req.body?.side === 'back' ? 'back' : 'front';
+      const purpose = side === 'back' ? 'lawyer_license_back' : 'lawyer_license_front';
 
       const lawyerProfile = await prisma.lawyerProfile.upsert({
         where: { userId: ownerId },
-        update: { lawyerLicenseUrl: fileUrl, lawyerLicenseVerified: false },
+        update: side === 'front' ? { lawyerLicenseUrl: fileUrl, lawyerLicenseVerified: false } : { lawyerLicenseVerified: false },
         create: {
           userId: ownerId,
-          lawyerLicenseUrl: fileUrl,
+          ...(side === 'front' ? { lawyerLicenseUrl: fileUrl } : {}),
           lawyerLicenseVerified: false,
         },
       });
@@ -2993,7 +2998,7 @@ ${additionalConditions}
         ownerId,
         resourceType: 'lawyer_profile',
         resourceId: lawyerProfile.userId,
-        purpose: 'lawyer_license',
+        purpose,
         originalName: req.file.originalname,
         filename: req.file.filename,
         url: fileUrl,
@@ -3003,8 +3008,9 @@ ${additionalConditions}
 
       res.json({
         success: true,
-        message: 'تم رفع بطاقة المحاماة بنجاح',
+        message: side === 'back' ? 'تم رفع الوجه الخلفي لبطاقة المحاماة بنجاح' : 'تم رفع الوجه الأمامي لبطاقة المحاماة بنجاح',
         fileUrl,
+        side,
         lawyerProfile,
       });
     } catch (error) {

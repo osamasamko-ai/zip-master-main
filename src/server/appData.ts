@@ -358,15 +358,32 @@ export async function changeCurrentUserPassword(userId: string, currentPassword:
 }
 
 export async function getUserSettingsBundle(userId: string) {
-  const [profile, sessions, activityItems, invoices] = await Promise.all([
+  const [profile, sessions, activityItems, invoices, documentUploads] = await Promise.all([
     getCurrentUserProfile(userId),
     prisma.userSession.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
     prisma.activityLog.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 12 }),
     prisma.invoice.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 12 }),
+    prisma.upload.findMany({
+      where: {
+        ownerId: userId,
+        resourceType: 'lawyer_profile',
+        purpose: { in: ['national_id_front', 'national_id_back', 'lawyer_license_front', 'lawyer_license_back'] },
+        status: 'active',
+      },
+      orderBy: { createdAt: 'desc' },
+    }),
   ]);
+  const latestUploadUrl = (purpose: string) => documentUploads.find((item) => item.purpose === purpose)?.url || '';
+  const profileWithDocumentSides = {
+    ...profile,
+    nationalIdFrontUrl: latestUploadUrl('national_id_front') || profile.nationalIdUrl || '',
+    nationalIdBackUrl: latestUploadUrl('national_id_back'),
+    lawyerLicenseFrontUrl: latestUploadUrl('lawyer_license_front') || profile.lawyerLicenseUrl || '',
+    lawyerLicenseBackUrl: latestUploadUrl('lawyer_license_back'),
+  };
 
   return {
-    profile,
+    profile: profileWithDocumentSides,
     sessions: sessions.map((item) => ({
       id: item.id,
       device: item.device,

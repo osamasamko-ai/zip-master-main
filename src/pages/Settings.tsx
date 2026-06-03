@@ -74,9 +74,11 @@ type VerificationDocument = {
   key: 'nationalId' | 'lawyerLicense';
   label: string;
   description: string;
-  helperText: string;
+  frontDescription: string;
+  backDescription: string;
   icon: string;
-  previewUrl: string;
+  frontUrl: string;
+  backUrl: string;
   isVerified: boolean;
   required: boolean;
 };
@@ -248,8 +250,12 @@ export default function Settings() {
   });
   const [documents, setDocuments] = useState({
     nationalIdUrl: '',
+    nationalIdFrontUrl: '',
+    nationalIdBackUrl: '',
     nationalIdVerified: false,
     lawyerLicenseUrl: '',
+    lawyerLicenseFrontUrl: '',
+    lawyerLicenseBackUrl: '',
     lawyerLicenseVerified: false,
   });
   const [connectedApps, setConnectedApps] = useState<ConnectedApp[]>([
@@ -301,8 +307,12 @@ export default function Settings() {
         setInvoices(data.invoices || []);
         setDocuments({
           nationalIdUrl: data.profile.nationalIdUrl || '',
+          nationalIdFrontUrl: data.profile.nationalIdFrontUrl || data.profile.nationalIdUrl || '',
+          nationalIdBackUrl: data.profile.nationalIdBackUrl || '',
           nationalIdVerified: !!data.profile.nationalIdVerified,
           lawyerLicenseUrl: data.profile.lawyerLicenseUrl || '',
+          lawyerLicenseFrontUrl: data.profile.lawyerLicenseFrontUrl || data.profile.lawyerLicenseUrl || '',
+          lawyerLicenseBackUrl: data.profile.lawyerLicenseBackUrl || '',
           lawyerLicenseVerified: !!data.profile.lawyerLicenseVerified,
         });
         setHasUnsavedChanges(false);
@@ -341,9 +351,11 @@ export default function Settings() {
         key: 'nationalId',
         label: 'البطاقة الوطنية',
         description: 'ارفع نسخة واضحة من الجهة الأمامية أو ملف PDF رسمي لاستخدامها في التحقق من الهوية.',
-        helperText: 'يفضّل أن تكون البيانات كاملة وواضحة وبدون قص للأطراف.',
+        frontDescription: 'الوجه الأمامي الذي يحتوي على الاسم والصورة والرقم الوطني.',
+        backDescription: 'الوجه الخلفي لإكمال بيانات الإصدار والقيود الخلفية.',
         icon: 'fa-id-card',
-        previewUrl: documents.nationalIdUrl,
+        frontUrl: documents.nationalIdFrontUrl || documents.nationalIdUrl,
+        backUrl: documents.nationalIdBackUrl,
         isVerified: documents.nationalIdVerified,
         required: true,
       },
@@ -353,9 +365,11 @@ export default function Settings() {
         description: isProfessionalAccount
           ? 'أضف بطاقة المحاماة الحالية لإكمال التحقق المهني وتفعيل الاعتماد في الملف العام.'
           : 'يمكنك رفع بطاقة المحاماة الآن إذا كنت بصدد الترقية إلى حساب مهني أو استكمال التحقق لاحقاً.',
-        helperText: 'نقبل JPG وPNG وPDF بحجم يصل إلى 5MB لكل ملف.',
+        frontDescription: 'الوجه الأمامي الذي يظهر الاسم ورقم العضوية أو النقابة.',
+        backDescription: 'الوجه الخلفي لإثبات الصلاحية وتفاصيل الإصدار.',
         icon: 'fa-scale-balanced',
-        previewUrl: documents.lawyerLicenseUrl,
+        frontUrl: documents.lawyerLicenseFrontUrl || documents.lawyerLicenseUrl,
+        backUrl: documents.lawyerLicenseBackUrl,
         isVerified: documents.lawyerLicenseVerified,
         required: isProfessionalAccount,
       },
@@ -365,7 +379,7 @@ export default function Settings() {
 
   const securityScore = form.twoFactor ? 92 : 71;
   const requiredVerificationDocuments = verificationDocuments.filter((item) => item.required);
-  const uploadedDocumentsCount = requiredVerificationDocuments.filter((item) => item.previewUrl).length;
+  const uploadedDocumentsCount = requiredVerificationDocuments.filter((item) => item.frontUrl && item.backUrl).length;
   const verifiedDocumentsCount = requiredVerificationDocuments.filter((item) => item.isVerified).length;
   const readinessSteps = useMemo<ReadinessStep[]>(() => {
     const baseSteps: ReadinessStep[] = [
@@ -382,11 +396,11 @@ export default function Settings() {
       {
         id: 'national-id',
         title: 'البطاقة الوطنية',
-        description: documents.nationalIdVerified ? 'تم اعتماد الهوية الوطنية.' : documents.nationalIdUrl ? 'مرفوعة وتنتظر مراجعة الإدارة.' : 'ارفع صورة واضحة أو ملف PDF للبطاقة الوطنية.',
+        description: documents.nationalIdVerified ? 'تم اعتماد الهوية الوطنية.' : documents.nationalIdFrontUrl && documents.nationalIdBackUrl ? 'الوجهان مرفوعان وينتظران مراجعة الإدارة.' : 'ارفع الوجه الأمامي والخلفي للبطاقة الوطنية.',
         section: 'documents',
         weight: 20,
         done: documents.nationalIdVerified,
-        status: documents.nationalIdVerified ? 'done' : documents.nationalIdUrl ? 'review' : 'missing',
+        status: documents.nationalIdVerified ? 'done' : documents.nationalIdFrontUrl && documents.nationalIdBackUrl ? 'review' : 'missing',
         icon: 'fa-file-shield',
       },
       {
@@ -443,17 +457,17 @@ export default function Settings() {
       {
         id: 'lawyer-license',
         title: 'بطاقة المحاماة',
-        description: documents.lawyerLicenseVerified ? 'تم اعتماد بطاقة المحاماة.' : documents.lawyerLicenseUrl ? 'مرفوعة وتنتظر مراجعة الإدارة.' : 'ارفع بطاقة المحاماة لتفعيل استقبال العملاء.',
+        description: documents.lawyerLicenseVerified ? 'تم اعتماد بطاقة المحاماة.' : documents.lawyerLicenseFrontUrl && documents.lawyerLicenseBackUrl ? 'الوجهان مرفوعان وينتظران مراجعة الإدارة.' : 'ارفع وجهي بطاقة المحاماة لتفعيل استقبال العملاء.',
         section: 'documents',
         weight: 20,
         done: documents.lawyerLicenseVerified,
-        status: documents.lawyerLicenseVerified ? 'done' : documents.lawyerLicenseUrl ? 'review' : 'missing',
+        status: documents.lawyerLicenseVerified ? 'done' : documents.lawyerLicenseFrontUrl && documents.lawyerLicenseBackUrl ? 'review' : 'missing',
         icon: 'fa-scale-balanced',
       },
       baseSteps[2],
       baseSteps[3],
     ];
-  }, [billingStatus, documents.lawyerLicenseUrl, documents.lawyerLicenseVerified, documents.nationalIdUrl, documents.nationalIdVerified, form.bio, form.consultationFee, form.email, form.highlights, form.name, form.phone, form.pushNotifications, form.securityAlerts, form.specialty, form.twoFactor, isProfessionalAccount]);
+  }, [billingStatus, documents.lawyerLicenseBackUrl, documents.lawyerLicenseFrontUrl, documents.lawyerLicenseVerified, documents.nationalIdBackUrl, documents.nationalIdFrontUrl, documents.nationalIdVerified, form.bio, form.consultationFee, form.email, form.highlights, form.name, form.phone, form.pushNotifications, form.securityAlerts, form.specialty, form.twoFactor, isProfessionalAccount]);
   const profileCompletion = readinessSteps.reduce((total, step) => total + (step.done ? step.weight : 0), 0);
   const remainingReadinessSteps = readinessSteps.filter((step) => !step.done);
   const accountTrustStatus = verifiedDocumentsCount === requiredVerificationDocuments.length ? 'موثق' : uploadedDocumentsCount > 0 ? 'قيد المراجعة' : 'غير مكتمل';
@@ -473,24 +487,24 @@ export default function Settings() {
     form.securityAlerts,
   ].filter(Boolean).length;
 
-  const handleNationalIdUpload = async (file: File) => {
-    const fileUrl = await uploadNationalId(file);
+  const handleNationalIdUpload = async (file: File, side: 'front' | 'back' = 'front') => {
+    const fileUrl = await uploadNationalId(file, side);
     setDocuments((current) => ({
       ...current,
-      nationalIdUrl: fileUrl,
+      ...(side === 'front' ? { nationalIdUrl: fileUrl, nationalIdFrontUrl: fileUrl } : { nationalIdBackUrl: fileUrl }),
       nationalIdVerified: false,
     }));
-    setDocumentNotice('تم رفع البطاقة الوطنية وهي الآن بانتظار المراجعة.');
+    setDocumentNotice(side === 'front' ? 'تم رفع الوجه الأمامي للبطاقة الوطنية.' : 'تم رفع الوجه الخلفي للبطاقة الوطنية.');
   };
 
-  const handleLawyerLicenseUpload = async (file: File) => {
-    const fileUrl = await uploadLawyerLicense(file);
+  const handleLawyerLicenseUpload = async (file: File, side: 'front' | 'back' = 'front') => {
+    const fileUrl = await uploadLawyerLicense(file, side);
     setDocuments((current) => ({
       ...current,
-      lawyerLicenseUrl: fileUrl,
+      ...(side === 'front' ? { lawyerLicenseUrl: fileUrl, lawyerLicenseFrontUrl: fileUrl } : { lawyerLicenseBackUrl: fileUrl }),
       lawyerLicenseVerified: false,
     }));
-    setDocumentNotice('تم رفع بطاقة المحاماة وهي الآن بانتظار المراجعة.');
+    setDocumentNotice(side === 'front' ? 'تم رفع الوجه الأمامي لبطاقة المحاماة.' : 'تم رفع الوجه الخلفي لبطاقة المحاماة.');
   };
 
   React.useEffect(() => {
@@ -1289,24 +1303,37 @@ export default function Settings() {
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <div className="flex flex-wrap justify-end gap-2">
                         {document.required && <StatusBadge tone="warning">مطلوب</StatusBadge>}
-                        {document.previewUrl && !document.isVerified && <StatusBadge tone="info">قيد المراجعة</StatusBadge>}
-                        {!document.previewUrl && <StatusBadge tone="neutral">غير مرفوع</StatusBadge>}
+                        {document.frontUrl && document.backUrl && !document.isVerified && <StatusBadge tone="info">قيد المراجعة</StatusBadge>}
+                        {document.frontUrl && !document.backUrl && <StatusBadge tone="warning">الخلفي ناقص</StatusBadge>}
+                        {!document.frontUrl && document.backUrl && <StatusBadge tone="warning">الأمامي ناقص</StatusBadge>}
+                        {!document.frontUrl && !document.backUrl && <StatusBadge tone="neutral">غير مرفوع</StatusBadge>}
                       </div>
                       <div className="text-right">
                         <h3 className="text-lg font-black text-brand-dark">{document.label}</h3>
-                        <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{document.helperText}</p>
+                        <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{document.description}</p>
                       </div>
                     </div>
 
-                    <DocumentUpload
-                      label={document.label}
-                      description={document.description}
-                      icon={document.icon}
-                      previewUrl={document.previewUrl}
-                      isVerified={document.isVerified}
-                      isLoading={uploading}
-                      onUpload={document.key === 'nationalId' ? handleNationalIdUpload : handleLawyerLicenseUpload}
-                    />
+                    <div className="grid gap-4 2xl:grid-cols-2">
+                      <DocumentUpload
+                        label={`الوجه الأمامي - ${document.label}`}
+                        description={document.frontDescription}
+                        icon={document.icon}
+                        previewUrl={document.frontUrl}
+                        isVerified={document.isVerified}
+                        isLoading={uploading}
+                        onUpload={(file) => document.key === 'nationalId' ? handleNationalIdUpload(file, 'front') : handleLawyerLicenseUpload(file, 'front')}
+                      />
+                      <DocumentUpload
+                        label={`الوجه الخلفي - ${document.label}`}
+                        description={document.backDescription}
+                        icon="fa-address-card"
+                        previewUrl={document.backUrl}
+                        isVerified={document.isVerified}
+                        isLoading={uploading}
+                        onUpload={(file) => document.key === 'nationalId' ? handleNationalIdUpload(file, 'back') : handleLawyerLicenseUpload(file, 'back')}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
