@@ -170,6 +170,7 @@ export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
   const [editingPost, setEditingPost] = useState<any | null>(null);
   const [editContent, setEditContent] = useState('');
   const [storyViewerOpen, setStoryViewerOpen] = useState(false);
+  const [selectedMediaPost, setSelectedMediaPost] = useState<any | null>(null);
   const [consultationPost, setConsultationPost] = useState<any | null>(null);
   const [consultationNote, setConsultationNote] = useState('');
   const [paymentMethod, setPaymentMethod] = useState(paymentMethods[0].id);
@@ -423,6 +424,8 @@ export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
         onFeature={() => adminUpdate(item, { featured: !item.featured })}
         onHide={() => adminUpdate(item, { status: 'hidden' })}
         onOpenProfile={() => onOpen?.('profile')}
+        onOpenMedia={() => setSelectedMediaPost(item)}
+        mediaPaused={selectedMediaPost?.id === item.id}
       />
       {index === 1 && suggestedLawyers.length > 0 ? (
         <View style={styles.inlineLawyers}>
@@ -690,6 +693,7 @@ export function FeedScreen({ onOpen }: FeedScreenProps = {}) {
         }
       />
       <EditModal post={editingPost} content={editContent} loading={busyId === `edit-${editingPost?.id}`} onChange={setEditContent} onClose={() => setEditingPost(null)} onSubmit={saveEdit} />
+      <MediaViewerModal post={selectedMediaPost} onClose={() => setSelectedMediaPost(null)} />
       <StoryModal
         visible={storyViewerOpen}
         stories={storyViewerStories}
@@ -747,6 +751,35 @@ function InteractiveCard({ children, onPress, style }: any) {
   );
 }
 
+function MediaViewerModal({ post, onClose }: { post: any | null; onClose: () => void }) {
+  if (!post?.mediaUrl) return null;
+  return (
+    <Modal visible={Boolean(post)} animationType="fade" transparent={false} onRequestClose={onClose}>
+      <View style={styles.mediaViewer}>
+        <View style={styles.mediaViewerHeader}>
+          <Pressable onPress={onClose} style={styles.mediaViewerClose}>
+            <Ionicons name="close" size={24} color="#fff" />
+          </Pressable>
+          <View style={styles.mediaViewerAuthor}>
+            <Text style={styles.mediaViewerName}>{post.author?.name || 'عضو المنصة'}</Text>
+            <Text style={styles.mediaViewerMeta}>{post.author?.specialty || post.category || 'منشور'}</Text>
+          </View>
+        </View>
+        <View style={styles.mediaViewerBody}>
+          {post.mediaType === 'video' ? (
+            <FeedVideo uri={mediaUrl(post.mediaUrl)} style={styles.mediaViewerContent} contentFit="contain" nativeControls autoPlay />
+          ) : (
+            <CachedImage uri={mediaUrl(post.mediaUrl)} style={styles.mediaViewerContent} contentFit="contain" />
+          )}
+        </View>
+        <View style={styles.mediaViewerFooter}>
+          <Text style={styles.mediaViewerText} numberOfLines={3}>{post.content}</Text>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 function MediaPreview({ media, variant, onRemove }: { media: PickedMedia; variant: 'post' | 'story'; onRemove: () => void }) {
   const kind = getPickedMediaKind(media);
   const isStory = variant === 'story';
@@ -783,6 +816,7 @@ function FeedVideo({
   autoPlay = false,
   loop = false,
   muted = false,
+  paused = false,
 }: {
   uri: string;
   style: any;
@@ -791,6 +825,7 @@ function FeedVideo({
   autoPlay?: boolean;
   loop?: boolean;
   muted?: boolean;
+  paused?: boolean;
 }) {
   const [shouldLoad, setShouldLoad] = useState(autoPlay);
 
@@ -805,7 +840,7 @@ function FeedVideo({
     );
   }
 
-  return <FeedVideoPlayer uri={uri} style={style} contentFit={contentFit} nativeControls={nativeControls} autoPlay={autoPlay} loop={loop} muted={muted} />;
+  return <FeedVideoPlayer uri={uri} style={style} contentFit={contentFit} nativeControls={nativeControls} autoPlay={autoPlay} loop={loop} muted={muted} paused={paused} />;
 }
 
 function FeedVideoPlayer({
@@ -816,6 +851,7 @@ function FeedVideoPlayer({
   autoPlay = false,
   loop = false,
   muted = false,
+  paused = false,
 }: {
   uri: string;
   style: any;
@@ -824,6 +860,7 @@ function FeedVideoPlayer({
   autoPlay?: boolean;
   loop?: boolean;
   muted?: boolean;
+  paused?: boolean;
 }) {
   const player = useVideoPlayer(uri, (playerInstance) => {
     playerInstance.loop = loop;
@@ -835,9 +872,10 @@ function FeedVideoPlayer({
   useEffect(() => {
     player.loop = loop;
     player.muted = muted;
-    if (autoPlay) player.play();
+    if (paused) player.pause();
+    else if (autoPlay) player.play();
     else player.pause();
-  }, [autoPlay, loop, muted, player]);
+  }, [autoPlay, loop, muted, paused, player]);
 
   return (
     <VideoView
@@ -875,7 +913,7 @@ function CreateStoryCard({ user, onPress }: { user: any; onPress: () => void }) 
 
 const PostCardMemo = React.memo(PostCard);
 
-function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide, onOpenProfile }: any) {
+function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChangeComment, onSubmitComment, onLike, onSave, onShare, onComment, onConsult, onFollow, onEdit, onDelete, onPin, onFeature, onHide, onOpenProfile, onOpenMedia, mediaPaused }: any) {
   const [expanded, setExpanded] = useState(false);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const heartAnim = useRef(new Animated.Value(0)).current;
@@ -950,7 +988,7 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
       <View style={styles.tagRow}><Text style={styles.tag}>#{post.category || 'عام'}</Text><Text style={styles.tag}>{post.readingTime || 1} دقيقة قراءة</Text></View>
       {post.mediaUrl ? (
         post.mediaType === 'image' ? (
-          <Pressable onPress={handleImagePress} style={[styles.mediaBox, styles.imageMediaBox]}>
+          <Pressable onPress={() => { handleImagePress(); onOpenMedia?.(); }} style={[styles.mediaBox, styles.imageMediaBox]}>
             <>
               <CachedImage uri={mediaUrl(post.mediaUrl)} style={styles.postImage} contentFit="contain" />
               <Animated.View style={[styles.heartOverlay, { transform: [{ scale: heartAnim }], opacity: heartAnim }]}>
@@ -959,9 +997,9 @@ function PostCard({ post, userId, userRole, busyId, commentOpen, comment, onChan
             </>
           </Pressable>
         ) : (
-          <View style={[styles.mediaBox, styles.imageMediaBox]}>
-            <FeedVideo uri={mediaUrl(post.mediaUrl)} style={styles.postImage} contentFit="contain" nativeControls />
-          </View>
+          <Pressable onPress={onOpenMedia} style={[styles.mediaBox, styles.imageMediaBox]}>
+            <FeedVideo uri={mediaUrl(post.mediaUrl)} style={styles.postImage} contentFit="contain" nativeControls paused={Boolean(mediaPaused)} />
+          </Pressable>
         )
       ) : null}
       <View style={styles.countRow}><Text style={styles.countText}>{(post.likesCount || 0).toLocaleString('ar-IQ')} إعجاب</Text><Text style={styles.countText}>{post.commentsCount || 0} تعليق · {post.shareCount || 0} مشاركة · {post.savesCount || 0} حفظ</Text></View>
@@ -1546,6 +1584,16 @@ const styles = StyleSheet.create({
   mediaPreviewBadgeText: { color: '#fff', fontSize: 11, fontWeight: '900' },
   mediaPreviewImage: { height: '100%', width: '100%' },
   mediaRemoveButton: { alignItems: 'center', backgroundColor: 'rgba(15,23,42,0.72)', borderRadius: 999, height: 32, justifyContent: 'center', left: 10, position: 'absolute', top: 10, width: 32 },
+  mediaViewer: { backgroundColor: '#000', flex: 1 },
+  mediaViewerAuthor: { alignItems: 'flex-end', flex: 1 },
+  mediaViewerBody: { alignItems: 'center', flex: 1, justifyContent: 'center' },
+  mediaViewerClose: { alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.14)', borderRadius: 999, height: 42, justifyContent: 'center', width: 42 },
+  mediaViewerContent: { height: '100%', width: '100%' },
+  mediaViewerFooter: { backgroundColor: 'rgba(0,0,0,0.72)', padding: 14 },
+  mediaViewerHeader: { alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.72)', flexDirection: 'row', gap: 12, padding: 14, paddingTop: Platform.OS === 'ios' ? 48 : 18 },
+  mediaViewerMeta: { color: 'rgba(255,255,255,0.62)', fontSize: 11, fontWeight: '800', marginTop: 3, textAlign: 'right' },
+  mediaViewerName: { color: '#fff', fontSize: 14, fontWeight: '900', textAlign: 'right' },
+  mediaViewerText: { color: '#fff', fontSize: 13, fontWeight: '800', lineHeight: 22, textAlign: 'right' },
   reportBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   reportMenu: { backgroundColor: '#fff', borderRadius: 24, width: '90%', padding: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 10 }, shadowOpacity: 0.3, shadowRadius: 20, elevation: 10 },
   reportTitle: { fontSize: 18, fontWeight: '900', color: colors.ink, marginBottom: 15, textAlign: 'center' },

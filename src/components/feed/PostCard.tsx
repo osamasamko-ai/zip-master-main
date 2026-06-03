@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import type { AuthUser } from '../../context/AuthContext';
 import type { FeedPost } from './types';
 import LazyVideo from './LazyVideo';
+import MediaViewer from './MediaViewer';
 
 const formatDate = (value: string) => new Intl.DateTimeFormat('ar-IQ', {
   month: 'short',
@@ -44,6 +45,7 @@ export default function PostCard({
   const [expanded, setExpanded] = useState(false);
   const [comment, setComment] = useState('');
   const [editing, setEditing] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
   const [draft, setDraft] = useState(post.content);
   const isLong = post.content.length > 280;
   const visibleText = expanded || !isLong ? post.content : `${post.content.slice(0, 280)}...`;
@@ -60,6 +62,7 @@ export default function PostCard({
   };
 
   return (
+    <>
     <article
       id={post.id}
       onDoubleClick={handleDoubleClick}
@@ -150,17 +153,17 @@ export default function PostCard({
         {post.mediaUrl && (
           <div className="-mx-4 mt-4 overflow-hidden border-y border-slate-100 bg-slate-100">
             {post.mediaType === 'video' ? (
-              <div className="relative aspect-square max-h-[680px] w-full bg-black sm:aspect-[4/3]">
-                <LazyVideo src={post.mediaUrl} className="bg-black object-contain" />
+              <div onClick={() => setViewerOpen(true)} className="relative aspect-square max-h-[680px] w-full cursor-pointer bg-black sm:aspect-[4/3]">
+                <LazyVideo src={post.mediaUrl} className="bg-black object-contain" paused={viewerOpen} />
                 <div className="pointer-events-none absolute right-4 top-4 rounded-full bg-black/55 px-3 py-1.5 text-[11px] font-black text-white backdrop-blur">
                   <i className="fa-solid fa-play ml-1 text-brand-gold"></i>
                   متابعة المشاهدة
                 </div>
               </div>
             ) : (
-              <div className="flex aspect-square max-h-[680px] w-full items-center justify-center bg-slate-100 sm:aspect-[4/3]">
+              <button type="button" onClick={() => setViewerOpen(true)} className="flex aspect-square max-h-[680px] w-full items-center justify-center bg-slate-100 sm:aspect-[4/3]">
                 <img src={post.mediaUrl} alt="" loading="lazy" decoding="async" className="h-full w-full object-contain" />
-              </div>
+              </button>
             )}
           </div>
         )}
@@ -214,6 +217,8 @@ export default function PostCard({
         </div>
       </div>
     </article>
+    <MediaViewer post={viewerOpen ? post : null} onClose={() => setViewerOpen(false)} />
+    </>
   );
 }
 

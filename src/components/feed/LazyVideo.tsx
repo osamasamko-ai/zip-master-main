@@ -7,6 +7,7 @@ export default function LazyVideo({
   muted = false,
   poster,
   fit = 'contain',
+  paused = false,
 }: {
   src: string;
   className?: string;
@@ -14,8 +15,10 @@ export default function LazyVideo({
   muted?: boolean;
   poster?: string;
   fit?: 'contain' | 'cover';
+  paused?: boolean;
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [canLoad, setCanLoad] = useState(false);
 
   useEffect(() => {
@@ -34,10 +37,14 @@ export default function LazyVideo({
     return () => observer.disconnect();
   }, [canLoad]);
 
+  useEffect(() => {
+    if (paused) videoRef.current?.pause();
+  }, [paused]);
+
   return (
     <div ref={rootRef} className={`relative h-full w-full ${className || ''}`}>
       {canLoad ? (
-        <video src={src} controls={controls} muted={muted} preload="metadata" poster={poster} className={`h-full w-full ${fit === 'cover' ? 'object-cover' : 'object-contain'}`} />
+        <video ref={videoRef} src={src} controls={controls} muted={muted} preload="metadata" poster={poster} className={`h-full w-full ${fit === 'cover' ? 'object-cover' : 'object-contain'}`} />
       ) : (
         <button
           type="button"
