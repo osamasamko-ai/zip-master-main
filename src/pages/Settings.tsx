@@ -8,7 +8,7 @@ import apiClient from '../api/client';
 import { DocumentUpload } from '../components/DocumentUpload';
 import { useDocumentUpload } from '../hooks/useDocumentUpload';
 
-type SettingsSection = 'account' | 'publicProfile' | 'security' | 'billing' | 'notifications' | 'integrations' | 'activity' | 'documents';
+type SettingsSection = 'readiness' | 'account' | 'publicProfile' | 'security' | 'billing' | 'notifications' | 'integrations' | 'activity' | 'documents';
 
 type SessionItem = {
   id: string;
@@ -79,6 +79,17 @@ type VerificationDocument = {
   previewUrl: string;
   isVerified: boolean;
   required: boolean;
+};
+
+type ReadinessStep = {
+  id: string;
+  title: string;
+  description: string;
+  section: SettingsSection;
+  weight: number;
+  done: boolean;
+  status: 'done' | 'review' | 'missing';
+  icon: string;
 };
 
 function formatConsultationFeeInput(value: string) {
@@ -193,7 +204,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const { uploadNationalId, uploadLawyerLicense, uploading, error: uploadError } = useDocumentUpload();
 
-  const [activeSection, setActiveSection] = useState<SettingsSection>('account');
+  const [activeSection, setActiveSection] = useState<SettingsSection>('readiness');
   const [savedToast, setSavedToast] = useState('');
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [settingsError, setSettingsError] = useState('');
@@ -309,6 +320,7 @@ export default function Settings() {
 
   const sections = useMemo(
     () => [
+      { id: 'readiness' as const, label: 'الجاهزية', icon: 'fa-circle-check', description: 'خطوات إكمال الحساب والتوثيق' },
       { id: 'account' as const, label: 'الحساب', icon: 'fa-id-card', description: 'الهوية، بيانات الحساب، وبيئة العمل' },
       ...(isProfessionalAccount
         ? [{ id: 'publicProfile' as const, label: 'الملف العام', icon: 'fa-address-card', description: 'النبذة، التخصصات، ونقاط التميز' }]
@@ -321,16 +333,6 @@ export default function Settings() {
       { id: 'activity' as const, label: 'النشاط', icon: 'fa-clock-rotate-left', description: 'تحليلات الاستخدام وسجل الأحداث' },
     ],
     [isProfessionalAccount]
-  );
-
-  const usageStats = useMemo(
-    () => [
-      { label: 'الاشتراك', value: 'احترافي (Pro)', note: 'التجديد القادم: 01 أيار 2026' },
-      { label: 'المساحة', value: '9.8 / 15 جيجابايت', note: 'تم استهلاك 65% من المساحة' },
-      { label: 'قوة الأمان', value: form.twoFactor ? '92/100' : '71/100', note: form.twoFactor ? 'المصادقة مفعلة' : 'فعل المصادقة للتحسين' },
-      { label: 'الجلسات', value: String(sessions.length), note: `${sessions.filter((item) => item.current).length} جهاز نشط حالياً` },
-    ],
-    [form.twoFactor, sessions]
   );
 
   const verificationDocuments = useMemo<VerificationDocument[]>(
@@ -361,13 +363,109 @@ export default function Settings() {
     [documents, isProfessionalAccount]
   );
 
-  const uploadedDocumentsCount = verificationDocuments.filter((item) => item.previewUrl).length;
-  const verifiedDocumentsCount = verificationDocuments.filter((item) => item.isVerified).length;
-  const requiredProfileFields = isProfessionalAccount
-    ? [form.name, form.email, form.phone, form.company, form.consultationFee, form.bio, form.specialty, form.highlights]
-    : [form.name, form.email, form.phone, form.company];
-  const profileCompletion = Math.round((requiredProfileFields.filter(Boolean).length / requiredProfileFields.length) * 100);
   const securityScore = form.twoFactor ? 92 : 71;
+  const requiredVerificationDocuments = verificationDocuments.filter((item) => item.required);
+  const uploadedDocumentsCount = requiredVerificationDocuments.filter((item) => item.previewUrl).length;
+  const verifiedDocumentsCount = requiredVerificationDocuments.filter((item) => item.isVerified).length;
+  const readinessSteps = useMemo<ReadinessStep[]>(() => {
+    const baseSteps: ReadinessStep[] = [
+      {
+        id: 'account',
+        title: 'بيانات الحساب الأساسية',
+        description: form.name && form.email && form.phone ? 'الاسم والبريد والهاتف مكتملة.' : 'أكمل الاسم ورقم الهاتف لتثبيت هوية الحساب.',
+        section: 'account',
+        weight: 20,
+        done: Boolean(form.name && form.email && form.phone),
+        status: form.name && form.email && form.phone ? 'done' : 'missing',
+        icon: 'fa-id-card',
+      },
+      {
+        id: 'national-id',
+        title: 'البطاقة الوطنية',
+        description: documents.nationalIdVerified ? 'تم اعتماد الهوية الوطنية.' : documents.nationalIdUrl ? 'مرفوعة وتنتظر مراجعة الإدارة.' : 'ارفع صورة واضحة أو ملف PDF للبطاقة الوطنية.',
+        section: 'documents',
+        weight: 20,
+        done: documents.nationalIdVerified,
+        status: documents.nationalIdVerified ? 'done' : documents.nationalIdUrl ? 'review' : 'missing',
+        icon: 'fa-file-shield',
+      },
+      {
+        id: 'security',
+        title: 'قوة الأمان',
+        description: form.twoFactor ? 'المصادقة الثنائية مفعلة.' : 'فعّل المصادقة الثنائية لحماية الدخول من الأجهزة الجديدة.',
+        section: 'security',
+        weight: 10,
+        done: form.twoFactor,
+        status: form.twoFactor ? 'done' : 'missing',
+        icon: 'fa-shield-halved',
+      },
+      {
+        id: 'notifications',
+        title: 'قنوات التنبيه المهمة',
+        description: form.pushNotifications && form.securityAlerts ? 'تنبيهات التطبيق والأمان مفعلة.' : 'فعّل تنبيهات التطبيق والأمان حتى لا تفوتك قرارات التوثيق.',
+        section: 'notifications',
+        weight: 10,
+        done: Boolean(form.pushNotifications && form.securityAlerts),
+        status: form.pushNotifications && form.securityAlerts ? 'done' : 'missing',
+        icon: 'fa-bell',
+      },
+    ];
+
+    if (!isProfessionalAccount) {
+      return [
+        ...baseSteps,
+        {
+          id: 'billing',
+          title: 'جاهزية الدفع',
+          description: billingStatus === 'active' ? 'الفوترة في وضع جيد.' : 'راجع حالة الفوترة قبل استخدام الخدمات المدفوعة.',
+          section: 'billing',
+          weight: 40,
+          done: billingStatus === 'active',
+          status: billingStatus === 'active' ? 'done' : 'missing',
+          icon: 'fa-credit-card',
+        },
+      ];
+    }
+
+    return [
+      baseSteps[0],
+      {
+        id: 'public-profile',
+        title: 'الملف المهني العام',
+        description: form.bio && form.specialty && form.highlights && form.consultationFee ? 'النبذة والتخصص والسعر ونقاط التميز مكتملة.' : 'أكمل النبذة والتخصص والسعر ونقاط التميز لرفع ظهورك.',
+        section: 'publicProfile',
+        weight: 20,
+        done: Boolean(form.bio && form.specialty && form.highlights && form.consultationFee),
+        status: form.bio && form.specialty && form.highlights && form.consultationFee ? 'done' : 'missing',
+        icon: 'fa-address-card',
+      },
+      baseSteps[1],
+      {
+        id: 'lawyer-license',
+        title: 'بطاقة المحاماة',
+        description: documents.lawyerLicenseVerified ? 'تم اعتماد بطاقة المحاماة.' : documents.lawyerLicenseUrl ? 'مرفوعة وتنتظر مراجعة الإدارة.' : 'ارفع بطاقة المحاماة لتفعيل استقبال العملاء.',
+        section: 'documents',
+        weight: 20,
+        done: documents.lawyerLicenseVerified,
+        status: documents.lawyerLicenseVerified ? 'done' : documents.lawyerLicenseUrl ? 'review' : 'missing',
+        icon: 'fa-scale-balanced',
+      },
+      baseSteps[2],
+      baseSteps[3],
+    ];
+  }, [billingStatus, documents.lawyerLicenseUrl, documents.lawyerLicenseVerified, documents.nationalIdUrl, documents.nationalIdVerified, form.bio, form.consultationFee, form.email, form.highlights, form.name, form.phone, form.pushNotifications, form.securityAlerts, form.specialty, form.twoFactor, isProfessionalAccount]);
+  const profileCompletion = readinessSteps.reduce((total, step) => total + (step.done ? step.weight : 0), 0);
+  const remainingReadinessSteps = readinessSteps.filter((step) => !step.done);
+  const accountTrustStatus = verifiedDocumentsCount === requiredVerificationDocuments.length ? 'موثق' : uploadedDocumentsCount > 0 ? 'قيد المراجعة' : 'غير مكتمل';
+  const usageStats = useMemo(
+    () => [
+      { label: 'الاشتراك', value: 'احترافي (Pro)', note: 'التجديد القادم: 01 أيار 2026' },
+      { label: 'المساحة', value: '9.8 / 15 جيجابايت', note: 'تم استهلاك 65% من المساحة' },
+      { label: 'قوة الأمان', value: form.twoFactor ? '92/100' : '71/100', note: form.twoFactor ? 'المصادقة مفعلة' : 'فعل المصادقة للتحسين' },
+      { label: 'الجلسات', value: String(sessions.length), note: `${sessions.filter((item) => item.current).length} جهاز نشط حالياً` },
+    ],
+    [form.twoFactor, sessions]
+  );
   const alertChannelsCount = [
     form.emailAlerts,
     form.pushNotifications,
@@ -603,7 +701,7 @@ export default function Settings() {
                   <p className="text-[10px] font-bold text-slate-400">قنوات</p>
                 </div>
                 <div className="rounded-xl bg-white p-3">
-                  <p className="text-lg font-black text-brand-dark">{uploadedDocumentsCount}</p>
+                  <p className="text-lg font-black text-brand-dark">{verifiedDocumentsCount}/{requiredVerificationDocuments.length}</p>
                   <p className="text-[10px] font-bold text-slate-400">مستندات</p>
                 </div>
               </div>
@@ -665,6 +763,111 @@ export default function Settings() {
         </aside>
 
         <div className="min-w-0 space-y-6">
+          {activeSection === 'readiness' && (
+            <>
+              <SettingsCard
+                title="مركز جاهزية الحساب"
+                description={remainingReadinessSteps.length ? `باقي ${remainingReadinessSteps.length} خطوة حتى يكتمل الحساب.` : 'كل عناصر الحساب الأساسية مكتملة.'}
+              >
+                <div className="grid gap-5 lg:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="rounded-[1.5rem] bg-brand-navy p-5 text-center text-white">
+                    <p className="text-xs font-black text-white/70">جاهزية الحساب</p>
+                    <p className="mt-3 text-5xl font-black text-brand-gold">{profileCompletion}%</p>
+                    <p className="mt-3 text-sm font-bold leading-6 text-white/75">
+                      {profileCompletion >= 90 ? 'حسابك جاهز للعمل بثقة.' : profileCompletion >= 60 ? 'اقتربت من الاكتمال.' : 'ابدأ بإكمال الأساسيات.'}
+                    </p>
+                  </div>
+                  <div className="min-w-0 rounded-[1.5rem] border border-slate-200 bg-slate-50 p-5">
+                    <div className="mb-3 flex items-center justify-between text-xs font-black text-slate-500">
+                      <span>{profileCompletion}%</span>
+                      <span>{remainingReadinessSteps[0]?.description || 'يمكنك الآن استخدام ميزات الحساب بثقة أعلى.'}</span>
+                    </div>
+                    <div className="h-3 overflow-hidden rounded-full bg-white">
+                      <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${profileCompletion}%` }}></div>
+                    </div>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                      {[
+                        { label: 'مرفوع', value: `${uploadedDocumentsCount}/${requiredVerificationDocuments.length}` },
+                        { label: 'موثق', value: `${verifiedDocumentsCount}/${requiredVerificationDocuments.length}` },
+                        { label: 'الأمان', value: `${securityScore}/100` },
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-2xl border border-slate-200 bg-white p-4 text-center">
+                          <p className="text-lg font-black text-brand-dark">{item.value}</p>
+                          <p className="mt-1 text-[11px] font-bold text-slate-400">{item.label}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-4 flex flex-wrap justify-end gap-2">
+                      <StatusBadge tone={accountTrustStatus === 'موثق' ? 'success' : accountTrustStatus === 'قيد المراجعة' ? 'info' : 'warning'}>
+                        التوثيق: {accountTrustStatus}
+                      </StatusBadge>
+                      <StatusBadge tone={profileCompletion >= 80 ? 'success' : 'warning'}>
+                        {remainingReadinessSteps.length ? `باقي ${remainingReadinessSteps.length}` : 'مكتمل'}
+                      </StatusBadge>
+                    </div>
+                  </div>
+                </div>
+              </SettingsCard>
+
+              <SettingsCard title="خطوات الإكمال" description="اضغط على أي خطوة للانتقال مباشرة إلى مكان تعديلها.">
+                <div className="grid gap-3">
+                  {readinessSteps.map((step) => {
+                    const toneClass = step.status === 'done'
+                      ? 'border-emerald-100 bg-emerald-50 text-emerald-700'
+                      : step.status === 'review'
+                        ? 'border-blue-100 bg-blue-50 text-blue-700'
+                        : 'border-amber-100 bg-amber-50 text-amber-700';
+                    const statusLabel = step.status === 'done' ? 'مكتمل' : step.status === 'review' ? 'قيد المراجعة' : 'ناقص';
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setActiveSection(step.section)}
+                        className="grid gap-4 rounded-[1.5rem] border border-slate-200 bg-white p-4 text-right transition hover:border-brand-navy/20 hover:bg-slate-50 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center"
+                      >
+                        <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${toneClass}`}>
+                          <i className={`fa-solid ${step.done ? 'fa-check' : step.icon}`}></i>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <span className={`rounded-full border px-3 py-1 text-[10px] font-black ${toneClass}`}>{statusLabel}</span>
+                            <h4 className="text-sm font-black text-brand-dark">{step.title}</h4>
+                          </div>
+                          <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{step.description}</p>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 text-xs font-black text-slate-400">
+                          <i className="fa-solid fa-chevron-left"></i>
+                          <span>{step.weight}%</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </SettingsCard>
+
+              <SettingsCard title="قواعد فتح الميزات" description="هذه القواعد تشرح سبب طلب خطوات التوثيق قبل العمليات الحساسة.">
+                <div className="grid gap-3 lg:grid-cols-3">
+                  {[
+                    { enabled: documents.nationalIdVerified, title: 'رفع المستندات الحساسة', note: 'يتطلب هوية وطنية موثقة.' },
+                    { enabled: !isProfessionalAccount || documents.lawyerLicenseVerified, title: 'استقبال الاستشارات المدفوعة', note: isProfessionalAccount ? 'يتطلب بطاقة محاماة موثقة.' : 'هذه الميزة خاصة بالحسابات المهنية.' },
+                    { enabled: form.twoFactor, title: 'حماية العمليات المالية', note: 'تفعيل المصادقة الثنائية يقلل مخاطر الدخول غير المصرح.' },
+                  ].map((gate) => (
+                    <div key={gate.title} className="rounded-[1.5rem] border border-slate-200 bg-slate-50 p-4 text-right">
+                      <div className="flex items-center justify-between gap-3">
+                        <StatusBadge tone={gate.enabled ? 'success' : 'warning'}>{gate.enabled ? 'مفتوح' : 'مقيّد'}</StatusBadge>
+                        <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${gate.enabled ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'}`}>
+                          <i className={`fa-solid ${gate.enabled ? 'fa-lock-open' : 'fa-lock'}`}></i>
+                        </div>
+                      </div>
+                      <h4 className="mt-4 text-sm font-black text-brand-dark">{gate.title}</h4>
+                      <p className="mt-2 text-xs font-bold leading-6 text-slate-500">{gate.note}</p>
+                    </div>
+                  ))}
+                </div>
+              </SettingsCard>
+            </>
+          )}
+
           {activeSection === 'account' && (
             <>
               <NoticePanel
@@ -1045,8 +1248,8 @@ export default function Settings() {
                       هذا القسم مخصص لرفع البطاقة الوطنية وبطاقة المحاماة ضمن تجربة واضحة وسريعة، مع إبقاء حالة كل مستند مفهومة فوراً للمستخدم.
                     </p>
                     <div className="mt-5 flex flex-wrap justify-end gap-2">
-                      <StatusBadge tone={uploadedDocumentsCount === verificationDocuments.length ? 'success' : 'warning'}>
-                        {uploadedDocumentsCount}/{verificationDocuments.length} مستندات مرفوعة
+                      <StatusBadge tone={uploadedDocumentsCount === requiredVerificationDocuments.length ? 'success' : 'warning'}>
+                        {uploadedDocumentsCount}/{requiredVerificationDocuments.length} مستندات مرفوعة
                       </StatusBadge>
                       <StatusBadge tone={verifiedDocumentsCount > 0 ? 'info' : 'neutral'}>
                         {verifiedDocumentsCount} مستندات موثقة

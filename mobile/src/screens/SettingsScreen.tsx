@@ -7,7 +7,7 @@ import { Button, EmptyState, Screen, SkeletonCard, Toast } from '../components/u
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
-type Section = 'account' | 'publicProfile' | 'security' | 'documents' | 'billing' | 'notifications' | 'integrations' | 'activity';
+type Section = 'readiness' | 'account' | 'publicProfile' | 'security' | 'documents' | 'billing' | 'notifications' | 'integrations' | 'activity';
 
 type SessionItem = {
   id: string;
@@ -31,6 +31,17 @@ type ActivityItem = {
   title: string;
   note: string;
   time: string;
+  icon: keyof typeof Ionicons.glyphMap;
+};
+
+type ReadinessStep = {
+  id: string;
+  title: string;
+  note: string;
+  section: Section;
+  weight: number;
+  done: boolean;
+  status: 'done' | 'review' | 'missing';
   icon: keyof typeof Ionicons.glyphMap;
 };
 
@@ -64,7 +75,7 @@ function formatConsultationFeeInput(value: string) {
 export function SettingsScreen() {
   const { user, logout } = useAuth();
   const isProfessional = user?.role === 'pro' || user?.role === 'admin';
-  const [activeSection, setActiveSection] = useState<Section>('account');
+  const [activeSection, setActiveSection] = useState<Section>('readiness');
   const [loadingSettings, setLoadingSettings] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploadingDocument, setUploadingDocument] = useState('');
@@ -109,6 +120,7 @@ export function SettingsScreen() {
   const [activityItems, setActivityItems] = useState<ActivityItem[]>(activitySeed);
 
   const sections = useMemo(() => [
+    { key: 'readiness' as const, label: 'الجاهزية', icon: 'checkmark-done-circle-outline' as const },
     { key: 'account' as const, label: 'الحساب', icon: 'id-card-outline' as const },
     ...(isProfessional ? [{ key: 'publicProfile' as const, label: 'الملف العام', icon: 'person-circle-outline' as const }] : []),
     { key: 'security' as const, label: 'الأمان', icon: 'shield-checkmark-outline' as const },
@@ -119,14 +131,108 @@ export function SettingsScreen() {
     { key: 'activity' as const, label: 'النشاط', icon: 'time-outline' as const },
   ], [isProfessional]);
 
-  const profileCompletion = useMemo(() => {
-    const fields = isProfessional ? [name, email, phone, company, consultationFee, bio, specialty, highlights] : [name, email, phone, company];
-    return Math.round((fields.filter(Boolean).length / fields.length) * 100);
-  }, [bio, company, consultationFee, email, highlights, isProfessional, name, phone, specialty]);
   const securityScore = prefs.twoFactor ? 92 : 71;
-  const uploadedDocs = [documents.nationalIdUrl, documents.lawyerLicenseUrl].filter(Boolean).length;
-  const verifiedDocs = [documents.nationalIdVerified, documents.lawyerLicenseVerified].filter(Boolean).length;
+  const requiredDocumentItems = isProfessional
+    ? [documents.nationalIdUrl, documents.lawyerLicenseUrl]
+    : [documents.nationalIdUrl];
+  const verifiedDocumentItems = isProfessional
+    ? [documents.nationalIdVerified, documents.lawyerLicenseVerified]
+    : [documents.nationalIdVerified];
+  const uploadedDocs = requiredDocumentItems.filter(Boolean).length;
+  const verifiedDocs = verifiedDocumentItems.filter(Boolean).length;
   const alertChannels = [prefs.emailAlerts, prefs.pushNotifications, prefs.billingReminders, prefs.securityAlerts].filter(Boolean).length;
+  const readinessSteps = useMemo<ReadinessStep[]>(() => {
+    const baseSteps: ReadinessStep[] = [
+      {
+        id: 'account',
+        title: 'بيانات الحساب الأساسية',
+        note: name && email && phone ? 'الاسم والبريد والهاتف مكتملة.' : 'أكمل الاسم ورقم الهاتف لتثبيت هوية الحساب.',
+        section: 'account',
+        weight: 20,
+        done: Boolean(name && email && phone),
+        status: name && email && phone ? 'done' : 'missing',
+        icon: 'id-card-outline',
+      },
+      {
+        id: 'national-id',
+        title: 'البطاقة الوطنية',
+        note: documents.nationalIdVerified ? 'تم اعتماد الهوية الوطنية.' : documents.nationalIdUrl ? 'مرفوعة وتنتظر مراجعة الإدارة.' : 'ارفع صورة واضحة أو ملف PDF للبطاقة الوطنية.',
+        section: 'documents',
+        weight: 20,
+        done: documents.nationalIdVerified,
+        status: documents.nationalIdVerified ? 'done' : documents.nationalIdUrl ? 'review' : 'missing',
+        icon: 'document-lock-outline',
+      },
+      {
+        id: 'security',
+        title: 'قوة الأمان',
+        note: prefs.twoFactor ? 'المصادقة الثنائية مفعلة.' : 'فعّل المصادقة الثنائية لحماية الدخول من الأجهزة الجديدة.',
+        section: 'security',
+        weight: 10,
+        done: prefs.twoFactor,
+        status: prefs.twoFactor ? 'done' : 'missing',
+        icon: 'shield-checkmark-outline',
+      },
+      {
+        id: 'notifications',
+        title: 'قنوات التنبيه المهمة',
+        note: prefs.pushNotifications && prefs.securityAlerts ? 'تنبيهات التطبيق والأمان مفعلة.' : 'فعّل تنبيهات التطبيق والأمان حتى لا تفوتك قرارات التوثيق.',
+        section: 'notifications',
+        weight: 10,
+        done: Boolean(prefs.pushNotifications && prefs.securityAlerts),
+        status: prefs.pushNotifications && prefs.securityAlerts ? 'done' : 'missing',
+        icon: 'notifications-outline',
+      },
+    ];
+
+    if (!isProfessional) {
+      return [
+        ...baseSteps,
+        {
+          id: 'billing',
+          title: 'جاهزية الدفع',
+          note: billingStatus === 'active' ? 'الفوترة في وضع جيد.' : 'راجع حالة الفوترة قبل استخدام الخدمات المدفوعة.',
+          section: 'billing',
+          weight: 40,
+          done: billingStatus === 'active',
+          status: billingStatus === 'active' ? 'done' : 'missing',
+          icon: 'card-outline',
+        },
+      ];
+    }
+
+    return [
+      baseSteps[0],
+      {
+        id: 'public-profile',
+        title: 'الملف المهني العام',
+        note: bio && specialty && highlights && consultationFee ? 'النبذة والتخصص والسعر ونقاط التميز مكتملة.' : 'أكمل النبذة والتخصص والسعر ونقاط التميز لرفع ظهورك.',
+        section: 'publicProfile',
+        weight: 20,
+        done: Boolean(bio && specialty && highlights && consultationFee),
+        status: bio && specialty && highlights && consultationFee ? 'done' : 'missing',
+        icon: 'person-circle-outline',
+      },
+      baseSteps[1],
+      {
+        id: 'lawyer-license',
+        title: 'بطاقة المحاماة',
+        note: documents.lawyerLicenseVerified ? 'تم اعتماد بطاقة المحاماة.' : documents.lawyerLicenseUrl ? 'مرفوعة وتنتظر مراجعة الإدارة.' : 'ارفع بطاقة المحاماة لتفعيل استقبال العملاء.',
+        section: 'documents',
+        weight: 20,
+        done: documents.lawyerLicenseVerified,
+        status: documents.lawyerLicenseVerified ? 'done' : documents.lawyerLicenseUrl ? 'review' : 'missing',
+        icon: 'briefcase-outline',
+      },
+      baseSteps[2],
+      baseSteps[3],
+    ];
+  }, [billingStatus, bio, consultationFee, documents.lawyerLicenseUrl, documents.lawyerLicenseVerified, documents.nationalIdUrl, documents.nationalIdVerified, email, highlights, isProfessional, name, phone, prefs.pushNotifications, prefs.securityAlerts, prefs.twoFactor, specialty]);
+  const profileCompletion = useMemo(() => {
+    return readinessSteps.reduce((total, step) => total + (step.done ? step.weight : 0), 0);
+  }, [readinessSteps]);
+  const remainingSteps = readinessSteps.filter((step) => !step.done);
+  const accountTrustStatus = verifiedDocs === verifiedDocumentItems.length ? 'موثق' : uploadedDocs > 0 ? 'قيد المراجعة' : 'غير مكتمل';
 
   useEffect(() => {
     let mounted = true;
@@ -289,7 +395,7 @@ export function SettingsScreen() {
         <View style={styles.scoreCard}>
           <Metric label="جاهزية الحساب" value={`${profileCompletion}%`} tone={profileCompletion >= 80 ? 'green' : 'gold'} />
           <Metric label="الأمان" value={`${securityScore}/100`} tone={securityScore >= 90 ? 'green' : 'gold'} />
-          <Metric label="الجلسات" value={sessions.length} tone="blue" />
+          <Metric label="التوثيق" value={accountTrustStatus} tone={accountTrustStatus === 'موثق' ? 'green' : accountTrustStatus === 'قيد المراجعة' ? 'blue' : 'gold'} />
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabs}>
@@ -303,6 +409,41 @@ export function SettingsScreen() {
 
         <Toast message={status} tone={status.includes('تم') ? 'success' : status.includes('تعذر') || status.includes('أدخل') || status.includes('غير') ? 'error' : 'info'} />
         {loadingSettings ? <><SkeletonCard /><SkeletonCard /></> : null}
+
+        {!loadingSettings && activeSection === 'readiness' ? (
+          <>
+            <SectionCard title="مركز جاهزية الحساب" note={remainingSteps.length ? `باقي ${remainingSteps.length} خطوة حتى يكتمل الحساب.` : 'كل عناصر الحساب الأساسية مكتملة.'}>
+              <View style={styles.readinessHero}>
+                <View style={styles.readinessScore}>
+                  <Text style={styles.readinessScoreValue}>{profileCompletion}%</Text>
+                  <Text style={styles.readinessScoreLabel}>جاهزية</Text>
+                </View>
+                <View style={styles.readinessHeroText}>
+                  <Text style={styles.readinessTitle}>{profileCompletion >= 90 ? 'حسابك جاهز للعمل' : profileCompletion >= 60 ? 'اقتربت من الاكتمال' : 'ابدأ بإكمال الأساسيات'}</Text>
+                  <Text style={styles.readinessNote}>{remainingSteps[0]?.note || 'يمكنك الآن استخدام ميزات الحساب بثقة أعلى.'}</Text>
+                </View>
+              </View>
+              <ProgressBar value={profileCompletion} />
+              <View style={styles.readinessSummary}>
+                <InfoPill label="مرفوع" value={`${uploadedDocs}/${requiredDocumentItems.length}`} />
+                <InfoPill label="موثق" value={`${verifiedDocs}/${verifiedDocumentItems.length}`} />
+                <InfoPill label="الأمان" value={`${securityScore}/100`} />
+              </View>
+            </SectionCard>
+
+            <SectionCard title="خطوات الإكمال" note="اضغط على أي خطوة للانتقال مباشرة إلى مكان تعديلها.">
+              {readinessSteps.map((step) => (
+                <ReadinessStepCard key={step.id} step={step} onPress={() => setActiveSection(step.section)} />
+              ))}
+            </SectionCard>
+
+            <SectionCard title="قواعد فتح الميزات" note="توضح لماذا نطلب هذه الخطوات قبل بعض العمليات الحساسة.">
+              <GateRow enabled={documents.nationalIdVerified} title="رفع المستندات الحساسة" note="يتطلب هوية وطنية موثقة." />
+              <GateRow enabled={!isProfessional || documents.lawyerLicenseVerified} title="استقبال الاستشارات المدفوعة" note={isProfessional ? 'يتطلب بطاقة محاماة موثقة.' : 'هذه الميزة خاصة بالحسابات المهنية.'} />
+              <GateRow enabled={prefs.twoFactor} title="حماية العمليات المالية" note="تفعيل المصادقة الثنائية يقلل مخاطر الدخول غير المصرح." />
+            </SectionCard>
+          </>
+        ) : null}
 
         {!loadingSettings && activeSection === 'account' ? (
           <>
@@ -377,7 +518,7 @@ export function SettingsScreen() {
         ) : null}
 
         {!loadingSettings && activeSection === 'documents' ? (
-          <SectionCard title="توثيق المستندات الأساسية" note={`${uploadedDocs}/2 مرفوعة · ${verifiedDocs} موثقة`}>
+          <SectionCard title="توثيق المستندات الأساسية" note={`${uploadedDocs}/${requiredDocumentItems.length} مرفوعة · ${verifiedDocs} موثقة`}>
             <DocumentCard title="البطاقة الوطنية" required uploaded={Boolean(documents.nationalIdUrl)} verified={documents.nationalIdVerified} loading={uploadingDocument === 'nationalId'} onPress={() => addDocument('nationalId')} />
             <DocumentCard title="بطاقة المحاماة" required={isProfessional} uploaded={Boolean(documents.lawyerLicenseUrl)} verified={documents.lawyerLicenseVerified} loading={uploadingDocument === 'lawyerLicense'} onPress={() => addDocument('lawyerLicense')} />
           </SectionCard>
@@ -503,6 +644,63 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
   return <Pressable onPress={onPress} style={[styles.chip, active && styles.chipActive]}><Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text></Pressable>;
 }
 
+function ProgressBar({ value }: { value: number }) {
+  return (
+    <View style={styles.progressTrack}>
+      <View style={[styles.progressFill, { width: `${Math.min(100, Math.max(0, value))}%` }]} />
+    </View>
+  );
+}
+
+function InfoPill({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={styles.infoPill}>
+      <Text style={styles.infoPillValue}>{value}</Text>
+      <Text style={styles.infoPillLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function ReadinessStepCard({ step, onPress }: { step: ReadinessStep; onPress: () => void }) {
+  const toneStyle = step.status === 'done' ? styles.stepDone : step.status === 'review' ? styles.stepReview : styles.stepMissing;
+  const statusLabel = step.status === 'done' ? 'مكتمل' : step.status === 'review' ? 'قيد المراجعة' : 'ناقص';
+  const iconColor = step.status === 'done' ? colors.green : step.status === 'review' ? colors.blue : colors.gold;
+
+  return (
+    <Pressable onPress={onPress} style={styles.stepCard}>
+      <View style={[styles.stepIcon, toneStyle]}>
+        <Ionicons name={step.done ? 'checkmark-circle-outline' : step.icon} size={20} color={iconColor} />
+      </View>
+      <View style={styles.flex}>
+        <View style={styles.stepTitleRow}>
+          <Text style={[styles.stepBadge, toneStyle]}>{statusLabel}</Text>
+          <Text style={styles.rowTitle}>{step.title}</Text>
+        </View>
+        <Text style={styles.rowNote}>{step.note}</Text>
+      </View>
+      <View style={styles.stepWeight}>
+        <Text style={styles.stepWeightText}>{step.weight}%</Text>
+        <Ionicons name="chevron-back-outline" size={16} color={colors.muted} />
+      </View>
+    </Pressable>
+  );
+}
+
+function GateRow({ enabled, title, note }: { enabled: boolean; title: string; note: string }) {
+  return (
+    <View style={styles.gateRow}>
+      <View style={[styles.gateIcon, enabled ? styles.gateIconOn : styles.gateIconOff]}>
+        <Ionicons name={enabled ? 'lock-open-outline' : 'lock-closed-outline'} size={18} color={enabled ? colors.green : colors.gold} />
+      </View>
+      <View style={styles.flex}>
+        <Text style={styles.rowTitle}>{title}</Text>
+        <Text style={styles.rowNote}>{note}</Text>
+      </View>
+      <Text style={[styles.gateStatus, enabled ? styles.gateStatusOn : styles.gateStatusOff]}>{enabled ? 'مفتوح' : 'مقيّد'}</Text>
+    </View>
+  );
+}
+
 function InfoRow({ label, value }: { label: string; value: string | number }) {
   return <View style={styles.infoRow}><Text style={styles.infoValue}>{value}</Text><Text style={styles.infoLabel}>{label}</Text></View>;
 }
@@ -562,6 +760,9 @@ const styles = StyleSheet.create({
   headerIcon: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 8, height: 50, justifyContent: 'center', width: 50 },
   headerText: { alignItems: 'flex-end', flex: 1 },
   infoLabel: { color: colors.muted, fontSize: 11, fontWeight: '800', marginTop: 3, textAlign: 'right' },
+  infoPill: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 8, borderWidth: 1, flex: 1, padding: 9 },
+  infoPillLabel: { color: colors.muted, fontSize: 10, fontWeight: '800', marginTop: 2 },
+  infoPillValue: { color: colors.ink, fontSize: 14, fontWeight: '900' },
   infoRow: { alignItems: 'center', borderBottomColor: colors.line, borderBottomWidth: 1, flexDirection: 'row-reverse', gap: 10, paddingVertical: 10 },
   infoValue: { color: colors.ink, flex: 1, fontSize: 13, fontWeight: '900', textAlign: 'right' },
   inlineActions: { gap: 8, marginTop: 12 },
@@ -583,6 +784,16 @@ const styles = StyleSheet.create({
   planBox: { backgroundColor: colors.goldTint, borderRadius: 8, padding: 12 },
   planName: { color: colors.ink, fontSize: 18, fontWeight: '900', textAlign: 'right' },
   planPrice: { color: colors.gold, fontSize: 16, fontWeight: '900', marginBottom: 8, marginTop: 4, textAlign: 'right' },
+  progressFill: { backgroundColor: colors.green, borderRadius: 999, height: '100%' },
+  progressTrack: { backgroundColor: colors.line, borderRadius: 999, height: 9, marginTop: 12, overflow: 'hidden' },
+  readinessHero: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 8, flexDirection: 'row-reverse', gap: 12, padding: 12 },
+  readinessHeroText: { alignItems: 'flex-end', flex: 1 },
+  readinessNote: { color: colors.muted, fontSize: 12, fontWeight: '700', lineHeight: 20, marginTop: 4, textAlign: 'right' },
+  readinessScore: { alignItems: 'center', backgroundColor: colors.navy, borderRadius: 8, height: 76, justifyContent: 'center', width: 76 },
+  readinessScoreLabel: { color: '#fff', fontSize: 10, fontWeight: '800', opacity: 0.82 },
+  readinessScoreValue: { color: colors.gold, fontSize: 22, fontWeight: '900' },
+  readinessSummary: { flexDirection: 'row-reverse', gap: 8, marginTop: 10 },
+  readinessTitle: { color: colors.ink, fontSize: 16, fontWeight: '900', textAlign: 'right' },
   rowCard: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 8, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 11 },
   rowCardDisabled: { opacity: 0.65 },
   rowNote: { color: colors.muted, fontSize: 11, fontWeight: '700', lineHeight: 18, marginTop: 3, textAlign: 'right' },
@@ -593,6 +804,15 @@ const styles = StyleSheet.create({
   smallButtonDanger: { backgroundColor: colors.redTint },
   smallButtonDangerText: { color: colors.red },
   smallButtonText: { color: colors.blue, fontSize: 12, fontWeight: '900' },
+  stepBadge: { borderRadius: 999, fontSize: 10, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3 },
+  stepCard: { alignItems: 'center', backgroundColor: colors.surface, borderRadius: 8, flexDirection: 'row-reverse', gap: 10, marginBottom: 8, padding: 11 },
+  stepDone: { backgroundColor: colors.greenTint, color: colors.green },
+  stepIcon: { alignItems: 'center', borderRadius: 999, height: 40, justifyContent: 'center', width: 40 },
+  stepMissing: { backgroundColor: colors.goldTint, color: colors.gold },
+  stepReview: { backgroundColor: colors.blueTint, color: colors.blue },
+  stepTitleRow: { alignItems: 'center', flexDirection: 'row', gap: 8, justifyContent: 'flex-end' },
+  stepWeight: { alignItems: 'center', flexDirection: 'row-reverse', gap: 2 },
+  stepWeightText: { color: colors.muted, fontSize: 11, fontWeight: '900' },
   subtitle: { color: colors.muted, fontSize: 13, fontWeight: '700', lineHeight: 21, marginTop: 4, textAlign: 'right' },
   tab: { alignItems: 'center', backgroundColor: colors.paper, borderColor: colors.line, borderRadius: 999, borderWidth: 1, flexDirection: 'row-reverse', gap: 5, minHeight: 38, paddingHorizontal: 12 },
   tabActive: { backgroundColor: colors.blue, borderColor: colors.blue },
@@ -608,4 +828,11 @@ const styles = StyleSheet.create({
   toggleText: { alignItems: 'flex-end', flex: 1 },
   toggleLabel: { color: colors.ink, fontSize: 14, fontWeight: '900', textAlign: 'right' },
   toggleNote: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 3, textAlign: 'right' },
+  gateIcon: { alignItems: 'center', borderRadius: 999, height: 38, justifyContent: 'center', width: 38 },
+  gateIconOff: { backgroundColor: colors.goldTint },
+  gateIconOn: { backgroundColor: colors.greenTint },
+  gateRow: { alignItems: 'center', borderBottomColor: colors.line, borderBottomWidth: 1, flexDirection: 'row-reverse', gap: 10, paddingVertical: 10 },
+  gateStatus: { borderRadius: 999, fontSize: 11, fontWeight: '900', overflow: 'hidden', paddingHorizontal: 9, paddingVertical: 5 },
+  gateStatusOff: { backgroundColor: colors.goldTint, color: colors.gold },
+  gateStatusOn: { backgroundColor: colors.greenTint, color: colors.green },
 });

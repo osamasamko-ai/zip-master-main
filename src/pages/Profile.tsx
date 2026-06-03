@@ -84,12 +84,30 @@ function SchedulingCalendar() {
   );
 }
 
-function PublicStat({ label, value, note }: { label: string; value: string; note: string }) {
-  return (
-    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 shadow-sm">
+function PublicStat({ label, value, note, onClick }: { label: string; value: string; note: string; onClick?: () => void }) {
+  const content = (
+    <>
       <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">{label}</p>
       <p className="mt-2 text-2xl font-black text-brand-dark">{value}</p>
       <p className="mt-1 text-xs font-bold text-slate-500">{note}</p>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        className="rounded-[1.75rem] border border-slate-200 bg-white p-4 text-right shadow-sm transition hover:border-brand-navy/30 hover:bg-slate-50"
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-[1.75rem] border border-slate-200 bg-white p-4 text-right shadow-sm">
+      {content}
     </div>
   );
 }
@@ -530,7 +548,7 @@ export default function Profile() {
           )}
 
           <div className="grid gap-3 py-5 sm:grid-cols-4">
-            <PublicStat label={isProfessionalProfile ? 'التقييم' : 'اكتمال الملف'} value={isProfessionalProfile ? lawyer.rating.toFixed(1) : `${lawyer.profileScore ?? 0}%`} note={isProfessionalProfile ? `${lawyer.reviewCount} مراجعة` : 'جاهزية الحساب'} />
+            <PublicStat label={isProfessionalProfile ? 'التقييم' : 'اكتمال الملف'} value={isProfessionalProfile ? lawyer.rating.toFixed(1) : `${lawyer.profileScore ?? 0}%`} note={isProfessionalProfile ? `${lawyer.reviewCount} مراجعة` : 'جاهزية الحساب'} onClick={isOwnProfile ? () => navigate('/settings') : undefined} />
             <PublicStat label="المتابعون" value={lawyer.followers.toLocaleString()} note="متابع" />
             <PublicStat label={isProfessionalProfile ? 'الخبرة' : 'الحالة'} value={isProfessionalProfile ? `${lawyer.experienceYears}` : (lawyer.verified ? 'موثق' : 'نشط')} note={isProfessionalProfile ? 'سنوات ممارسة' : lawyer.specialty} />
             <PublicStat label={isProfessionalProfile ? 'القضايا' : 'النشاط'} value={lawyer.casesHandled} note={isProfessionalProfile ? 'منجزة' : 'عام'} />

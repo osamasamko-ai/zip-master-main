@@ -297,7 +297,7 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
         />
 
         {isOwnProfile && (
-          <View style={styles.completionBarContainer}>
+          <Pressable onPress={() => onOpen?.('settings')} style={styles.completionBarContainer}>
             <View style={styles.completionTextRow}>
               <Text style={styles.completionLabel}>جاهزية الحساب والتوثيق</Text>
               <Text style={styles.completionValue}>{profile?.profileScore ?? 0}%</Text>
@@ -307,7 +307,7 @@ export function ProfileScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }
                 style={[styles.completionFill, { width: `${profile?.profileScore ?? 0}%` }]}
               />
             </View>
-          </View>
+          </Pressable>
         )}
 
         <View style={styles.hero}>
