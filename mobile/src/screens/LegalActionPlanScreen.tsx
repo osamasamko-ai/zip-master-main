@@ -48,6 +48,14 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
   }, [plan]);
   const completedCount = completionItems.filter((item) => completedRequirements[item.id]).length;
   const readiness = completionItems.length ? Math.round((completedCount / completionItems.length) * 100) : 0;
+  const suggestedBudget = useMemo(() => {
+    if (!plan) return 0;
+    if (plan.urgency === 'critical') return 750000;
+    if (plan.category.includes('مطالبة') || plan.category.includes('شركة')) return 500000;
+    if (plan.category.includes('أحوال')) return 350000;
+    return 250000;
+  }, [plan]);
+  const missingRequirement = useMemo(() => completionItems.find((item) => !completedRequirements[item.id]), [completedRequirements, completionItems]);
 
   const handleShare = async () => {
     if (!plan) return;
@@ -194,6 +202,44 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
 
             <PlanList icon="checkbox-outline" title="الخطوات التالية" items={plan.nextSteps} />
             <PlanList icon="folder-open-outline" title="المستندات المطلوبة" items={plan.requiredDocuments} />
+
+            <Card>
+              <View style={styles.listHeader}>
+                <Text style={styles.sectionTitle}>مقترحات لتحسين خطتي</Text>
+                <View style={styles.smallIcon}>
+                  <Ionicons name="bulb-outline" size={18} color={colors.navy} />
+                </View>
+              </View>
+              {missingRequirement ? (
+                <SuggestionRow
+                  icon="checkmark-circle-outline"
+                  title={`أكمل ${missingRequirement.type} مهم`}
+                  note={missingRequirement.label}
+                  action="تحديد كمكتمل"
+                  onPress={() => setCompletedRequirements((current) => ({ ...current, [missingRequirement.id]: true }))}
+                />
+              ) : (
+                <SuggestionRow icon="shield-checkmark-outline" title="ملفك منظم وجاهز" note="يمكنك الآن نشر الدعوى أو اختيار محام مناسب." action="عرض المحامين" onPress={() => onOpen?.('lawyers')} />
+              )}
+              <SuggestionRow
+                icon="cash-outline"
+                title="مبلغ مقترح للدعوى"
+                note={`${suggestedBudget.toLocaleString('en-US')} د.ع كبداية قابلة للتفاوض مع المحامي.`}
+                action="استخدام المبلغ"
+                onPress={() => setCaseBudget(String(suggestedBudget))}
+              />
+              <SuggestionRow
+                icon="chatbox-ellipses-outline"
+                title="رسالة مختصرة للمحامي"
+                note="أضف ملخصاً واضحاً يزيد فرصة قبول الدعوى بسرعة."
+                action="إضافة للملاحظات"
+                onPress={() =>
+                  setCaseNotes(
+                    `أرغب بعرض هذه الدعوى على محام متخصص. التصنيف: ${plan.category}. الأولوية: ${plan.urgencyLabel}. جاهزية الملف: ${readiness}%. أحتاج تقييماً للتكلفة والخطوة القانونية الأقرب.`,
+                  )
+                }
+              />
+            </Card>
 
             <Card>
               <View style={styles.readinessHeader}>
@@ -362,6 +408,33 @@ function ActionButton({ icon, title, onPress }: { icon: keyof typeof Ionicons.gl
     <Pressable onPress={onPress} style={({ pressed }) => [styles.actionButton, pressed && styles.pressed]}>
       <Ionicons name={icon} size={21} color={colors.navy} />
       <Text style={styles.actionText}>{title}</Text>
+    </Pressable>
+  );
+}
+
+function SuggestionRow({
+  icon,
+  title,
+  note,
+  action,
+  onPress,
+}: {
+  icon: keyof typeof Ionicons.glyphMap;
+  title: string;
+  note: string;
+  action: string;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.suggestionRow, pressed && styles.pressed]}>
+      <Text style={styles.suggestionAction}>{action}</Text>
+      <View style={styles.suggestionText}>
+        <Text style={styles.suggestionTitle}>{title}</Text>
+        <Text style={styles.suggestionNote}>{note}</Text>
+      </View>
+      <View style={styles.suggestionIcon}>
+        <Ionicons name={icon} size={18} color={colors.gold} />
+      </View>
     </Pressable>
   );
 }
@@ -558,6 +631,48 @@ const styles = StyleSheet.create({
   actionText: {
     color: colors.ink,
     fontSize: 12,
+    fontWeight: '900',
+  },
+  suggestionRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+    padding: 10,
+  },
+  suggestionIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.goldTint,
+    borderRadius: 8,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  suggestionText: {
+    alignItems: 'flex-end',
+    flex: 1,
+  },
+  suggestionTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  suggestionNote: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 3,
+    textAlign: 'right',
+  },
+  suggestionAction: {
+    color: colors.navy,
+    fontSize: 11,
     fontWeight: '900',
   },
   readinessHeader: {

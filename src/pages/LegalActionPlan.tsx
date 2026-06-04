@@ -43,6 +43,55 @@ export default function LegalActionPlan() {
   }, [plan]);
   const completedCount = completionItems.filter((item) => completedRequirements[item.id]).length;
   const readiness = completionItems.length ? Math.round((completedCount / completionItems.length) * 100) : 0;
+  const suggestedBudget = useMemo(() => {
+    if (!plan) return 0;
+    if (plan.urgency === 'critical') return 750000;
+    if (plan.category.includes('مطالبة') || plan.category.includes('شركة')) return 500000;
+    if (plan.category.includes('أحوال')) return 350000;
+    return 250000;
+  }, [plan]);
+  const smartSuggestions = useMemo(() => {
+    if (!plan) return [];
+    const missing = completionItems.find((item) => !completedRequirements[item.id]);
+    return [
+      missing
+        ? {
+            id: 'missing',
+            icon: 'fa-circle-check',
+            title: `أكمل ${missing.type} مهم`,
+            note: missing.label,
+            action: 'تحديد كمكتمل',
+            onClick: () => toggleRequirement(missing.id),
+          }
+        : {
+            id: 'ready',
+            icon: 'fa-shield-check',
+            title: 'ملفك منظم وجاهز',
+            note: 'يمكنك الآن نشر الدعوى أو اختيار محام مناسب.',
+            action: 'عرض المحامين',
+            onClick: () => navigate('/lawyers'),
+          },
+      {
+        id: 'budget',
+        icon: 'fa-money-bill-wave',
+        title: 'مبلغ مقترح للدعوى',
+        note: `${suggestedBudget.toLocaleString('en-US')} د.ع كبداية قابلة للتفاوض مع المحامي.`,
+        action: 'استخدام المبلغ',
+        onClick: () => setCaseBudget(String(suggestedBudget)),
+      },
+      {
+        id: 'brief',
+        icon: 'fa-message',
+        title: 'رسالة مختصرة للمحامي',
+        note: 'أضف ملخصاً واضحاً يزيد فرصة قبول الدعوى بسرعة.',
+        action: 'إضافة للملاحظات',
+        onClick: () =>
+          setCaseNotes(
+            `أرغب بعرض هذه الدعوى على محام متخصص. التصنيف: ${plan.category}. الأولوية: ${plan.urgencyLabel}. جاهزية الملف: ${readiness}%. أحتاج تقييماً للتكلفة والخطوة القانونية الأقرب.`,
+          ),
+      },
+    ];
+  }, [completedRequirements, completionItems, navigate, plan, readiness, suggestedBudget]);
 
   const generate = () => {
     if (!canGenerate) return;
@@ -222,6 +271,29 @@ export default function LegalActionPlan() {
                 <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-black text-slate-400">نص قابل للمشاركة</p>
                   <p className="mt-2 whitespace-pre-line text-sm font-bold leading-7 text-slate-600">{plan.shareText}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2">
+                <div className="flex items-center justify-end gap-3">
+                  <h3 className="text-lg font-black text-brand-dark">مقترحات لتحسين خطتي</h3>
+                  <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-navy text-brand-gold">
+                    <i className="fa-solid fa-lightbulb" />
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  {smartSuggestions.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={item.onClick}
+                      className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-right transition hover:border-brand-gold hover:bg-white"
+                    >
+                      <i className={`fa-solid ${item.icon} text-brand-gold`} />
+                      <p className="mt-3 text-sm font-black text-brand-dark">{item.title}</p>
+                      <p className="mt-1 min-h-12 text-xs font-bold leading-6 text-slate-500">{item.note}</p>
+                      <span className="mt-3 inline-flex rounded-lg bg-brand-navy px-3 py-2 text-xs font-black text-white">{item.action}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2">
