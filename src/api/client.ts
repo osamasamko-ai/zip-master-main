@@ -262,6 +262,28 @@ class ApiClient {
         return response.data;
     }
 
+    async publishCaseMarketplaceListing(data: FormData): Promise<ApiResponse<any>> {
+        const response = await this.client.post('/api/app/case-marketplace', data, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        return response.data;
+    }
+
+    async getClientCaseMarketplaceListings(): Promise<ApiResponse<any[]>> {
+        const response = await this.cachedGet<ApiResponse<any[]>>('/api/app/case-marketplace/client');
+        return response;
+    }
+
+    async getLawyerCaseMarketplaceListings(): Promise<ApiResponse<any[]>> {
+        const response = await this.cachedGet<ApiResponse<any[]>>('/api/app/case-marketplace/lawyer');
+        return response;
+    }
+
+    async respondToCaseMarketplaceListing(id: string, data: { decision: 'accept' | 'reject'; note?: string }): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/case-marketplace/${id}/respond`, data);
+        return response.data;
+    }
+
     async payCaseInstallment(caseId: string, installments: 1 | 2 | 3): Promise<ApiResponse<any>> {
         const response = await this.client.post(`/api/app/workspace/cases/${caseId}/payments`, { installments });
         return response.data;

@@ -1,7 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
 import React, { useMemo, useState } from 'react';
+import { useEffect } from 'react';
 import { Pressable, ScrollView, Share, StyleSheet, Text, TextInput, View } from 'react-native';
+import { apiClient } from '../api/client';
 import { Button, Card, Pill, Screen } from '../components/ui';
+import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 import { buildLegalActionPlan, LegalPlan } from '../utils/legalActionPlan';
 
@@ -21,10 +25,18 @@ const urgencyTone: Record<LegalPlan['urgency'], 'red' | 'gold' | 'blue'> = {
 };
 
 export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }) {
+  const { user } = useAuth();
   const [problem, setProblem] = useState('');
   const [submittedProblem, setSubmittedProblem] = useState('');
   const [completedRequirements, setCompletedRequirements] = useState<Record<string, boolean>>({});
   const [caseNotes, setCaseNotes] = useState('');
+  const [caseBudget, setCaseBudget] = useState('');
+  const [pickedDocs, setPickedDocs] = useState<DocumentPicker.DocumentPickerAsset[]>([]);
+  const [clientListings, setClientListings] = useState<any[]>([]);
+  const [lawyerListings, setLawyerListings] = useState<any[]>([]);
+  const [marketplaceMessage, setMarketplaceMessage] = useState('');
+  const [marketplaceError, setMarketplaceError] = useState('');
+  const [busy, setBusy] = useState('');
   const plan = useMemo(() => (submittedProblem ? buildLegalActionPlan(submittedProblem) : null), [submittedProblem]);
   const canGenerate = problem.trim().length >= 12;
   const completionItems = useMemo(() => {
@@ -40,6 +52,83 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
   const handleShare = async () => {
     if (!plan) return;
     await Share.share({ message: plan.shareText });
+  };
+
+  const loadMarketplace = async () => {
+    try {
+      const clientResponse = await apiClient.getClientCaseMarketplaceListings();
+      setClientListings(clientResponse.data || []);
+    } catch {
+      setClientListings([]);
+    }
+    if (user?.role === 'pro' || user?.role === 'admin') {
+      try {
+        const lawyerResponse = await apiClient.getLawyerCaseMarketplaceListings();
+        setLawyerListings(lawyerResponse.data || []);
+      } catch {
+        setLawyerListings([]);
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (user) void loadMarketplace();
+  }, [user?.id, user?.role]);
+
+  const pickDocuments = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      copyToCacheDirectory: true,
+      multiple: true,
+      type: ['application/pdf', 'image/*', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+    });
+    if (!result.canceled) setPickedDocs(result.assets.slice(0, 8));
+  };
+
+  const publishMarketplaceCase = async () => {
+    if (!plan) return;
+    const budget = Number(caseBudget.replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(budget) || budget <= 0) {
+      setMarketplaceError('حدد مبلغ الدعوى المقترح للمحامين.');
+      return;
+    }
+    setBusy('publish');
+    setMarketplaceMessage('');
+    setMarketplaceError('');
+    try {
+      const data = new FormData();
+      data.append('title', plan.category);
+      data.append('matter', submittedProblem);
+      data.append('category', plan.category);
+      data.append('budget', String(budget));
+      data.append('readiness', String(readiness));
+      data.append('notes', caseNotes);
+      data.append('location', String((user as any)?.location || ''));
+      pickedDocs.forEach((doc) => {
+        data.append('documents', {
+          uri: doc.uri,
+          name: doc.name || 'document',
+          type: doc.mimeType || 'application/octet-stream',
+        } as any);
+      });
+      const response = await apiClient.publishCaseMarketplaceListing(data);
+      setMarketplaceMessage(response.message || 'تم نشر الدعوى للمحامين.');
+      setPickedDocs([]);
+      await loadMarketplace();
+    } catch (error: any) {
+      setMarketplaceError(error?.message || 'تعذر نشر الدعوى.');
+    } finally {
+      setBusy('');
+    }
+  };
+
+  const respondToListing = async (id: string, decision: 'accept' | 'reject') => {
+    setBusy(`${id}-${decision}`);
+    try {
+      await apiClient.respondToCaseMarketplaceListing(id, { decision });
+      await loadMarketplace();
+    } finally {
+      setBusy('');
+    }
   };
 
   return (
@@ -153,6 +242,27 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
             </Card>
 
             <Card>
+              <Text style={styles.sectionTitle}>نشر الدعوى للمحامين</Text>
+              <Text style={styles.planSummary}>حدد مبلغ الدعوى المقترح وارفع الوثائق ليتم عرضها على المحامين القريبين والمقترحين للقبول أو الرفض.</Text>
+              {marketplaceMessage ? <Text style={styles.successText}>{marketplaceMessage}</Text> : null}
+              {marketplaceError ? <Text style={styles.errorText}>{marketplaceError}</Text> : null}
+              <TextInput
+                keyboardType="numeric"
+                onChangeText={setCaseBudget}
+                placeholder="المبلغ المقترح بالدينار"
+                placeholderTextColor={colors.subtle}
+                style={styles.amountInput}
+                textAlign="right"
+                value={caseBudget}
+              />
+              <Pressable onPress={pickDocuments} style={styles.uploadButton}>
+                <Text style={styles.uploadText}>{pickedDocs.length ? `${pickedDocs.length} وثائق مختارة` : 'رفع وثائق الدعوى'}</Text>
+                <Ionicons name="cloud-upload-outline" size={20} color={colors.gold} />
+              </Pressable>
+              <Button title="نشر الدعوى للمحامين" loading={busy === 'publish'} onPress={publishMarketplaceCase} />
+            </Card>
+
+            <Card>
               <Text style={styles.sectionTitle}>حوّل الخطة إلى إجراء</Text>
               <View style={styles.actionGrid}>
                 <ActionButton icon="people-outline" title="محام" onPress={() => onOpen?.('lawyers')} />
@@ -168,8 +278,61 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
             <Text style={styles.planSummary}>المستخدم يشارك الخطة لأنها مفيدة فوراً، والمحامي يستلم ملفاً مرتباً بدل محادثة مبعثرة.</Text>
           </Card>
         )}
+
+        {clientListings.length > 0 ? (
+          <Card>
+            <Text style={styles.sectionTitle}>دعاواي المنشورة</Text>
+            {clientListings.slice(0, 4).map((item) => <MarketplaceCard key={item.id} item={item} />)}
+          </Card>
+        ) : null}
+
+        {lawyerListings.length > 0 ? (
+          <Card>
+            <Text style={styles.sectionTitle}>دعاوى مقترحة للمحامي</Text>
+            {lawyerListings.slice(0, 5).map((item) => (
+              <MarketplaceCard
+                key={item.id}
+                item={item}
+                action={
+                  item.offerStatus ? (
+                    <Text style={styles.offerStatus}>قرارك: {item.offerStatus === 'accepted' ? 'قبول' : 'رفض'}</Text>
+                  ) : (
+                    <View style={styles.offerActions}>
+                      <Pressable onPress={() => respondToListing(item.id, 'reject')} style={styles.rejectButton}>
+                        <Text style={styles.rejectText}>رفض</Text>
+                      </Pressable>
+                      <Pressable onPress={() => respondToListing(item.id, 'accept')} style={styles.acceptButton}>
+                        <Text style={styles.acceptText}>{busy === `${item.id}-accept` ? 'جار القبول' : 'قبول'}</Text>
+                      </Pressable>
+                    </View>
+                  )
+                }
+              />
+            ))}
+          </Card>
+        ) : null}
       </ScrollView>
     </Screen>
+  );
+}
+
+function MarketplaceCard({ item, action }: { item: any; action?: React.ReactNode }) {
+  return (
+    <View style={styles.marketCard}>
+      <View style={styles.marketHead}>
+        {action || <Text style={styles.offerStatus}>{item.status === 'assigned' ? `تم اختيار ${item.selectedLawyerName || 'محام'}` : 'بانتظار المحامين'}</Text>}
+        <View style={styles.marketTitleWrap}>
+          <Text style={styles.marketTitle}>{item.title}</Text>
+          <Text style={styles.marketMeta}>{Number(item.budget || 0).toLocaleString('en-US')} د.ع · جاهزية {item.readiness}%</Text>
+        </View>
+      </View>
+      <Text style={styles.marketMatter} numberOfLines={2}>{item.matter}</Text>
+      <View style={styles.marketTags}>
+        {item.nearby ? <Pill label="قريب" tone="blue" /> : null}
+        {item.suggested ? <Pill label="مقترح" tone="gold" /> : null}
+        <Pill label={`${item.documents?.length || 0} وثائق`} />
+      </View>
+    </View>
   );
 }
 
@@ -501,5 +664,124 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 20,
     textAlign: 'right',
+  },
+  amountInput: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    marginTop: 10,
+    padding: 12,
+  },
+  uploadButton: {
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderStyle: 'dashed',
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    gap: 8,
+    justifyContent: 'center',
+    marginBottom: 12,
+    marginTop: 10,
+    minHeight: 46,
+  },
+  uploadText: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  successText: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 8,
+    textAlign: 'right',
+  },
+  errorText: {
+    color: colors.red,
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 8,
+    textAlign: 'right',
+  },
+  marketCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 9,
+    padding: 11,
+  },
+  marketHead: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  marketTitleWrap: {
+    alignItems: 'flex-end',
+    flex: 1,
+  },
+  marketTitle: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  marketMeta: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  marketMatter: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 20,
+    marginTop: 8,
+    textAlign: 'right',
+  },
+  marketTags: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  offerActions: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  rejectButton: {
+    backgroundColor: colors.redTint,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  rejectText: {
+    color: colors.red,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  acceptButton: {
+    backgroundColor: colors.green,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  acceptText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  offerStatus: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: '900',
   },
 });

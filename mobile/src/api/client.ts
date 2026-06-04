@@ -339,6 +339,28 @@ class ApiClient {
     });
   }
 
+  publishCaseMarketplaceListing(data: FormData) {
+    return this.request<any>('/api/app/case-marketplace', {
+      method: 'POST',
+      body: data,
+    });
+  }
+
+  getClientCaseMarketplaceListings() {
+    return this.request<any[]>('/api/app/case-marketplace/client');
+  }
+
+  getLawyerCaseMarketplaceListings() {
+    return this.request<any[]>('/api/app/case-marketplace/lawyer');
+  }
+
+  respondToCaseMarketplaceListing(id: string, data: { decision: 'accept' | 'reject'; note?: string }) {
+    return this.request<any>(`/api/app/case-marketplace/${id}/respond`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  }
+
   payCaseInstallment(caseId: string, installments: 1 | 2 | 3) {
     return this.request<any>(`/api/app/workspace/cases/${caseId}/payments`, {
       method: 'POST',

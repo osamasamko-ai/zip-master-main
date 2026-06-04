@@ -357,6 +357,63 @@ async function startServer() {
     next();
   };
 
+  const ensureCaseMarketplaceTables = async () => {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "CaseMarketplaceListing" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "clientId" TEXT NOT NULL,
+        "title" TEXT NOT NULL,
+        "matter" TEXT NOT NULL,
+        "category" TEXT NOT NULL DEFAULT 'استشارة عامة',
+        "location" TEXT,
+        "budget" REAL NOT NULL DEFAULT 0,
+        "readiness" INTEGER NOT NULL DEFAULT 0,
+        "notes" TEXT,
+        "documentsJson" TEXT NOT NULL DEFAULT '[]',
+        "status" TEXT NOT NULL DEFAULT 'open',
+        "selectedLawyerId" TEXT,
+        "createdCaseId" TEXT,
+        "createdAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS "CaseMarketplaceOffer" (
+        "id" TEXT PRIMARY KEY NOT NULL,
+        "listingId" TEXT NOT NULL,
+        "lawyerId" TEXT NOT NULL,
+        "status" TEXT NOT NULL DEFAULT 'pending',
+        "note" TEXT,
+        "createdCaseId" TEXT,
+        "createdAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE("listingId", "lawyerId")
+      )
+    `);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceListing_client_status_idx" ON "CaseMarketplaceListing"("clientId", "status", "createdAt")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceListing_status_category_idx" ON "CaseMarketplaceListing"("status", "category", "createdAt")`);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceOffer_lawyer_status_idx" ON "CaseMarketplaceOffer"("lawyerId", "status", "createdAt")`);
+  };
+
+  const parseMarketplaceDocuments = (value: unknown) => {
+    try {
+      const parsed = JSON.parse(String(value || '[]'));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const mapMarketplaceListing = (item: any) => ({
+    ...item,
+    budget: Number(item.budget || 0),
+    readiness: Number(item.readiness || 0),
+    documents: parseMarketplaceDocuments(item.documentsJson),
+    documentsJson: undefined,
+    suggested: Boolean(item.suggested),
+    nearby: Boolean(item.nearby),
+  });
+
   const requireAdminPermission = (permission: string) => async (req: express.Request, res: express.Response, next: express.NextFunction) => {
     try {
       const user = (req as any).user;
@@ -1075,6 +1132,239 @@ async function startServer() {
     } catch (error) {
       console.error('Create workspace case error:', error);
       res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر إنشاء القضية.' });
+    }
+  });
+
+  app.get('/api/app/case-marketplace/client', authenticateToken, async (req, res) => {
+    try {
+      await ensureCaseMarketplaceTables();
+      const currentUser = (req as any).user;
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `
+        SELECT l.*,
+          u.name as clientName,
+          lawyer.name as selectedLawyerName,
+          (SELECT COUNT(*) FROM "CaseMarketplaceOffer" o WHERE o."listingId" = l.id AND o.status = 'accepted') as acceptedCount,
+          (SELECT COUNT(*) FROM "CaseMarketplaceOffer" o WHERE o."listingId" = l.id AND o.status = 'rejected') as rejectedCount
+        FROM "CaseMarketplaceListing" l
+        JOIN "User" u ON u.id = l."clientId"
+        LEFT JOIN "User" lawyer ON lawyer.id = l."selectedLawyerId"
+        WHERE l."clientId" = ?
+        ORDER BY l."createdAt" DESC
+        `,
+        currentUser.userId,
+      );
+      res.json({ data: rows.map(mapMarketplaceListing) });
+    } catch (error) {
+      console.error('Client marketplace listings error:', error);
+      res.status(500).json({ error: 'تعذر تحميل الدعاوى المنشورة.' });
+    }
+  });
+
+  app.get('/api/app/case-marketplace/lawyer', authenticateToken, async (req, res) => {
+    try {
+      await ensureCaseMarketplaceTables();
+      const currentUser = (req as any).user;
+      if (currentUser.role !== 'pro' && currentUser.role !== 'admin') {
+        return res.status(403).json({ error: 'هذه القائمة متاحة للمحامين فقط.' });
+      }
+
+      const lawyer = await prisma.user.findUnique({
+        where: { id: currentUser.userId },
+        select: {
+          location: true,
+          lawyerProfile: { select: { specialty: true, licenseStatus: true } },
+        },
+      });
+      const specialty = lawyer?.lawyerProfile?.specialty || '';
+      const location = lawyer?.location || '';
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `
+        SELECT l.*,
+          u.name as clientName,
+          u.location as clientLocation,
+          o.status as offerStatus,
+          o.note as offerNote,
+          CASE WHEN LOWER(l.category) LIKE LOWER(?) THEN 1 ELSE 0 END as suggested,
+          CASE WHEN l.location IS NOT NULL AND l.location != '' AND LOWER(l.location) LIKE LOWER(?) THEN 1 ELSE 0 END as nearby
+        FROM "CaseMarketplaceListing" l
+        JOIN "User" u ON u.id = l."clientId"
+        LEFT JOIN "CaseMarketplaceOffer" o ON o."listingId" = l.id AND o."lawyerId" = ?
+        WHERE l.status = 'open' OR l."selectedLawyerId" = ?
+        ORDER BY suggested DESC, nearby DESC, l."createdAt" DESC
+        `,
+        `%${specialty}%`,
+        `%${location}%`,
+        currentUser.userId,
+        currentUser.userId,
+      );
+      res.json({ data: rows.map(mapMarketplaceListing) });
+    } catch (error) {
+      console.error('Lawyer marketplace listings error:', error);
+      res.status(500).json({ error: 'تعذر تحميل الدعاوى المقترحة.' });
+    }
+  });
+
+  app.post('/api/app/case-marketplace', authenticateToken, upload.array('documents', 8), async (req, res) => {
+    try {
+      await ensureCaseMarketplaceTables();
+      const currentUser = (req as any).user;
+      const title = String(req.body.title || '').trim().slice(0, 160);
+      const matter = String(req.body.matter || '').trim().slice(0, 4000);
+      const category = String(req.body.category || 'استشارة عامة').trim().slice(0, 100);
+      const location = String(req.body.location || '').trim().slice(0, 120);
+      const notes = String(req.body.notes || '').trim().slice(0, 2000);
+      const budget = Number(String(req.body.budget || '').replace(/[^\d.]/g, ''));
+      const readiness = Math.max(0, Math.min(100, Number(req.body.readiness || 0)));
+
+      if (!title || !matter || !Number.isFinite(budget) || budget <= 0) {
+        return res.status(400).json({ error: 'العنوان، تفاصيل الدعوى، والمبلغ المقترح مطلوبة.' });
+      }
+
+      const files = (req.files || []) as Express.Multer.File[];
+      const documents = files.map((file) => ({
+        name: file.originalname,
+        filename: file.filename,
+        url: `/uploads/${file.filename}`,
+        mimeType: file.mimetype,
+        size: file.size,
+      }));
+
+      for (const doc of documents) {
+        await addUploadRecord({
+          ownerId: currentUser.userId,
+          resourceType: 'case_marketplace_listing',
+          resourceId: null,
+          purpose: 'case_marketplace_document',
+          originalName: doc.name,
+          filename: doc.filename,
+          url: doc.url,
+          mimeType: doc.mimeType,
+          size: doc.size,
+        });
+      }
+
+      const id = crypto.randomUUID();
+      await prisma.$executeRawUnsafe(
+        `
+        INSERT INTO "CaseMarketplaceListing"
+          ("id", "clientId", "title", "matter", "category", "location", "budget", "readiness", "notes", "documentsJson", "status", "createdAt", "updatedAt")
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'open', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        `,
+        id,
+        currentUser.userId,
+        title,
+        matter,
+        category,
+        location,
+        budget,
+        readiness,
+        notes,
+        JSON.stringify(documents),
+      );
+
+      const listingRows = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "CaseMarketplaceListing" WHERE id = ?`, id);
+      res.status(201).json({ data: mapMarketplaceListing(listingRows[0]), message: 'تم نشر الدعوى للمحامين القريبين والمقترحين.' });
+    } catch (error) {
+      console.error('Publish marketplace listing error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر نشر الدعوى.' });
+    }
+  });
+
+  app.post('/api/app/case-marketplace/:id/respond', authenticateToken, async (req, res) => {
+    try {
+      await ensureCaseMarketplaceTables();
+      const currentUser = (req as any).user;
+      if (currentUser.role !== 'pro' && currentUser.role !== 'admin') {
+        return res.status(403).json({ error: 'قبول أو رفض الدعوى متاح للمحامين فقط.' });
+      }
+
+      const decision = req.body.decision === 'reject' ? 'rejected' : 'accepted';
+      const note = String(req.body.note || '').trim().slice(0, 1000);
+      const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "CaseMarketplaceListing" WHERE id = ?`, req.params.id);
+      const listing = rows[0];
+      if (!listing) return res.status(404).json({ error: 'الدعوى غير موجودة.' });
+      if (listing.status !== 'open' && decision === 'accepted') {
+        return res.status(409).json({ error: 'تم اختيار محام لهذه الدعوى مسبقاً.' });
+      }
+
+      let createdCase: any = null;
+      if (decision === 'accepted') {
+        createdCase = await createClientCase(listing.clientId, {
+          title: listing.title,
+          matter: `${listing.matter}\n\nملاحظات العميل: ${listing.notes || 'لا توجد'}\nالمبلغ المقترح: ${Number(listing.budget || 0).toLocaleString('en-US')} د.ع`,
+          lawyerId: currentUser.userId,
+          totalAgreedFee: Number(listing.budget || 0),
+          caseType: listing.category,
+        });
+
+        const documents = parseMarketplaceDocuments(listing.documentsJson);
+        for (const doc of documents) {
+          await prisma.document.create({
+            data: {
+              caseId: createdCase.id,
+              name: doc.name || 'وثيقة مرفوعة',
+              fileUrl: doc.url,
+              previewUrl: doc.url,
+              size: `${((Number(doc.size || 0) || 0) / (1024 * 1024)).toFixed(2)} MB`,
+              type: String(doc.mimeType || '').includes('pdf') ? 'pdf' : String(doc.mimeType || '').includes('image') ? 'image' : 'other',
+              status: 'Draft',
+              tags: '[]',
+            },
+          });
+        }
+
+        await prisma.caseTimelineEntry.create({
+          data: {
+            caseId: createdCase.id,
+            dateLabel: 'اليوم',
+            title: 'قبول الدعوى',
+            detail: 'قبل المحامي الدعوى المنشورة وتم تحويلها إلى ملف قضية.',
+            type: 'system',
+          },
+        });
+
+        await prisma.$executeRawUnsafe(
+          `UPDATE "CaseMarketplaceListing" SET status = 'assigned', "selectedLawyerId" = ?, "createdCaseId" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE id = ?`,
+          currentUser.userId,
+          createdCase.id,
+          req.params.id,
+        );
+
+        await prisma.notification.create({
+          data: {
+            userId: listing.clientId,
+            title: 'تم قبول الدعوى',
+            message: `قبل أحد المحامين دعوى: ${listing.title}`,
+            type: 'success',
+            link: '/cases',
+          },
+        });
+      }
+
+      const offerId = crypto.randomUUID();
+      await prisma.$executeRawUnsafe(
+        `
+        INSERT INTO "CaseMarketplaceOffer" ("id", "listingId", "lawyerId", "status", "note", "createdCaseId", "createdAt", "updatedAt")
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT("listingId", "lawyerId") DO UPDATE SET
+          status = excluded.status,
+          note = excluded.note,
+          "createdCaseId" = excluded."createdCaseId",
+          "updatedAt" = CURRENT_TIMESTAMP
+        `,
+        offerId,
+        req.params.id,
+        currentUser.userId,
+        decision,
+        note,
+        createdCase?.id || null,
+      );
+
+      res.json({ data: { status: decision, case: createdCase }, message: decision === 'accepted' ? 'تم قبول الدعوى وإنشاء ملف قضية.' : 'تم تسجيل رفض الدعوى.' });
+    } catch (error) {
+      console.error('Marketplace response error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر حفظ القرار.' });
     }
   });
 

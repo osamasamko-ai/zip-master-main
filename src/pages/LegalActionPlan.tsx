@@ -1,5 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { buildLegalActionPlan, LegalPlan } from '../utils/legalActionPlan';
 
 const examples = [
@@ -17,10 +19,19 @@ const urgencyStyles: Record<LegalPlan['urgency'], string> = {
 
 export default function LegalActionPlan() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [problem, setProblem] = useState('');
   const [submittedProblem, setSubmittedProblem] = useState('');
   const [completedRequirements, setCompletedRequirements] = useState<Record<string, boolean>>({});
   const [caseNotes, setCaseNotes] = useState('');
+  const [caseBudget, setCaseBudget] = useState('');
+  const [caseFiles, setCaseFiles] = useState<File[]>([]);
+  const [marketplaceMessage, setMarketplaceMessage] = useState('');
+  const [marketplaceError, setMarketplaceError] = useState('');
+  const [publishing, setPublishing] = useState(false);
+  const [clientListings, setClientListings] = useState<any[]>([]);
+  const [lawyerListings, setLawyerListings] = useState<any[]>([]);
+  const [respondingId, setRespondingId] = useState('');
   const plan = useMemo(() => (submittedProblem ? buildLegalActionPlan(submittedProblem) : null), [submittedProblem]);
   const canGenerate = problem.trim().length >= 12;
   const completionItems = useMemo(() => {
@@ -42,6 +53,69 @@ export default function LegalActionPlan() {
 
   const toggleRequirement = (id: string) => {
     setCompletedRequirements((current) => ({ ...current, [id]: !current[id] }));
+  };
+
+  const loadMarketplace = async () => {
+    if (!user) return;
+    try {
+      const clientResponse = await apiClient.getClientCaseMarketplaceListings();
+      setClientListings(clientResponse.data || []);
+    } catch {
+      setClientListings([]);
+    }
+    if (user.role === 'pro' || user.role === 'admin') {
+      try {
+        const lawyerResponse = await apiClient.getLawyerCaseMarketplaceListings();
+        setLawyerListings(lawyerResponse.data || []);
+      } catch {
+        setLawyerListings([]);
+      }
+    }
+  };
+
+  useEffect(() => {
+    loadMarketplace();
+  }, [user?.id, user?.role]);
+
+  const publishMarketplaceCase = async () => {
+    if (!plan || !submittedProblem.trim()) return;
+    const budget = Number(caseBudget.replace(/[^\d.]/g, ''));
+    if (!Number.isFinite(budget) || budget <= 0) {
+      setMarketplaceError('حدد مبلغ الدعوى المقترح للمحامين.');
+      return;
+    }
+    setPublishing(true);
+    setMarketplaceError('');
+    setMarketplaceMessage('');
+    try {
+      const data = new FormData();
+      data.append('title', plan.category);
+      data.append('matter', submittedProblem);
+      data.append('category', plan.category);
+      data.append('budget', String(budget));
+      data.append('readiness', String(readiness));
+      data.append('notes', caseNotes);
+      data.append('location', String((user as any)?.location || ''));
+      caseFiles.forEach((file) => data.append('documents', file));
+      const response = await apiClient.publishCaseMarketplaceListing(data);
+      setMarketplaceMessage(response.message || 'تم نشر الدعوى للمحامين.');
+      setCaseFiles([]);
+      await loadMarketplace();
+    } catch (error: any) {
+      setMarketplaceError(error?.response?.data?.error || 'تعذر نشر الدعوى.');
+    } finally {
+      setPublishing(false);
+    }
+  };
+
+  const respondToListing = async (id: string, decision: 'accept' | 'reject') => {
+    setRespondingId(`${id}-${decision}`);
+    try {
+      await apiClient.respondToCaseMarketplaceListing(id, { decision });
+      await loadMarketplace();
+    } finally {
+      setRespondingId('');
+    }
   };
 
   return (
@@ -209,12 +283,127 @@ export default function LegalActionPlan() {
                     </button>
                   </div>
                 </div>
+                <div className="mt-4 rounded-2xl border border-brand-gold/30 bg-[#fffaf0] p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      {marketplaceMessage && <span className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-black text-emerald-700">{marketplaceMessage}</span>}
+                      {marketplaceError && <span className="rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-700">{marketplaceError}</span>}
+                    </div>
+                    <div>
+                      <p className="text-xs font-black text-brand-gold">نشر الدعوى للمحامين</p>
+                      <h3 className="mt-1 text-lg font-black text-brand-dark">اعرضها على القريبين والمقترحين</h3>
+                    </div>
+                  </div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[220px_minmax(0,1fr)]">
+                    <input
+                      value={caseBudget}
+                      onChange={(event) => setCaseBudget(event.target.value)}
+                      inputMode="numeric"
+                      className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-brand-dark outline-none focus:border-brand-navy focus:ring-4 focus:ring-brand-navy/10"
+                      placeholder="المبلغ المقترح د.ع"
+                    />
+                    <label className="flex min-h-12 cursor-pointer items-center justify-between gap-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-3 text-sm font-black text-slate-500 transition hover:border-brand-gold">
+                      <span>{caseFiles.length ? `${caseFiles.length} ملفات مختارة` : 'رفع وثائق الدعوى'}</span>
+                      <i className="fa-solid fa-cloud-arrow-up text-brand-gold" />
+                      <input
+                        type="file"
+                        multiple
+                        className="hidden"
+                        onChange={(event) => setCaseFiles(Array.from(event.target.files || []).slice(0, 8))}
+                      />
+                    </label>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={publishMarketplaceCase}
+                    disabled={publishing}
+                    className="mt-3 w-full rounded-xl bg-brand-navy px-4 py-3 text-sm font-black text-white transition hover:bg-brand-dark disabled:bg-slate-300"
+                  >
+                    {publishing ? 'جار نشر الدعوى...' : 'نشر الدعوى للمحامين'}
+                  </button>
+                </div>
               </div>
             </div>
           </section>
         ) : null}
+
+        {(clientListings.length > 0 || lawyerListings.length > 0) && (
+          <section className="mt-5 grid gap-5 lg:grid-cols-2">
+            {clientListings.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-lg font-black text-brand-dark">دعاواي المنشورة</h3>
+                <div className="mt-4 space-y-3">
+                  {clientListings.slice(0, 4).map((item) => (
+                    <MarketplaceListingCard key={item.id} item={item} />
+                  ))}
+                </div>
+              </div>
+            )}
+            {lawyerListings.length > 0 && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="text-lg font-black text-brand-dark">دعاوى مقترحة للمحامي</h3>
+                <div className="mt-4 space-y-3">
+                  {lawyerListings.slice(0, 5).map((item) => (
+                    <MarketplaceListingCard
+                      key={item.id}
+                      item={item}
+                      action={
+                        item.offerStatus ? (
+                          <span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-500">قرارك: {item.offerStatus === 'accepted' ? 'قبول' : 'رفض'}</span>
+                        ) : (
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => respondToListing(item.id, 'reject')}
+                              disabled={Boolean(respondingId)}
+                              className="rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-600"
+                            >
+                              رفض
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => respondToListing(item.id, 'accept')}
+                              disabled={Boolean(respondingId)}
+                              className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white"
+                            >
+                              قبول الدعوى
+                            </button>
+                          </div>
+                        )
+                      }
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+          </section>
+        )}
       </div>
     </main>
+  );
+}
+
+function MarketplaceListingCard({ item, action }: { item: any; action?: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        {action || (
+          <span className={`rounded-xl px-3 py-2 text-xs font-black ${item.status === 'assigned' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+            {item.status === 'assigned' ? `تم اختيار ${item.selectedLawyerName || 'محام'}` : 'بانتظار المحامين'}
+          </span>
+        )}
+        <div>
+          <p className="text-sm font-black text-brand-dark">{item.title}</p>
+          <p className="mt-1 text-xs font-bold text-slate-500">{Number(item.budget || 0).toLocaleString('en-US')} د.ع · جاهزية {item.readiness}%</p>
+        </div>
+      </div>
+      <p className="mt-3 line-clamp-2 text-xs font-bold leading-6 text-slate-500">{item.matter}</p>
+      <div className="mt-3 flex flex-wrap justify-end gap-2">
+        {item.nearby && <span className="rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">قريب</span>}
+        {item.suggested && <span className="rounded-lg bg-brand-gold/10 px-2 py-1 text-[11px] font-black text-brand-gold">مقترح</span>}
+        <span className="rounded-lg bg-white px-2 py-1 text-[11px] font-black text-slate-500">{item.documents?.length || 0} وثائق</span>
+      </div>
+    </div>
   );
 }
 
