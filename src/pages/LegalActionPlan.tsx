@@ -19,12 +19,29 @@ export default function LegalActionPlan() {
   const navigate = useNavigate();
   const [problem, setProblem] = useState('');
   const [submittedProblem, setSubmittedProblem] = useState('');
+  const [completedRequirements, setCompletedRequirements] = useState<Record<string, boolean>>({});
+  const [caseNotes, setCaseNotes] = useState('');
   const plan = useMemo(() => (submittedProblem ? buildLegalActionPlan(submittedProblem) : null), [submittedProblem]);
   const canGenerate = problem.trim().length >= 12;
+  const completionItems = useMemo(() => {
+    if (!plan) return [];
+    return [
+      ...plan.requiredDocuments.map((item) => ({ id: `doc-${item}`, label: item, type: 'مستند' })),
+      ...plan.nextSteps.map((item) => ({ id: `step-${item}`, label: item, type: 'خطوة' })),
+    ];
+  }, [plan]);
+  const completedCount = completionItems.filter((item) => completedRequirements[item.id]).length;
+  const readiness = completionItems.length ? Math.round((completedCount / completionItems.length) * 100) : 0;
 
   const generate = () => {
     if (!canGenerate) return;
     setSubmittedProblem(problem.trim());
+    setCompletedRequirements({});
+    setCaseNotes('');
+  };
+
+  const toggleRequirement = (id: string) => {
+    setCompletedRequirements((current) => ({ ...current, [id]: !current[id] }));
   };
 
   return (
@@ -131,6 +148,66 @@ export default function LegalActionPlan() {
                 <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
                   <p className="text-xs font-black text-slate-400">نص قابل للمشاركة</p>
                   <p className="mt-2 whitespace-pre-line text-sm font-bold leading-7 text-slate-600">{plan.shareText}</p>
+                </div>
+              </div>
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 sm:w-56">
+                    <div className="h-full rounded-full bg-brand-gold transition-all" style={{ width: `${readiness}%` }} />
+                  </div>
+                  <div>
+                    <p className="text-xs font-black text-brand-gold">إكمال المتطلبات داخل نفس الصفحة</p>
+                    <h3 className="mt-2 text-lg font-black text-brand-dark">جاهزية الملف: {readiness}%</h3>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-2">
+                  {completionItems.map((item) => {
+                    const checked = Boolean(completedRequirements[item.id]);
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => toggleRequirement(item.id)}
+                        className={`flex items-start justify-between gap-3 rounded-xl border p-4 text-right transition ${checked ? 'border-emerald-200 bg-emerald-50' : 'border-slate-200 bg-slate-50 hover:border-brand-gold'}`}
+                      >
+                        <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border text-xs ${checked ? 'border-emerald-500 bg-emerald-500 text-white' : 'border-slate-300 bg-white text-slate-300'}`}>
+                          <i className="fa-solid fa-check" />
+                        </span>
+                        <span className="flex-1">
+                          <span className="block text-[11px] font-black text-brand-gold">{item.type}</span>
+                          <span className={`mt-1 block text-sm font-bold leading-6 ${checked ? 'text-emerald-800 line-through decoration-emerald-500/60' : 'text-slate-600'}`}>{item.label}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+                  <textarea
+                    value={caseNotes}
+                    onChange={(event) => setCaseNotes(event.target.value)}
+                    rows={5}
+                    className="w-full resize-none rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm font-bold leading-7 text-slate-700 outline-none focus:border-brand-navy focus:bg-white focus:ring-4 focus:ring-brand-navy/10"
+                    placeholder="أضف ملاحظاتك: التواريخ، أسماء الأطراف، المبلغ، الشهود، أو أي تفاصيل يريد المحامي معرفتها..."
+                  />
+                  <div className="rounded-xl bg-brand-navy p-4 text-white">
+                    <p className="text-xs font-black text-brand-gold">ملخص جاهز للمحامي</p>
+                    <p className="mt-3 text-sm font-bold leading-7">
+                      التصنيف: {plan.category}
+                      <br />
+                      الأولوية: {plan.urgencyLabel}
+                      <br />
+                      الجاهزية: {readiness}%
+                      <br />
+                      ملاحظات: {caseNotes.trim() || 'لم تتم إضافة ملاحظات بعد'}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => navigate(readiness >= 60 ? '/lawyers' : '/aichat')}
+                      className="mt-4 w-full rounded-xl bg-white px-4 py-3 text-sm font-black text-brand-navy transition hover:bg-brand-lightgold"
+                    >
+                      {readiness >= 60 ? 'اختيار محام مناسب' : 'إكمال التفاصيل مع المساعد'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

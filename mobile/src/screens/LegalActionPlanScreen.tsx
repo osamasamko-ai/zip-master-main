@@ -23,8 +23,19 @@ const urgencyTone: Record<LegalPlan['urgency'], 'red' | 'gold' | 'blue'> = {
 export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }) {
   const [problem, setProblem] = useState('');
   const [submittedProblem, setSubmittedProblem] = useState('');
+  const [completedRequirements, setCompletedRequirements] = useState<Record<string, boolean>>({});
+  const [caseNotes, setCaseNotes] = useState('');
   const plan = useMemo(() => (submittedProblem ? buildLegalActionPlan(submittedProblem) : null), [submittedProblem]);
   const canGenerate = problem.trim().length >= 12;
+  const completionItems = useMemo(() => {
+    if (!plan) return [];
+    return [
+      ...plan.requiredDocuments.map((item) => ({ id: `doc-${item}`, label: item, type: 'مستند' })),
+      ...plan.nextSteps.map((item) => ({ id: `step-${item}`, label: item, type: 'خطوة' })),
+    ];
+  }, [plan]);
+  const completedCount = completionItems.filter((item) => completedRequirements[item.id]).length;
+  const readiness = completionItems.length ? Math.round((completedCount / completionItems.length) * 100) : 0;
 
   const handleShare = async () => {
     if (!plan) return;
@@ -62,7 +73,15 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
               </Pressable>
             ))}
           </View>
-          <Button title="إنشاء الخطة" disabled={!canGenerate} onPress={() => setSubmittedProblem(problem.trim())} />
+          <Button
+            title="إنشاء الخطة"
+            disabled={!canGenerate}
+            onPress={() => {
+              setSubmittedProblem(problem.trim());
+              setCompletedRequirements({});
+              setCaseNotes('');
+            }}
+          />
         </Card>
 
         {plan ? (
@@ -86,6 +105,52 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
 
             <PlanList icon="checkbox-outline" title="الخطوات التالية" items={plan.nextSteps} />
             <PlanList icon="folder-open-outline" title="المستندات المطلوبة" items={plan.requiredDocuments} />
+
+            <Card>
+              <View style={styles.readinessHeader}>
+                <Text style={styles.sectionTitle}>إكمال المتطلبات</Text>
+                <Text style={styles.readinessValue}>{readiness}%</Text>
+              </View>
+              <View style={styles.progressTrack}>
+                <View style={[styles.progressFill, { width: `${readiness}%` }]} />
+              </View>
+              {completionItems.map((item) => {
+                const checked = Boolean(completedRequirements[item.id]);
+                return (
+                  <Pressable
+                    key={item.id}
+                    onPress={() => setCompletedRequirements((current) => ({ ...current, [item.id]: !current[item.id] }))}
+                    style={[styles.requirementRow, checked && styles.requirementRowDone]}
+                  >
+                    <View style={styles.requirementText}>
+                      <Text style={styles.requirementType}>{item.type}</Text>
+                      <Text style={[styles.requirementLabel, checked && styles.requirementLabelDone]}>{item.label}</Text>
+                    </View>
+                    <View style={[styles.checkBox, checked && styles.checkBoxDone]}>
+                      {checked ? <Ionicons name="checkmark" size={17} color="#fff" /> : null}
+                    </View>
+                  </Pressable>
+                );
+              })}
+              <TextInput
+                multiline
+                onChangeText={setCaseNotes}
+                placeholder="أضف ملاحظاتك: التواريخ، أسماء الأطراف، المبلغ، الشهود..."
+                placeholderTextColor={colors.subtle}
+                style={styles.notesArea}
+                textAlign="right"
+                textAlignVertical="top"
+                value={caseNotes}
+              />
+              <View style={styles.briefBox}>
+                <Text style={styles.briefTitle}>ملخص جاهز للمحامي</Text>
+                <Text style={styles.briefText}>التصنيف: {plan.category}</Text>
+                <Text style={styles.briefText}>الأولوية: {plan.urgencyLabel}</Text>
+                <Text style={styles.briefText}>الجاهزية: {readiness}%</Text>
+                <Text style={styles.briefText}>ملاحظات: {caseNotes.trim() || 'لم تتم إضافة ملاحظات بعد'}</Text>
+              </View>
+              <Button title={readiness >= 60 ? 'اختيار محام مناسب' : 'إكمال التفاصيل مع المساعد'} onPress={() => onOpen?.(readiness >= 60 ? 'lawyers' : 'ai')} />
+            </Card>
 
             <Card>
               <Text style={styles.sectionTitle}>حوّل الخطة إلى إجراء</Text>
@@ -331,5 +396,110 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: 12,
     fontWeight: '900',
+  },
+  readinessHeader: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    justifyContent: 'space-between',
+  },
+  readinessValue: {
+    color: colors.gold,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  progressTrack: {
+    backgroundColor: colors.tint,
+    borderRadius: 999,
+    height: 8,
+    marginBottom: 10,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  progressFill: {
+    backgroundColor: colors.gold,
+    borderRadius: 999,
+    height: '100%',
+  },
+  requirementRow: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    gap: 10,
+    marginTop: 8,
+    padding: 10,
+  },
+  requirementRowDone: {
+    backgroundColor: colors.greenTint,
+    borderColor: '#bdebd7',
+  },
+  requirementText: {
+    alignItems: 'flex-end',
+    flex: 1,
+  },
+  requirementType: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  requirementLabel: {
+    color: colors.muted,
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 21,
+    marginTop: 2,
+    textAlign: 'right',
+  },
+  requirementLabelDone: {
+    color: colors.green,
+    textDecorationLine: 'line-through',
+  },
+  checkBox: {
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  checkBoxDone: {
+    backgroundColor: colors.green,
+    borderColor: colors.green,
+  },
+  notesArea: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 13,
+    marginTop: 10,
+    minHeight: 105,
+    padding: 11,
+  },
+  briefBox: {
+    alignItems: 'flex-end',
+    backgroundColor: colors.navy,
+    borderRadius: 8,
+    marginBottom: 12,
+    marginTop: 10,
+    padding: 12,
+  },
+  briefTitle: {
+    color: colors.gold,
+    fontSize: 12,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  briefText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 20,
+    textAlign: 'right',
   },
 });
