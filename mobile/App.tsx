@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import {
   IBMPlexSansArabic_400Regular,
@@ -23,6 +23,7 @@ import { FollowingScreen } from './src/screens/FollowingScreen';
 import { HomeScreen } from './src/screens/HomeScreen';
 import { IntelligenceScreen } from './src/screens/IntelligenceScreen';
 import { LawyersScreen } from './src/screens/LawyersScreen';
+import { LegalActionPlanScreen } from './src/screens/LegalActionPlanScreen';
 import { LegalDocsScreen } from './src/screens/LegalDocsScreen';
 import { MessagesScreen } from './src/screens/MessagesScreen';
 import { MoreRoute, MoreScreen } from './src/screens/MoreScreen';
@@ -74,11 +75,12 @@ function applyDefaultFont(Component: typeof Text | typeof TextInput) {
 applyDefaultFont(Text);
 applyDefaultFont(TextInput);
 
-type TabKey = 'home' | 'lawyers' | 'cases' | 'ai' | 'messages' | 'more';
+type TabKey = 'home' | 'plan' | 'lawyers' | 'cases' | 'ai' | 'messages' | 'more';
 type RouteKey = TabKey | MoreRoute | 'profile';
 
 const tabs: Array<{ key: TabKey; label: string; icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap }> = [
   { key: 'home', label: 'الرئيسية', icon: 'home-outline', activeIcon: 'home' },
+  { key: 'plan', label: 'خطتي', icon: 'git-branch-outline', activeIcon: 'git-branch' },
   { key: 'lawyers', label: 'المحامين', icon: 'people-outline', activeIcon: 'people' },
   { key: 'cases', label: 'القضايا', icon: 'briefcase-outline', activeIcon: 'briefcase' },
   { key: 'ai', label: 'الذكاء', icon: 'sparkles-outline', activeIcon: 'sparkles' },
@@ -147,7 +149,15 @@ function Shell() {
             <Ionicons name="chevron-forward" size={20} color={colors.navy} />
             <Text style={styles.backText}>رجوع</Text>
           </Pressable>
-          <Text style={styles.topTitle}>القسطاس الذكي</Text>
+          <View style={styles.brandLockup}>
+            <View style={styles.brandMark}>
+              <FontAwesome5 name="balance-scale" size={14} color={colors.gold} />
+            </View>
+            <View style={styles.brandText}>
+              <Text style={styles.brandTitle}>القسطاس</Text>
+              <Text style={styles.brandSubtitle}>Smart Legal Platform</Text>
+            </View>
+          </View>
         </Animated.View>
       ) : null}
       <View
@@ -200,6 +210,8 @@ function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKe
   switch (route) {
     case 'lawyers':
       return <LawyersScreen onOpen={setRoute} />;
+    case 'plan':
+      return <LegalActionPlanScreen onOpen={setRoute} />;
     case 'cases':
       return <CasesScreen />;
     case 'ai':
@@ -379,9 +391,37 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '900',
   },
-  topTitle: {
-    color: colors.ink,
+  brandLockup: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 9,
+  },
+  brandMark: {
+    alignItems: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: 12,
+    height: 36,
+    justifyContent: 'center',
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 5 },
+    shadowOpacity: 0.16,
+    shadowRadius: 10,
+    width: 36,
+  },
+  brandText: {
+    alignItems: 'flex-end',
+  },
+  brandTitle: {
+    color: colors.navy,
     fontSize: 15,
     fontWeight: '900',
+    lineHeight: 18,
+  },
+  brandSubtitle: {
+    color: colors.subtle,
+    fontSize: 8,
+    fontWeight: '900',
+    lineHeight: 11,
+    textTransform: 'uppercase',
   },
 });

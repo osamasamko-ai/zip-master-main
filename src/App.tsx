@@ -24,6 +24,7 @@ import Messages from './pages/Messages';
 import Billing from './pages/Billing';
 import Support from './pages/Support';
 import ContractWizard from './pages/ContractWizard';
+import LegalActionPlan from './pages/LegalActionPlan';
 import NotFound from './pages/NotFound';
 import Verify from './pages/Verify';
 
@@ -101,6 +102,7 @@ export default function App() {
               <Route path="billing" element={<Billing />} />
               <Route path="contract" element={<ContractWizard />} />
               <Route path="contracts" element={<ContractWizard />} />
+              <Route path="action-plan" element={<LegalActionPlan />} />
               <Route path="support" element={<Support />} />
               <Route path="aichat" element={<AiChat />} />
               <Route path="legal" element={<LegalDocs />} />

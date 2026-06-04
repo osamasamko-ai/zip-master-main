@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+import { FontAwesome5, Ionicons } from '@expo/vector-icons';
 import React, { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -108,9 +108,10 @@ export function AuthScreen() {
         <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           <View style={styles.header}>
             <View style={styles.logo}>
-              <Ionicons name="scale-outline" size={25} color={colors.gold} />
+              <FontAwesome5 name="balance-scale" size={23} color={colors.gold} />
             </View>
             <Text style={styles.title}>القسطاس</Text>
+            <Text style={styles.brandSubtitle}>Smart Legal Platform</Text>
             <Text style={styles.subtitle}>ادخل لحسابك وتابع القضايا، الرسائل، والمستندات من مكان واحد.</Text>
           </View>
 
@@ -437,14 +438,24 @@ const styles = StyleSheet.create({
   },
   logo: {
     alignItems: 'center',
-    backgroundColor: colors.paper,
-    borderColor: colors.line,
-    borderRadius: 8,
-    borderWidth: 1,
+    backgroundColor: colors.navy,
+    borderRadius: 14,
     height: 54,
     justifyContent: 'center',
     marginBottom: 10,
+    shadowColor: colors.shadow,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.16,
+    shadowRadius: 14,
     width: 54,
+  },
+  brandSubtitle: {
+    color: colors.subtle,
+    fontSize: 9,
+    fontWeight: '900',
+    marginBottom: 8,
+    marginTop: 3,
+    textTransform: 'uppercase',
   },
   message: {
     alignItems: 'center',

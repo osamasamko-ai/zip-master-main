@@ -6,6 +6,7 @@ import { Screen } from '../components/ui';
 import { colors } from '../theme/colors';
 
 export type MoreRoute =
+  | 'plan'
   | 'feed'
   | 'legal'
   | 'contract'
@@ -30,6 +31,7 @@ type Item = {
 };
 
 const items: Item[] = [
+  { key: 'plan', title: 'خطتي القانونية', note: 'حوّل المشكلة إلى خطوات ومستندات', icon: 'git-branch-outline', group: 'work' },
   { key: 'feed', title: 'المجتمع القانوني', note: 'منشورات وأسئلة وتحديثات', icon: 'newspaper-outline', group: 'work' },
   { key: 'legal', title: 'المستندات', note: 'مكتبة قانونية وعقود محفوظة', icon: 'document-text-outline', group: 'work' },
   { key: 'contract', title: 'منشئ العقود', note: 'إنشاء وحفظ مسودات العقود', icon: 'create-outline', group: 'work' },
