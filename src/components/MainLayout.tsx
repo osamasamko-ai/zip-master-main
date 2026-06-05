@@ -19,9 +19,11 @@ export default function MainLayout() {
   } | null>(null);
   const [sosOpen, setSosOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [moreNavOpen, setMoreNavOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [notificationsFilter, setNotificationsFilter] = useState<'all' | 'unread'>('unread');
   const notificationsMenuRef = useRef<HTMLDivElement | null>(null);
+  const moreNavRef = useRef<HTMLDivElement | null>(null);
 
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
@@ -43,9 +45,9 @@ export default function MainLayout() {
     'messages': 'الرسائل',
     'billing': 'المدفوعات',
     'following': 'المحفوظون',
-      'feed': 'تواصل',
-      'legal': 'المكتبة',
-      'action-plan': 'خطتي القانونية',
+    'feed': 'تواصل',
+    'legal': 'المكتبة',
+    'action-plan': 'خطتي القانونية',
     'aichat': 'المساعد',
     'pro': 'المكتب',
     'case-store': 'متجر القضايا',
@@ -74,6 +76,19 @@ export default function MainLayout() {
     document.addEventListener('pointerdown', handlePointerDown);
     return () => document.removeEventListener('pointerdown', handlePointerDown);
   }, [isNotificationsOpen, setIsNotificationsOpen]);
+
+  useEffect(() => {
+    if (!moreNavOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!moreNavRef.current?.contains(event.target as Node)) {
+        setMoreNavOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    return () => document.removeEventListener('pointerdown', handlePointerDown);
+  }, [moreNavOpen]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -230,6 +245,7 @@ export default function MainLayout() {
 
   useEffect(() => {
     setMobileNavOpen(false);
+    setMoreNavOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -261,6 +277,23 @@ export default function MainLayout() {
       ].filter((item) => item.visible !== false),
     [user?.role]
   );
+  const primaryNavItems = useMemo(() => {
+    const priorityPaths = ['/user', '/action-plan', '/cases', '/lawyers'];
+    if (user?.role === 'pro' || user?.role === 'admin') {
+      priorityPaths.push('/pro', '/case-store');
+    }
+    if (user?.role === 'admin') {
+      priorityPaths.push('/admin');
+    }
+
+    return navItems.filter((item) => priorityPaths.includes(item.path));
+  }, [navItems, user?.role]);
+  const overflowNavItems = useMemo(
+    () => navItems.filter((item) => !primaryNavItems.some((primaryItem) => primaryItem.path === item.path)),
+    [navItems, primaryNavItems]
+  );
+  const isNavItemActive = (item: { path: string }) => location.pathname === item.path || (item.path !== '/user' && location.pathname.startsWith(item.path));
+  const hasActiveOverflowItem = overflowNavItems.some(isNavItemActive);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -336,8 +369,8 @@ export default function MainLayout() {
             }}
             className="hidden h-full items-center gap-1 xl:flex"
           >
-            {navItems.map((item) => {
-              const isActive = location.pathname === item.path;
+            {primaryNavItems.map((item) => {
+              const isActive = isNavItemActive(item);
               return (
                 <motion.div
                   key={item.path}
@@ -350,7 +383,7 @@ export default function MainLayout() {
                 >
                   <Link
                     to={item.path}
-                    className={`group relative flex items-center gap-2 overflow-hidden rounded-xl px-4 py-2 text-sm font-bold transition-colors ${isActive
+                    className={`group relative flex items-center gap-2 overflow-hidden rounded-xl px-3 py-2 text-sm font-bold transition-colors ${isActive
                       ? 'bg-brand-navy/5 text-brand-navy'
                       : 'text-slate-500 hover:text-brand-navy hover:bg-slate-50'
                       }`}
@@ -367,7 +400,7 @@ export default function MainLayout() {
                       transition={headerTransition}
                       className={`fa-solid ${item.icon} relative z-10 text-xs ${isActive ? 'text-brand-navy' : 'text-slate-300 group-hover:text-brand-navy'}`}
                     />
-                    <span className="relative z-10">{item.name}</span>
+                    <span className="relative z-10 whitespace-nowrap">{item.name}</span>
                     {isActive && (
                       <motion.div
                         layoutId="nav-pill"
@@ -379,6 +412,68 @@ export default function MainLayout() {
                 </motion.div>
               );
             })}
+            {overflowNavItems.length > 0 && (
+              <div ref={moreNavRef} className="relative">
+                <motion.button
+                  type="button"
+                  onClick={() => setMoreNavOpen((current) => !current)}
+                  whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+                  className={`group relative flex items-center gap-2 overflow-hidden rounded-xl px-3 py-2 text-sm font-bold transition-colors ${hasActiveOverflowItem || moreNavOpen
+                    ? 'bg-brand-navy/5 text-brand-navy'
+                    : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'
+                    }`}
+                  aria-expanded={moreNavOpen}
+                  aria-label="فتح الصفحات الأخرى"
+                >
+                  <i className={`fa-solid fa-table-cells-large relative z-10 text-xs ${hasActiveOverflowItem || moreNavOpen ? 'text-brand-navy' : 'text-slate-300 group-hover:text-brand-navy'}`} />
+                  <span className="relative z-10 whitespace-nowrap">المزيد</span>
+                  <i className={`fa-solid fa-chevron-down relative z-10 text-[10px] transition-transform ${moreNavOpen ? 'rotate-180' : ''}`} />
+                  {hasActiveOverflowItem && (
+                    <motion.div
+                      layoutId="nav-pill-overflow"
+                      transition={headerTransition}
+                      className="absolute inset-x-2 -bottom-3 h-1 rounded-t-full bg-brand-navy"
+                    />
+                  )}
+                </motion.button>
+
+                <AnimatePresence>
+                  {moreNavOpen && (
+                    <motion.div
+                      initial={prefersReducedMotion ? false : { opacity: 0, y: 10, scale: 0.98, filter: 'blur(6px)' }}
+                      animate={{ opacity: 1, y: 0, scale: 1, filter: 'blur(0px)' }}
+                      exit={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 8, scale: 0.98, filter: 'blur(6px)' }}
+                      transition={menuTransition}
+                      className="absolute left-0 top-full z-50 mt-3 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 text-right shadow-2xl"
+                    >
+                      <div className="px-3 py-3">
+                        <p className="text-xs font-black text-brand-navy">صفحات إضافية</p>
+                        <p className="mt-1 text-[11px] font-bold text-slate-400">كل الصفحات متاحة بدون ازدحام الهيدر</p>
+                      </div>
+                      <div className="space-y-1">
+                        {overflowNavItems.map((item) => {
+                          const isActive = isNavItemActive(item);
+                          return (
+                            <Link
+                              key={item.path}
+                              to={item.path}
+                              onClick={() => setMoreNavOpen(false)}
+                              className={`flex items-center justify-between gap-3 rounded-xl px-3 py-3 transition ${isActive ? 'bg-brand-navy text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-brand-navy'}`}
+                            >
+                              <i className={`fa-solid fa-chevron-left text-[10px] ${isActive ? 'text-white/60' : 'text-slate-300'}`} />
+                              <span className="flex-1 text-sm font-black">{item.name}</span>
+                              <span className={`flex h-9 w-9 items-center justify-center rounded-xl ${isActive ? 'bg-white/15 text-brand-gold' : 'bg-slate-50 text-brand-navy'}`}>
+                                <i className={`fa-solid ${item.icon} text-xs`} />
+                              </span>
+                            </Link>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )}
           </motion.nav>
 
           {/* Right Actions */}
