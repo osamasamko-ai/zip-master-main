@@ -17,6 +17,7 @@ import { AiChatScreen } from './src/screens/AiChatScreen';
 import { AuthScreen } from './src/screens/AuthScreen';
 import { BillingScreen } from './src/screens/BillingScreen';
 import { CasesScreen } from './src/screens/CasesScreen';
+import { CaseStoreScreen } from './src/screens/CaseStoreScreen';
 import { ContractWizardScreen } from './src/screens/ContractWizardScreen';
 import { FeedScreen } from './src/screens/FeedScreen';
 import { FollowingScreen } from './src/screens/FollowingScreen';
@@ -238,6 +239,8 @@ function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKe
       return <IntelligenceScreen />;
     case 'pro':
       return <ProWorkspaceScreen />;
+    case 'caseStore':
+      return <CaseStoreScreen onOpen={setRoute} />;
     case 'admin':
       return <AdminScreen />;
     case 'profile':
