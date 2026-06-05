@@ -46,8 +46,9 @@ export default function MainLayout() {
       'feed': 'تواصل',
       'legal': 'المكتبة',
       'action-plan': 'خطتي القانونية',
-      'aichat': 'المساعد',
+    'aichat': 'المساعد',
     'pro': 'المكتب',
+    'case-store': 'متجر القضايا',
     'admin': 'الإدارة',
     'profile': 'الملف',
     'settings': 'الإعدادات',
@@ -139,6 +140,10 @@ export default function MainLayout() {
     }
     if (user?.role === 'pro') {
       items.push({ id: 'p1', type: 'احترافي', title: 'المكتب', subtitle: 'إدارة القضايا والعملاء', icon: 'fa-briefcase', path: '/pro' });
+      items.push({ id: 'p2', type: 'احترافي', title: 'متجر القضايا', subtitle: 'مراجعة الدعاوى المتاحة وقبولها', icon: 'fa-store', path: '/case-store' });
+    }
+    if (user?.role === 'admin') {
+      items.push({ id: 'p2a', type: 'احترافي', title: 'متجر القضايا', subtitle: 'مراجعة الدعاوى المتاحة وقبولها', icon: 'fa-store', path: '/case-store' });
     }
 
     return items.filter(
@@ -251,6 +256,7 @@ export default function MainLayout() {
         { name: 'المساعد', icon: 'fa-robot', path: '/aichat' },
         { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },
         { name: 'المحامي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
+        { name: 'المتجر', icon: 'fa-store', path: '/case-store', visible: user?.role === 'pro' || user?.role === 'admin' },
         { name: 'الإدارة', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
       ].filter((item) => item.visible !== false),
     [user?.role]

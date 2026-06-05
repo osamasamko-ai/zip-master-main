@@ -25,6 +25,7 @@ import Billing from './pages/Billing';
 import Support from './pages/Support';
 import ContractWizard from './pages/ContractWizard';
 import LegalActionPlan from './pages/LegalActionPlan';
+import CaseStore from './pages/CaseStore';
 import NotFound from './pages/NotFound';
 import Verify from './pages/Verify';
 
@@ -114,6 +115,14 @@ export default function App() {
                 element={
                   <RequireRole allowedRoles={['pro', 'admin']}>
                     <ProDashboard />
+                  </RequireRole>
+                }
+              />
+              <Route
+                path="case-store"
+                element={
+                  <RequireRole allowedRoles={['pro', 'admin']}>
+                    <CaseStore />
                   </RequireRole>
                 }
               />
