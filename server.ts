@@ -408,6 +408,8 @@ async function startServer() {
     ...item,
     budget: Number(item.budget || 0),
     readiness: Number(item.readiness || 0),
+    acceptedCount: Number(item.acceptedCount || 0),
+    rejectedCount: Number(item.rejectedCount || 0),
     documents: parseMarketplaceDocuments(item.documentsJson),
     documentsJson: undefined,
     suggested: Boolean(item.suggested),
@@ -1323,6 +1325,8 @@ async function startServer() {
             type: 'system',
           },
         });
+
+        createdCase = await getCaseWorkspace(createdCase.id);
 
         await prisma.$executeRawUnsafe(
           `UPDATE "CaseMarketplaceListing" SET status = 'assigned', "selectedLawyerId" = ?, "createdCaseId" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE id = ?`,
