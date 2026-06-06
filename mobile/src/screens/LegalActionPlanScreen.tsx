@@ -24,6 +24,50 @@ const urgencyTone: Record<LegalPlan['urgency'], 'red' | 'gold' | 'blue'> = {
   medium: 'blue',
 };
 
+function getReadinessLabel(score: number) {
+  if (score >= 85) return 'جاهزة جداً';
+  if (score >= 70) return 'جاهزة للنشر';
+  if (score >= 50) return 'تحتاج تحسين';
+  return 'غير مكتملة';
+}
+
+function assessCaseReadiness({
+  requirementRatio,
+  notes,
+  budget,
+  docsCount,
+  problem,
+}: {
+  requirementRatio: number;
+  notes: string;
+  budget: string;
+  docsCount: number;
+  problem: string;
+}) {
+  const missing: string[] = [];
+  const budgetAmount = Number(String(budget || '').replace(/[^\d.]/g, ''));
+  let score = Math.round(requirementRatio * 45);
+
+  if (notes.trim().length >= 80) score += 15;
+  else if (notes.trim().length >= 30) score += 8;
+  else missing.push('أضف ملخصاً أوضح يتضمن التواريخ والأطراف والمبلغ أو الضرر.');
+
+  if (Number.isFinite(budgetAmount) && budgetAmount > 0) score += 15;
+  else missing.push('حدد ميزانية مبدئية حتى يستطيع المحامي تقديم عرض واقعي.');
+
+  if (docsCount > 0) score += 15;
+  else missing.push('ارفع وثيقة واحدة على الأقل مثل وصل، عقد، أو محادثات.');
+
+  if (problem.trim().length >= 120) score += 10;
+  else if (problem.trim().length >= 60) score += 6;
+  else missing.push('وسّع وصف المشكلة قبل النشر.');
+
+  if (requirementRatio < 1) missing.push('أكمل المستندات والخطوات غير المحددة في قائمة المتطلبات.');
+
+  const normalizedScore = Math.max(0, Math.min(100, score));
+  return { score: normalizedScore, label: getReadinessLabel(normalizedScore), missing: missing.slice(0, 5) };
+}
+
 export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) => void }) {
   const { user } = useAuth();
   const [problem, setProblem] = useState('');
@@ -48,6 +92,17 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
   }, [plan]);
   const completedCount = completionItems.filter((item) => completedRequirements[item.id]).length;
   const readiness = completionItems.length ? Math.round((completedCount / completionItems.length) * 100) : 0;
+  const readinessAssessment = useMemo(
+    () =>
+      assessCaseReadiness({
+        requirementRatio: completionItems.length ? completedCount / completionItems.length : 0,
+        notes: caseNotes,
+        budget: caseBudget,
+        docsCount: pickedDocs.length,
+        problem: submittedProblem,
+      }),
+    [caseBudget, caseNotes, completedCount, completionItems.length, pickedDocs.length, submittedProblem],
+  );
   const suggestedBudget = useMemo(() => {
     if (!plan) return 0;
     if (plan.urgency === 'critical') return 750000;
@@ -108,7 +163,7 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
       data.append('matter', submittedProblem);
       data.append('category', plan.category);
       data.append('budget', String(budget));
-      data.append('readiness', String(readiness));
+      data.append('readiness', String(readinessAssessment.score));
       data.append('notes', caseNotes);
       data.append('location', String((user as any)?.location || ''));
       pickedDocs.forEach((doc) => {
@@ -241,7 +296,7 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
                 action="إضافة للملاحظات"
                 onPress={() =>
                   setCaseNotes(
-                    `أرغب بعرض هذه الدعوى على محام متخصص. التصنيف: ${plan.category}. الأولوية: ${plan.urgencyLabel}. جاهزية الملف: ${readiness}%. أحتاج تقييماً للتكلفة والخطوة القانونية الأقرب.`,
+                    `أرغب بعرض هذه الدعوى على محام متخصص. التصنيف: ${plan.category}. الأولوية: ${plan.urgencyLabel}. جاهزية الملف: ${readinessAssessment.score}%. أحتاج تقييماً للتكلفة والخطوة القانونية الأقرب.`,
                   )
                 }
               />
@@ -287,10 +342,10 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
                 <Text style={styles.briefTitle}>ملخص جاهز للمحامي</Text>
                 <Text style={styles.briefText}>التصنيف: {plan.category}</Text>
                 <Text style={styles.briefText}>الأولوية: {plan.urgencyLabel}</Text>
-                <Text style={styles.briefText}>الجاهزية: {readiness}%</Text>
+                <Text style={styles.briefText}>الجاهزية: {readinessAssessment.score}% - {readinessAssessment.label}</Text>
                 <Text style={styles.briefText}>ملاحظات: {caseNotes.trim() || 'لم تتم إضافة ملاحظات بعد'}</Text>
               </View>
-              <Button title={readiness >= 60 ? 'اختيار محام مناسب' : 'إكمال التفاصيل مع المساعد'} onPress={() => onOpen?.(readiness >= 60 ? 'lawyers' : 'ai')} />
+              <Button title={readinessAssessment.score >= 60 ? 'اختيار محام مناسب' : 'إكمال التفاصيل مع المساعد'} onPress={() => onOpen?.(readinessAssessment.score >= 60 ? 'lawyers' : 'ai')} />
             </Card>
 
             <Card>
@@ -311,6 +366,26 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
                 <Text style={styles.uploadText}>{pickedDocs.length ? `${pickedDocs.length} وثائق مختارة` : 'رفع وثائق الدعوى'}</Text>
                 <Ionicons name="cloud-upload-outline" size={20} color={colors.gold} />
               </Pressable>
+              <View style={styles.publishReadinessBox}>
+                <View style={styles.readinessHeader}>
+                  <Text style={styles.sectionTitle}>تقييم جاهزية الدعوى قبل النشر</Text>
+                  <Text style={styles.readinessValue}>{readinessAssessment.score}%</Text>
+                </View>
+                <Text style={styles.readinessLabel}>{readinessAssessment.label}</Text>
+                <View style={styles.progressTrack}>
+                  <View style={[styles.progressFill, { width: `${readinessAssessment.score}%` }]} />
+                </View>
+                {readinessAssessment.missing.length ? (
+                  readinessAssessment.missing.map((item) => (
+                    <View key={item} style={styles.missingRow}>
+                      <Text style={styles.missingText}>{item}</Text>
+                      <Ionicons name="alert-circle-outline" size={16} color={colors.gold} />
+                    </View>
+                  ))
+                ) : (
+                  <Text style={styles.readyText}>ملفك منظم بما يكفي لزيادة فرصة قبول عروض المحامين.</Text>
+                )}
+              </View>
               <Button title="نشر الدعوى للمحامين" loading={busy === 'publish'} onPress={publishMarketplaceCase} />
             </Card>
 
@@ -699,6 +774,13 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '900',
   },
+  readinessLabel: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 4,
+    textAlign: 'right',
+  },
   progressTrack: {
     backgroundColor: colors.tint,
     borderRadius: 999,
@@ -823,6 +905,35 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 13,
     fontWeight: '900',
+  },
+  publishReadinessBox: {
+    backgroundColor: colors.tint,
+    borderRadius: 8,
+    marginBottom: 12,
+    marginTop: 12,
+    padding: 12,
+  },
+  missingRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row-reverse',
+    gap: 8,
+    marginTop: 8,
+  },
+  missingText: {
+    color: colors.muted,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 20,
+    textAlign: 'right',
+  },
+  readyText: {
+    color: colors.green,
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 20,
+    marginTop: 8,
+    textAlign: 'right',
   },
   successText: {
     color: colors.green,

@@ -17,6 +17,56 @@ const urgencyStyles: Record<LegalPlan['urgency'], string> = {
   medium: 'border-blue-200 bg-blue-50 text-blue-700',
 };
 
+function getReadinessLabel(score: number) {
+  if (score >= 85) return 'جاهزة جداً';
+  if (score >= 70) return 'جاهزة للنشر';
+  if (score >= 50) return 'تحتاج تحسين';
+  return 'غير مكتملة';
+}
+
+function assessCaseReadiness({
+  requirementRatio,
+  notes,
+  budget,
+  filesCount,
+  problem,
+}: {
+  requirementRatio: number;
+  notes: string;
+  budget: string;
+  filesCount: number;
+  problem: string;
+}) {
+  const missing: string[] = [];
+  const budgetAmount = Number(String(budget || '').replace(/[^\d.]/g, ''));
+  const notesLength = notes.trim().length;
+  const problemLength = problem.trim().length;
+  let score = Math.round(requirementRatio * 45);
+
+  if (notesLength >= 80) score += 15;
+  else if (notesLength >= 30) score += 8;
+  else missing.push('أضف ملخصاً أوضح يتضمن التواريخ، الأطراف، والمبلغ أو الضرر.');
+
+  if (Number.isFinite(budgetAmount) && budgetAmount > 0) score += 15;
+  else missing.push('حدد ميزانية مبدئية حتى يستطيع المحامي تقديم عرض واقعي.');
+
+  if (filesCount > 0) score += 15;
+  else missing.push('ارفع وثيقة واحدة على الأقل مثل وصل، عقد، محادثات، أو هوية مستندة للقضية.');
+
+  if (problemLength >= 120) score += 10;
+  else if (problemLength >= 60) score += 6;
+  else missing.push('وسّع وصف المشكلة قبل النشر ليفهم المحامي الوقائع بسرعة.');
+
+  if (requirementRatio < 1) missing.push('أكمل المستندات والخطوات غير المحددة في قائمة المتطلبات.');
+
+  const normalizedScore = Math.max(0, Math.min(100, score));
+  return {
+    score: normalizedScore,
+    label: getReadinessLabel(normalizedScore),
+    missing: missing.slice(0, 5),
+  };
+}
+
 export default function LegalActionPlan() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -43,6 +93,17 @@ export default function LegalActionPlan() {
   }, [plan]);
   const completedCount = completionItems.filter((item) => completedRequirements[item.id]).length;
   const readiness = completionItems.length ? Math.round((completedCount / completionItems.length) * 100) : 0;
+  const readinessAssessment = useMemo(
+    () =>
+      assessCaseReadiness({
+        requirementRatio: completionItems.length ? completedCount / completionItems.length : 0,
+        notes: caseNotes,
+        budget: caseBudget,
+        filesCount: caseFiles.length,
+        problem: submittedProblem,
+      }),
+    [caseBudget, caseFiles.length, caseNotes, completedCount, completionItems.length, submittedProblem],
+  );
   const suggestedBudget = useMemo(() => {
     if (!plan) return 0;
     if (plan.urgency === 'critical') return 750000;
@@ -87,11 +148,11 @@ export default function LegalActionPlan() {
         action: 'إضافة للملاحظات',
         onClick: () =>
           setCaseNotes(
-            `أرغب بعرض هذه الدعوى على محام متخصص. التصنيف: ${plan.category}. الأولوية: ${plan.urgencyLabel}. جاهزية الملف: ${readiness}%. أحتاج تقييماً للتكلفة والخطوة القانونية الأقرب.`,
+            `أرغب بعرض هذه الدعوى على محام متخصص. التصنيف: ${plan.category}. الأولوية: ${plan.urgencyLabel}. جاهزية الملف: ${readinessAssessment.score}%. أحتاج تقييماً للتكلفة والخطوة القانونية الأقرب.`,
           ),
       },
     ];
-  }, [completedRequirements, completionItems, navigate, plan, readiness, suggestedBudget]);
+  }, [completedRequirements, completionItems, navigate, plan, readinessAssessment.score, suggestedBudget]);
 
   const generate = () => {
     if (!canGenerate) return;
@@ -142,7 +203,7 @@ export default function LegalActionPlan() {
       data.append('matter', submittedProblem);
       data.append('category', plan.category);
       data.append('budget', String(budget));
-      data.append('readiness', String(readiness));
+      data.append('readiness', String(readinessAssessment.score));
       data.append('notes', caseNotes);
       data.append('location', String((user as any)?.location || ''));
       caseFiles.forEach((file) => data.append('documents', file));
@@ -305,11 +366,11 @@ export default function LegalActionPlan() {
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm md:col-span-2">
                 <div className="flex flex-wrap items-center justify-between gap-4">
                   <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100 sm:w-56">
-                    <div className="h-full rounded-full bg-brand-gold transition-all" style={{ width: `${readiness}%` }} />
+                    <div className="h-full rounded-full bg-brand-gold transition-all" style={{ width: `${readinessAssessment.score}%` }} />
                   </div>
                   <div>
                     <p className="text-xs font-black text-brand-gold">إكمال المتطلبات داخل نفس الصفحة</p>
-                    <h3 className="mt-2 text-lg font-black text-brand-dark">جاهزية الملف: {readiness}%</h3>
+                    <h3 className="mt-2 text-lg font-black text-brand-dark">جاهزية الدعوى: {readinessAssessment.score}% {readinessAssessment.label}</h3>
                   </div>
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-2">
@@ -348,16 +409,16 @@ export default function LegalActionPlan() {
                       <br />
                       الأولوية: {plan.urgencyLabel}
                       <br />
-                      الجاهزية: {readiness}%
+                      الجاهزية: {readinessAssessment.score}% - {readinessAssessment.label}
                       <br />
                       ملاحظات: {caseNotes.trim() || 'لم تتم إضافة ملاحظات بعد'}
                     </p>
                     <button
                       type="button"
-                      onClick={() => navigate(readiness >= 60 ? '/lawyers' : '/aichat')}
+                      onClick={() => navigate(readinessAssessment.score >= 60 ? '/lawyers' : '/aichat')}
                       className="mt-4 w-full rounded-xl bg-white px-4 py-3 text-sm font-black text-brand-navy transition hover:bg-brand-lightgold"
                     >
-                      {readiness >= 60 ? 'اختيار محام مناسب' : 'إكمال التفاصيل مع المساعد'}
+                      {readinessAssessment.score >= 60 ? 'اختيار محام مناسب' : 'إكمال التفاصيل مع المساعد'}
                     </button>
                   </div>
                 </div>
@@ -390,6 +451,27 @@ export default function LegalActionPlan() {
                         onChange={(event) => setCaseFiles(Array.from(event.target.files || []).slice(0, 8))}
                       />
                     </label>
+                  </div>
+                  <div className="mt-4 rounded-xl bg-white p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <span className="rounded-xl bg-brand-navy px-3 py-2 text-xs font-black text-white">{readinessAssessment.score}% {readinessAssessment.label}</span>
+                      <p className="text-sm font-black text-brand-dark">تقييم جاهزية الدعوى قبل النشر</p>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-brand-gold" style={{ width: `${readinessAssessment.score}%` }} />
+                    </div>
+                    {readinessAssessment.missing.length ? (
+                      <div className="mt-3 space-y-2">
+                        {readinessAssessment.missing.map((item) => (
+                          <div key={item} className="flex items-start justify-end gap-2 text-right text-xs font-bold leading-6 text-slate-600">
+                            <span>{item}</span>
+                            <i className="fa-solid fa-circle-exclamation mt-1 text-brand-gold" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-xs font-black text-emerald-700">ملفك منظم بما يكفي لزيادة فرصة قبول عروض المحامين.</p>
+                    )}
                   </div>
                   <button
                     type="button"
