@@ -419,6 +419,7 @@ async function startServer() {
     budget: Number(item.budget || 0),
     proposedPrice: item.proposedPrice == null ? null : Number(item.proposedPrice || 0),
     readiness: Number(item.readiness || 0),
+    opportunityScore: Number(item.opportunityScore || 0),
     acceptedCount: Number(item.acceptedCount || 0),
     rejectedCount: Number(item.rejectedCount || 0),
     documents: parseMarketplaceDocuments(item.documentsJson),
@@ -1209,13 +1210,34 @@ async function startServer() {
           o."paymentMethod" as paymentMethod,
           o."requestedDocuments" as requestedDocuments,
           CASE WHEN LOWER(l.category) LIKE LOWER(?) THEN 1 ELSE 0 END as suggested,
-          CASE WHEN l.location IS NOT NULL AND l.location != '' AND LOWER(l.location) LIKE LOWER(?) THEN 1 ELSE 0 END as nearby
+          CASE WHEN l.location IS NOT NULL AND l.location != '' AND LOWER(l.location) LIKE LOWER(?) THEN 1 ELSE 0 END as nearby,
+          (
+            CASE WHEN LOWER(l.category) LIKE LOWER(?) THEN 35 ELSE 0 END +
+            CASE WHEN l.location IS NOT NULL AND l.location != '' AND LOWER(l.location) LIKE LOWER(?) THEN 20 ELSE 0 END +
+            CASE
+              WHEN l.budget >= 750000 THEN 20
+              WHEN l.budget >= 500000 THEN 16
+              WHEN l.budget >= 250000 THEN 10
+              WHEN l.budget > 0 THEN 6
+              ELSE 0
+            END +
+            CASE
+              WHEN l.readiness >= 85 THEN 20
+              WHEN l.readiness >= 65 THEN 15
+              WHEN l.readiness >= 40 THEN 9
+              WHEN l.readiness > 0 THEN 4
+              ELSE 0
+            END +
+            CASE WHEN l."documentsJson" IS NOT NULL AND l."documentsJson" != '[]' THEN 5 ELSE 0 END
+          ) as opportunityScore
         FROM "CaseMarketplaceListing" l
         JOIN "User" u ON u.id = l."clientId"
         LEFT JOIN "CaseMarketplaceOffer" o ON o."listingId" = l.id AND o."lawyerId" = ?
         WHERE l.status = 'open' OR l."selectedLawyerId" = ?
-        ORDER BY suggested DESC, nearby DESC, l."createdAt" DESC
+        ORDER BY opportunityScore DESC, suggested DESC, nearby DESC, l.readiness DESC, l.budget DESC, l."createdAt" DESC
         `,
+        `%${specialty}%`,
+        `%${location}%`,
         `%${specialty}%`,
         `%${location}%`,
         currentUser.userId,

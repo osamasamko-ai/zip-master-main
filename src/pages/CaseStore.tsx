@@ -12,6 +12,7 @@ type CaseStoreListing = {
   clientLocation?: string;
   budget: number;
   readiness: number;
+  opportunityScore?: number;
   notes?: string;
   documents?: Array<{ name?: string; url?: string; mimeType?: string; size?: number }>;
   status: 'open' | 'assigned' | string;
@@ -53,6 +54,27 @@ function offerLabel(status?: string | null) {
   if (status === 'accepted') return 'تم قبولها';
   if (status === 'rejected') return 'تم رفضها';
   return 'بانتظار قرارك';
+}
+
+function getOpportunityScore(item: CaseStoreListing) {
+  return Math.max(0, Math.min(100, Number(item.opportunityScore || 0)));
+}
+
+function getOpportunityLabel(score: number) {
+  if (score >= 80) return 'فرصة ممتازة';
+  if (score >= 60) return 'فرصة قوية';
+  if (score >= 40) return 'فرصة متوسطة';
+  return 'تحتاج مراجعة';
+}
+
+function getOpportunityReasons(item: CaseStoreListing) {
+  const reasons = [];
+  if (Boolean(item.suggested)) reasons.push('مناسبة لتخصصك');
+  if (Boolean(item.nearby)) reasons.push('قريبة منك');
+  if (Number(item.budget || 0) >= 500000) reasons.push('ميزانية جيدة');
+  if (Number(item.readiness || 0) >= 65) reasons.push('جاهزية عالية');
+  if (item.documents?.length) reasons.push('وثائق مرفوعة');
+  return reasons.length ? reasons : ['راجع التفاصيل قبل العرض'];
 }
 
 export default function CaseStore() {
@@ -110,7 +132,8 @@ export default function CaseStore() {
     const unanswered = listings.filter((item) => !item.offerStatus && item.status === 'open').length;
     const suggested = listings.filter((item) => Boolean(item.suggested)).length;
     const accepted = listings.filter((item) => item.offerStatus === 'accepted').length;
-    return { open, unanswered, suggested, accepted };
+    const bestScore = listings.reduce((max, item) => Math.max(max, getOpportunityScore(item)), 0);
+    return { open, unanswered, suggested, accepted, bestScore };
   }, [listings]);
 
   const filteredListings = useMemo(() => {
@@ -129,7 +152,7 @@ export default function CaseStore() {
         (filter === 'unanswered' && !item.offerStatus && item.status === 'open') ||
         (filter === 'reviewed' && Boolean(item.offerStatus));
       return matchesQuery && matchesFilter;
-    });
+    }).sort((first, second) => getOpportunityScore(second) - getOpportunityScore(first));
   }, [filter, listings, query]);
 
   const selectListing = (item: CaseStoreListing) => {
@@ -185,10 +208,10 @@ export default function CaseStore() {
           <div className="grid gap-6 p-5 sm:p-7 lg:grid-cols-[minmax(0,1fr)_360px] lg:p-8">
             <div className="flex flex-col items-end justify-between gap-6">
               <div>
-                <p className="text-xs font-black text-brand-gold">Case Store</p>
-                <h1 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">متجر القضايا للمحامين</h1>
+                <p className="text-xs font-black text-brand-gold">Lawyer Opportunities</p>
+                <h1 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">فرص المحامين</h1>
                 <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-white/70">
-                  راجع الدعاوى المنشورة من العملاء، افحص الوثائق والمبلغ المقترح، ثم اقبل القضية أو ارفضها مع ملاحظة واضحة.
+                  القضايا مرتبة حسب أفضل فرصة لك: القرب، ملاءمة التخصص، قوة الميزانية، وجاهزية ملف العميل.
                 </p>
               </div>
               <div className="grid w-full gap-3 sm:grid-cols-4">
@@ -196,11 +219,11 @@ export default function CaseStore() {
                   ['متاحة', stats.open, 'fa-folder-open'],
                   ['بانتظارك', stats.unanswered, 'fa-hourglass-half'],
                   ['مقترحة', stats.suggested, 'fa-wand-magic-sparkles'],
-                  ['مقبولة', stats.accepted, 'fa-circle-check'],
+                  ['أفضل فرصة', `${stats.bestScore}%`, 'fa-ranking-star'],
                 ].map(([label, value, icon]) => (
                   <div key={String(label)} className="rounded-2xl bg-white/10 p-4">
                     <i className={`fa-solid ${icon} text-brand-gold`} />
-                    <p className="mt-3 text-2xl font-black">{Number(value).toLocaleString('ar-IQ')}</p>
+                    <p className="mt-3 text-2xl font-black">{typeof value === 'number' ? value.toLocaleString('ar-IQ') : value}</p>
                     <p className="mt-1 text-xs font-bold text-white/60">{label}</p>
                   </div>
                 ))}
@@ -209,7 +232,7 @@ export default function CaseStore() {
             <aside className="rounded-2xl bg-white/10 p-5">
               <p className="text-sm font-black text-brand-gold">سير العمل الصحيح</p>
               <div className="mt-4 space-y-3">
-                {['اقرأ ملخص الدعوى والملاحظات', 'افتح الوثائق قبل القرار', 'اكتب ملاحظة مهنية للعميل', 'اقبل لتتحول الدعوى إلى ملف قضية'].map((item, index) => (
+                {['ابدأ بالأعلى درجة فرصة', 'راجع سبب الترشيح والجاهزية', 'قدّم عرضاً بسعر ومدة واضحين', 'اطلب الوثائق الناقصة قبل البدء'].map((item, index) => (
                   <div key={item} className="flex items-center justify-end gap-3 rounded-xl bg-white/10 p-3">
                     <p className="flex-1 text-sm font-bold text-white/80">{item}</p>
                     <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-brand-gold text-xs font-black text-brand-navy">{index + 1}</span>
@@ -269,7 +292,9 @@ export default function CaseStore() {
                   <p className="text-sm font-black text-slate-500">لا توجد قضايا مطابقة حالياً</p>
                 </div>
               ) : (
-                filteredListings.map((item) => (
+                filteredListings.map((item) => {
+                  const score = getOpportunityScore(item);
+                  return (
                   <button
                     key={item.id}
                     type="button"
@@ -280,7 +305,7 @@ export default function CaseStore() {
                   >
                     <div className="flex items-start justify-between gap-3">
                       <span className={`rounded-xl px-2.5 py-1 text-[10px] font-black ${selected?.id === item.id ? 'bg-white/15 text-brand-gold' : 'bg-white text-slate-500'}`}>
-                        {offerLabel(item.offerStatus)}
+                        {score}% · {getOpportunityLabel(score)}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className={`truncate text-sm font-black ${selected?.id === item.id ? 'text-white' : 'text-brand-dark'}`}>{item.title}</p>
@@ -290,15 +315,20 @@ export default function CaseStore() {
                       </div>
                     </div>
                     <p className={`mt-3 line-clamp-2 text-xs font-bold leading-6 ${selected?.id === item.id ? 'text-white/65' : 'text-slate-500'}`}>{item.matter}</p>
+                    <div className={`mt-3 h-2 overflow-hidden rounded-full ${selected?.id === item.id ? 'bg-white/15' : 'bg-white'}`}>
+                      <div className="h-full rounded-full bg-brand-gold" style={{ width: `${score}%` }} />
+                    </div>
                     <div className="mt-3 flex flex-wrap justify-end gap-2">
-                      {Boolean(item.suggested) && <span className="rounded-lg bg-brand-gold/15 px-2 py-1 text-[10px] font-black text-brand-gold">مقترحة</span>}
-                      {Boolean(item.nearby) && <span className="rounded-lg bg-blue-50 px-2 py-1 text-[10px] font-black text-blue-600">قريبة</span>}
+                      {getOpportunityReasons(item).slice(0, 3).map((reason) => (
+                        <span key={reason} className={`rounded-lg px-2 py-1 text-[10px] font-black ${selected?.id === item.id ? 'bg-white/15 text-white/75' : 'bg-white text-slate-500'}`}>{reason}</span>
+                      ))}
                       <span className={`rounded-lg px-2 py-1 text-[10px] font-black ${selected?.id === item.id ? 'bg-white/15 text-white/65' : 'bg-white text-slate-500'}`}>
                         {item.documents?.length || 0} وثائق
                       </span>
                     </div>
                   </button>
-                ))
+                  );
+                })
               )}
             </div>
           </aside>
@@ -376,6 +406,8 @@ function CaseReviewPanel({
   onReject: () => void;
 }) {
   const alreadyReviewed = Boolean(listing.offerStatus);
+  const score = getOpportunityScore(listing);
+  const reasons = getOpportunityReasons(listing);
 
   return (
     <div className="space-y-5">
@@ -391,6 +423,26 @@ function CaseReviewPanel({
           <p className="mt-2 text-xs font-bold text-slate-400">{getAgeLabel(listing.createdAt)}</p>
         </div>
       </div>
+
+      <section className="rounded-2xl bg-brand-navy p-5 text-white">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="text-left">
+            <p className="text-3xl font-black text-brand-gold">{score}%</p>
+            <p className="mt-1 text-xs font-black text-white/60">{getOpportunityLabel(score)}</p>
+          </div>
+          <div className="max-w-2xl text-right">
+            <p className="text-sm font-black">لماذا هذه فرصة مناسبة؟</p>
+            <div className="mt-3 flex flex-wrap justify-end gap-2">
+              {reasons.map((reason) => (
+                <span key={reason} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white/75">{reason}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/15">
+          <div className="h-full rounded-full bg-brand-gold" style={{ width: `${score}%` }} />
+        </div>
+      </section>
 
       <div className="grid gap-3 md:grid-cols-4">
         <Metric label="المبلغ المقترح" value={formatMoney(listing.budget)} icon="fa-money-bill-wave" />

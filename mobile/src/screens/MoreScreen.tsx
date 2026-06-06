@@ -43,7 +43,7 @@ const items: Item[] = [
   { key: 'intelligence', title: 'الذكاء التشغيلي', note: 'تنبيهات واقتراحات مخصصة', icon: 'analytics-outline', group: 'work' },
   { key: 'profile', title: 'حسابي', note: 'الملف الشخصي', icon: 'person-outline', group: 'account' },
   { key: 'pro', title: 'مساحة المحامي', note: 'عملاء وقضايا مهنية', icon: 'briefcase-outline', roles: ['pro', 'admin'], group: 'work' },
-  { key: 'caseStore', title: 'متجر القضايا', note: 'راجع الدعاوى المتاحة واقبل المناسب', icon: 'storefront-outline', roles: ['pro', 'admin'], group: 'work' },
+  { key: 'caseStore', title: 'فرص المحامين', note: 'قضايا مرتبة حسب أفضل فرصة لك', icon: 'trophy-outline', roles: ['pro', 'admin'], group: 'work' },
   { key: 'admin', title: 'الإدارة', note: 'مؤشرات ومراجعات المنصة', icon: 'shield-checkmark-outline', roles: ['admin'], group: 'work' },
 ];
 

@@ -15,6 +15,7 @@ type CaseStoreListing = {
   clientLocation?: string;
   budget: number;
   readiness: number;
+  opportunityScore?: number;
   notes?: string;
   documents?: Array<{ name?: string; url?: string; mimeType?: string; size?: number }>;
   status: string;
@@ -55,6 +56,27 @@ function ageLabel(value?: string) {
   if (hours < 1) return 'قبل أقل من ساعة';
   if (hours < 24) return `قبل ${hours} ساعة`;
   return `قبل ${Math.round(hours / 24)} يوم`;
+}
+
+function getOpportunityScore(item: CaseStoreListing) {
+  return Math.max(0, Math.min(100, Number(item.opportunityScore || 0)));
+}
+
+function getOpportunityLabel(score: number) {
+  if (score >= 80) return 'فرصة ممتازة';
+  if (score >= 60) return 'فرصة قوية';
+  if (score >= 40) return 'فرصة متوسطة';
+  return 'تحتاج مراجعة';
+}
+
+function getOpportunityReasons(item: CaseStoreListing) {
+  const reasons = [];
+  if (Boolean(item.suggested)) reasons.push('مناسبة للتخصص');
+  if (Boolean(item.nearby)) reasons.push('قريبة');
+  if (Number(item.budget || 0) >= 500000) reasons.push('ميزانية جيدة');
+  if (Number(item.readiness || 0) >= 65) reasons.push('جاهزية عالية');
+  if (item.documents?.length) reasons.push('وثائق مرفوعة');
+  return reasons.length ? reasons : ['راجع التفاصيل'];
 }
 
 export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }) {
@@ -111,6 +133,7 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
       open: listings.filter((item) => item.status === 'open').length,
       waiting: listings.filter((item) => !item.offerStatus && item.status === 'open').length,
       suggested: listings.filter((item) => Boolean(item.suggested)).length,
+      best: listings.reduce((max, item) => Math.max(max, getOpportunityScore(item)), 0),
     };
   }, [listings]);
 
@@ -130,7 +153,7 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
         (filter === 'unanswered' && !item.offerStatus && item.status === 'open') ||
         (filter === 'reviewed' && Boolean(item.offerStatus));
       return matchesQuery && matchesFilter;
-    });
+    }).sort((first, second) => getOpportunityScore(second) - getOpportunityScore(first));
   }, [filter, listings, query]);
 
   const respond = async (decision: 'accept' | 'reject') => {
@@ -173,13 +196,13 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
           <View style={styles.heroIcon}>
             <Ionicons name="storefront-outline" size={24} color={colors.gold} />
           </View>
-          <Text style={styles.eyebrow}>Case Store</Text>
-          <Text style={styles.title}>متجر القضايا للمحامين</Text>
-          <Text style={styles.subtitle}>راجع الدعاوى المنشورة، افحص الوثائق والمبلغ، ثم اقبل أو ارفض بعد المراجعة.</Text>
+          <Text style={styles.eyebrow}>Lawyer Opportunities</Text>
+          <Text style={styles.title}>فرص المحامين</Text>
+          <Text style={styles.subtitle}>القضايا مرتبة حسب القرب، التخصص، الميزانية، وجاهزية ملف العميل.</Text>
           <View style={styles.stats}>
             <Stat label="متاحة" value={stats.open} />
             <Stat label="بانتظارك" value={stats.waiting} />
-            <Stat label="مقترحة" value={stats.suggested} />
+            <Stat label="أفضل فرصة" value={stats.best} suffix="%" />
           </View>
         </View>
 
@@ -243,10 +266,20 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
             </View>
 
             <View style={styles.metricsGrid}>
+              <Metric label="درجة الفرصة" value={`${getOpportunityScore(selected)}%`} />
               <Metric label="المبلغ" value={formatMoney(selected.budget)} />
               <Metric label="الجاهزية" value={`${selected.readiness || 0}%`} />
               <Metric label="الوثائق" value={`${selected.documents?.length || 0}`} />
-              <Metric label="الموقع" value={selected.location || selected.clientLocation || 'غير محدد'} />
+            </View>
+
+            <View style={styles.opportunityPanel}>
+              <Text style={styles.opportunityTitle}>{getOpportunityLabel(getOpportunityScore(selected))}</Text>
+              <View style={styles.scoreTrack}>
+                <View style={[styles.scoreFill, { width: `${getOpportunityScore(selected)}%` }]} />
+              </View>
+              <View style={styles.cardBadges}>
+                {getOpportunityReasons(selected).map((reason) => <Badge key={reason} label={reason} tone="neutral" />)}
+              </View>
             </View>
 
             <View style={styles.detailCard}>
@@ -366,29 +399,32 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
   );
 }
 
-function Stat({ label, value }: { label: string; value: number }) {
+function Stat({ label, value, suffix = '' }: { label: string; value: number; suffix?: string }) {
   return (
     <View style={styles.stat}>
-      <Text style={styles.statValue}>{value.toLocaleString('ar-IQ')}</Text>
+      <Text style={styles.statValue}>{value.toLocaleString('ar-IQ')}{suffix}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
   );
 }
 
 function CaseCard({ item, active, onPress }: { item: CaseStoreListing; active: boolean; onPress: () => void }) {
+  const score = getOpportunityScore(item);
   return (
     <Pressable onPress={onPress} style={[styles.caseCard, active && styles.caseCardActive]}>
       <View style={styles.cardTop}>
-        <Badge label={offerLabel(item.offerStatus)} tone={item.offerStatus === 'accepted' ? 'green' : item.offerStatus === 'rejected' ? 'red' : 'neutral'} />
+        <Badge label={`${score}%`} tone={score >= 60 ? 'gold' : 'neutral'} />
         <View style={styles.cardText}>
           <Text style={[styles.cardTitle, active && styles.cardTitleActive]} numberOfLines={1}>{item.title}</Text>
-          <Text style={[styles.cardMeta, active && styles.cardMetaActive]}>{formatMoney(item.budget)} · جاهزية {item.readiness || 0}%</Text>
+          <Text style={[styles.cardMeta, active && styles.cardMetaActive]}>{getOpportunityLabel(score)} · {formatMoney(item.budget)}</Text>
         </View>
       </View>
       <Text style={[styles.cardMatter, active && styles.cardMatterActive]} numberOfLines={2}>{item.matter}</Text>
+      <View style={[styles.scoreTrack, active && styles.scoreTrackActive]}>
+        <View style={[styles.scoreFill, { width: `${score}%` }]} />
+      </View>
       <View style={styles.cardBadges}>
-        {Boolean(item.suggested) ? <Badge label="مقترحة" tone="gold" /> : null}
-        {Boolean(item.nearby) ? <Badge label="قريبة" tone="blue" /> : null}
+        {getOpportunityReasons(item).slice(0, 3).map((reason) => <Badge key={reason} label={reason} tone="neutral" />)}
         <Badge label={`${item.documents?.length || 0} وثائق`} tone="neutral" />
       </View>
     </Pressable>
@@ -612,6 +648,22 @@ const styles = StyleSheet.create({
   cardMatterActive: {
     color: 'rgba(255,255,255,0.7)',
   },
+  scoreTrack: {
+    backgroundColor: colors.tint,
+    borderRadius: 999,
+    height: 7,
+    marginTop: 10,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  scoreTrackActive: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+  },
+  scoreFill: {
+    backgroundColor: colors.gold,
+    borderRadius: 999,
+    height: '100%',
+  },
   cardBadges: {
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
@@ -700,6 +752,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  opportunityPanel: {
+    alignItems: 'flex-end',
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    padding: 14,
+  },
+  opportunityTitle: {
+    color: colors.ink,
+    fontSize: 15,
+    fontWeight: '900',
+    textAlign: 'right',
   },
   metric: {
     alignItems: 'flex-end',
