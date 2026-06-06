@@ -129,10 +129,16 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
     }
   };
 
-  const respondToListing = async (id: string, decision: 'accept' | 'reject') => {
+  const respondToListing = async (item: any, decision: 'accept' | 'reject') => {
+    const id = item.id;
     setBusy(`${id}-${decision}`);
     try {
-      await apiClient.respondToCaseMarketplaceListing(id, { decision });
+      await apiClient.respondToCaseMarketplaceListing(id, {
+        decision,
+        proposedPrice: decision === 'accept' ? Number(item.budget || 0) : undefined,
+        evaluationDuration: decision === 'accept' ? '48 ساعة' : undefined,
+        paymentMethod: decision === 'accept' ? 'حسب اتفاق العميل' : undefined,
+      });
       await loadMarketplace();
     } finally {
       setBusy('');
@@ -344,10 +350,10 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
                     <Text style={styles.offerStatus}>قرارك: {item.offerStatus === 'accepted' ? 'قبول' : 'رفض'}</Text>
                   ) : (
                     <View style={styles.offerActions}>
-                      <Pressable onPress={() => respondToListing(item.id, 'reject')} style={styles.rejectButton}>
+                      <Pressable onPress={() => respondToListing(item, 'reject')} style={styles.rejectButton}>
                         <Text style={styles.rejectText}>رفض</Text>
                       </Pressable>
-                      <Pressable onPress={() => respondToListing(item.id, 'accept')} style={styles.acceptButton}>
+                      <Pressable onPress={() => respondToListing(item, 'accept')} style={styles.acceptButton}>
                         <Text style={styles.acceptText}>{busy === `${item.id}-accept` ? 'جار القبول' : 'قبول'}</Text>
                       </Pressable>
                     </View>
@@ -373,6 +379,14 @@ function MarketplaceCard({ item, action }: { item: any; action?: React.ReactNode
         </View>
       </View>
       <Text style={styles.marketMatter} numberOfLines={2}>{item.matter}</Text>
+      {item.status === 'assigned' && item.proposedPrice ? (
+        <View style={styles.offerSummary}>
+          <Text style={styles.offerSummaryText}>السعر: {Number(item.proposedPrice || 0).toLocaleString('en-US')} د.ع</Text>
+          <Text style={styles.offerSummaryText}>مدة التقييم: {item.evaluationDuration || 'غير محددة'}</Text>
+          <Text style={styles.offerSummaryText}>الدفع: {item.paymentMethod || 'غير محدد'}</Text>
+          <Text style={styles.offerSummaryText}>وثائق مطلوبة: {item.requestedDocuments || 'لا توجد'}</Text>
+        </View>
+      ) : null}
       <View style={styles.marketTags}>
         {item.nearby ? <Pill label="قريب" tone="blue" /> : null}
         {item.suggested ? <Pill label="مقترح" tone="gold" /> : null}
@@ -867,6 +881,19 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     gap: 6,
     marginTop: 8,
+  },
+  offerSummary: {
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    gap: 5,
+    marginTop: 8,
+    padding: 10,
+  },
+  offerSummaryText: {
+    color: colors.ink,
+    fontSize: 11,
+    fontWeight: '900',
+    textAlign: 'right',
   },
   offerActions: {
     flexDirection: 'row',

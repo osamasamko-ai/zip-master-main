@@ -17,6 +17,10 @@ type CaseStoreListing = {
   status: 'open' | 'assigned' | string;
   offerStatus?: 'accepted' | 'rejected' | string | null;
   offerNote?: string | null;
+  proposedPrice?: number | null;
+  evaluationDuration?: string | null;
+  paymentMethod?: string | null;
+  requestedDocuments?: string | null;
   suggested?: boolean | number;
   nearby?: boolean | number;
   createdAt?: string;
@@ -61,6 +65,10 @@ export default function CaseStore() {
   const [selected, setSelected] = useState<CaseStoreListing | null>(null);
   const [reviewChecked, setReviewChecked] = useState(false);
   const [decisionNote, setDecisionNote] = useState('');
+  const [proposedPrice, setProposedPrice] = useState('');
+  const [evaluationDuration, setEvaluationDuration] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [requestedDocuments, setRequestedDocuments] = useState('');
   const [responding, setResponding] = useState<'accept' | 'reject' | ''>('');
   const [notice, setNotice] = useState('');
 
@@ -86,6 +94,16 @@ export default function CaseStore() {
   useEffect(() => {
     loadListings();
   }, []);
+
+  useEffect(() => {
+    if (!selected) return;
+    setReviewChecked(Boolean(selected.offerStatus));
+    setDecisionNote(selected.offerNote || '');
+    setProposedPrice(selected.proposedPrice ? String(selected.proposedPrice) : selected.budget ? String(selected.budget) : '');
+    setEvaluationDuration(selected.evaluationDuration || '');
+    setPaymentMethod(selected.paymentMethod || '');
+    setRequestedDocuments(selected.requestedDocuments || '');
+  }, [selected?.id]);
 
   const stats = useMemo(() => {
     const open = listings.filter((item) => item.status === 'open').length;
@@ -118,6 +136,10 @@ export default function CaseStore() {
     setSelected(item);
     setReviewChecked(Boolean(item.offerStatus));
     setDecisionNote(item.offerNote || '');
+    setProposedPrice(item.proposedPrice ? String(item.proposedPrice) : item.budget ? String(item.budget) : '');
+    setEvaluationDuration(item.evaluationDuration || '');
+    setPaymentMethod(item.paymentMethod || '');
+    setRequestedDocuments(item.requestedDocuments || '');
     setNotice('');
   };
 
@@ -127,6 +149,11 @@ export default function CaseStore() {
       setNotice('راجع تفاصيل الدعوى والوثائق ثم أكد المراجعة قبل القبول.');
       return;
     }
+    const normalizedPrice = Number(proposedPrice.replace(/[^\d.]/g, ''));
+    if (decision === 'accept' && (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0 || !evaluationDuration.trim() || !paymentMethod.trim())) {
+      setNotice('أكمل السعر المقترح ومدة التقييم وطريقة الدفع قبل تقديم العرض.');
+      return;
+    }
 
     setResponding(decision);
     setNotice('');
@@ -134,6 +161,10 @@ export default function CaseStore() {
       const response = await apiClient.respondToCaseMarketplaceListing(selected.id, {
         decision,
         note: decisionNote,
+        proposedPrice: normalizedPrice,
+        evaluationDuration,
+        paymentMethod,
+        requestedDocuments,
       });
       setNotice(response.message || (decision === 'accept' ? 'تم قبول الدعوى.' : 'تم تسجيل الرفض.'));
       await loadListings();
@@ -280,6 +311,14 @@ export default function CaseStore() {
                 setReviewChecked={setReviewChecked}
                 decisionNote={decisionNote}
                 setDecisionNote={setDecisionNote}
+                proposedPrice={proposedPrice}
+                setProposedPrice={setProposedPrice}
+                evaluationDuration={evaluationDuration}
+                setEvaluationDuration={setEvaluationDuration}
+                paymentMethod={paymentMethod}
+                setPaymentMethod={setPaymentMethod}
+                requestedDocuments={requestedDocuments}
+                setRequestedDocuments={setRequestedDocuments}
                 notice={notice}
                 responding={responding}
                 onAccept={() => respond('accept')}
@@ -305,6 +344,14 @@ function CaseReviewPanel({
   setReviewChecked,
   decisionNote,
   setDecisionNote,
+  proposedPrice,
+  setProposedPrice,
+  evaluationDuration,
+  setEvaluationDuration,
+  paymentMethod,
+  setPaymentMethod,
+  requestedDocuments,
+  setRequestedDocuments,
   notice,
   responding,
   onAccept,
@@ -315,6 +362,14 @@ function CaseReviewPanel({
   setReviewChecked: (value: boolean) => void;
   decisionNote: string;
   setDecisionNote: (value: string) => void;
+  proposedPrice: string;
+  setProposedPrice: (value: string) => void;
+  evaluationDuration: string;
+  setEvaluationDuration: (value: string) => void;
+  paymentMethod: string;
+  setPaymentMethod: (value: string) => void;
+  requestedDocuments: string;
+  setRequestedDocuments: (value: string) => void;
   notice: string;
   responding: 'accept' | 'reject' | '';
   onAccept: () => void;
@@ -417,6 +472,49 @@ function CaseReviewPanel({
           rows={4}
           className="mt-4 w-full resize-none rounded-xl bg-white p-4 text-sm font-bold leading-7 text-slate-700 outline-none focus:ring-4 focus:ring-brand-navy/10 disabled:opacity-60"
           placeholder="ملاحظة للعميل: سبب القبول، المتطلبات الناقصة، أو سبب الرفض..."
+        />
+
+        <div className="mt-4 grid gap-3 md:grid-cols-3">
+          <label className="block">
+            <span className="mb-2 block text-xs font-black text-slate-500">السعر المقترح</span>
+            <input
+              value={proposedPrice}
+              onChange={(event) => setProposedPrice(event.target.value)}
+              disabled={alreadyReviewed}
+              inputMode="numeric"
+              className="h-12 w-full rounded-xl bg-white px-4 text-sm font-black text-brand-dark outline-none focus:ring-4 focus:ring-brand-navy/10 disabled:opacity-60"
+              placeholder="مثال: 500000"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-black text-slate-500">مدة التقييم</span>
+            <input
+              value={evaluationDuration}
+              onChange={(event) => setEvaluationDuration(event.target.value)}
+              disabled={alreadyReviewed}
+              className="h-12 w-full rounded-xl bg-white px-4 text-sm font-black text-brand-dark outline-none focus:ring-4 focus:ring-brand-navy/10 disabled:opacity-60"
+              placeholder="مثال: 48 ساعة"
+            />
+          </label>
+          <label className="block">
+            <span className="mb-2 block text-xs font-black text-slate-500">طريقة الدفع</span>
+            <input
+              value={paymentMethod}
+              onChange={(event) => setPaymentMethod(event.target.value)}
+              disabled={alreadyReviewed}
+              className="h-12 w-full rounded-xl bg-white px-4 text-sm font-black text-brand-dark outline-none focus:ring-4 focus:ring-brand-navy/10 disabled:opacity-60"
+              placeholder="دفعة واحدة أو أقساط"
+            />
+          </label>
+        </div>
+
+        <textarea
+          value={requestedDocuments}
+          onChange={(event) => setRequestedDocuments(event.target.value)}
+          disabled={alreadyReviewed}
+          rows={3}
+          className="mt-3 w-full resize-none rounded-xl bg-white p-4 text-sm font-bold leading-7 text-slate-700 outline-none focus:ring-4 focus:ring-brand-navy/10 disabled:opacity-60"
+          placeholder="وثائق إضافية مطلوبة من العميل قبل البدء..."
         />
 
         {notice && <p className="mt-3 rounded-xl bg-white px-4 py-3 text-sm font-black text-brand-navy">{notice}</p>}

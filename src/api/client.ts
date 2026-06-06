@@ -279,7 +279,7 @@ class ApiClient {
         return response;
     }
 
-    async respondToCaseMarketplaceListing(id: string, data: { decision: 'accept' | 'reject'; note?: string }): Promise<ApiResponse<any>> {
+    async respondToCaseMarketplaceListing(id: string, data: { decision: 'accept' | 'reject'; note?: string; proposedPrice?: number | string; evaluationDuration?: string; paymentMethod?: string; requestedDocuments?: string }): Promise<ApiResponse<any>> {
         const response = await this.client.post(`/api/app/case-marketplace/${id}/respond`, data);
         return response.data;
     }

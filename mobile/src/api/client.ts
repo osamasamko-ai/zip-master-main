@@ -354,7 +354,7 @@ class ApiClient {
     return this.request<any[]>('/api/app/case-marketplace/lawyer');
   }
 
-  respondToCaseMarketplaceListing(id: string, data: { decision: 'accept' | 'reject'; note?: string }) {
+  respondToCaseMarketplaceListing(id: string, data: { decision: 'accept' | 'reject'; note?: string; proposedPrice?: number | string; evaluationDuration?: string; paymentMethod?: string; requestedDocuments?: string }) {
     return this.request<any>(`/api/app/case-marketplace/${id}/respond`, {
       method: 'POST',
       body: JSON.stringify(data),

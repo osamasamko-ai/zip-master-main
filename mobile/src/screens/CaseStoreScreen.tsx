@@ -20,6 +20,10 @@ type CaseStoreListing = {
   status: string;
   offerStatus?: string | null;
   offerNote?: string | null;
+  proposedPrice?: number | null;
+  evaluationDuration?: string | null;
+  paymentMethod?: string | null;
+  requestedDocuments?: string | null;
   suggested?: boolean | number;
   nearby?: boolean | number;
   createdAt?: string;
@@ -62,6 +66,10 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
   const [error, setError] = useState('');
   const [reviewed, setReviewed] = useState(false);
   const [note, setNote] = useState('');
+  const [proposedPrice, setProposedPrice] = useState('');
+  const [evaluationDuration, setEvaluationDuration] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('');
+  const [requestedDocuments, setRequestedDocuments] = useState('');
   const [responding, setResponding] = useState<'accept' | 'reject' | ''>('');
   const [notice, setNotice] = useState('');
 
@@ -91,6 +99,10 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
   useEffect(() => {
     setReviewed(Boolean(selected?.offerStatus));
     setNote(selected?.offerNote || '');
+    setProposedPrice(selected?.proposedPrice ? String(selected.proposedPrice) : selected?.budget ? String(selected.budget) : '');
+    setEvaluationDuration(selected?.evaluationDuration || '');
+    setPaymentMethod(selected?.paymentMethod || '');
+    setRequestedDocuments(selected?.requestedDocuments || '');
     setNotice('');
   }, [selected?.id]);
 
@@ -127,11 +139,23 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
       setNotice('أكد مراجعة التفاصيل والوثائق قبل قبول الدعوى.');
       return;
     }
+    const normalizedPrice = Number(proposedPrice.replace(/[^\d.]/g, ''));
+    if (decision === 'accept' && (!Number.isFinite(normalizedPrice) || normalizedPrice <= 0 || !evaluationDuration.trim() || !paymentMethod.trim())) {
+      setNotice('أكمل السعر المقترح ومدة التقييم وطريقة الدفع قبل تقديم العرض.');
+      return;
+    }
 
     setResponding(decision);
     setNotice('');
     try {
-      const response = await apiClient.respondToCaseMarketplaceListing(selected.id, { decision, note });
+      const response = await apiClient.respondToCaseMarketplaceListing(selected.id, {
+        decision,
+        note,
+        proposedPrice: normalizedPrice,
+        evaluationDuration,
+        paymentMethod,
+        requestedDocuments,
+      });
       setNotice(response.message || (decision === 'accept' ? 'تم قبول الدعوى.' : 'تم تسجيل الرفض.'));
       await loadListings();
       if (decision === 'accept') onOpen('cases');
@@ -273,6 +297,46 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
                 editable={!selected.offerStatus}
                 multiline
                 placeholder="ملاحظة للعميل قبل القبول أو الرفض..."
+                placeholderTextColor={colors.subtle}
+                style={styles.noteInput}
+                textAlign="right"
+              />
+              <View style={styles.offerGrid}>
+                <TextInput
+                  value={proposedPrice}
+                  onChangeText={setProposedPrice}
+                  editable={!selected.offerStatus}
+                  keyboardType="numeric"
+                  placeholder="السعر المقترح"
+                  placeholderTextColor={colors.subtle}
+                  style={styles.offerInput}
+                  textAlign="right"
+                />
+                <TextInput
+                  value={evaluationDuration}
+                  onChangeText={setEvaluationDuration}
+                  editable={!selected.offerStatus}
+                  placeholder="مدة التقييم"
+                  placeholderTextColor={colors.subtle}
+                  style={styles.offerInput}
+                  textAlign="right"
+                />
+                <TextInput
+                  value={paymentMethod}
+                  onChangeText={setPaymentMethod}
+                  editable={!selected.offerStatus}
+                  placeholder="طريقة الدفع"
+                  placeholderTextColor={colors.subtle}
+                  style={styles.offerInput}
+                  textAlign="right"
+                />
+              </View>
+              <TextInput
+                value={requestedDocuments}
+                onChangeText={setRequestedDocuments}
+                editable={!selected.offerStatus}
+                multiline
+                placeholder="وثائق إضافية مطلوبة..."
                 placeholderTextColor={colors.subtle}
                 style={styles.noteInput}
                 textAlign="right"
@@ -738,6 +802,19 @@ const styles = StyleSheet.create({
     marginTop: 10,
     padding: 12,
     textAlignVertical: 'top',
+  },
+  offerGrid: {
+    gap: 8,
+    marginTop: 10,
+  },
+  offerInput: {
+    backgroundColor: colors.tint,
+    borderRadius: 8,
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    minHeight: 46,
+    paddingHorizontal: 12,
   },
   notice: {
     backgroundColor: colors.goldTint,

@@ -384,12 +384,22 @@ async function startServer() {
         "lawyerId" TEXT NOT NULL,
         "status" TEXT NOT NULL DEFAULT 'pending',
         "note" TEXT,
+        "proposedPrice" REAL,
+        "evaluationDuration" TEXT,
+        "paymentMethod" TEXT,
+        "requestedDocuments" TEXT,
         "createdCaseId" TEXT,
         "createdAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE("listingId", "lawyerId")
       )
     `);
+    const offerColumns = await prisma.$queryRawUnsafe<any[]>(`PRAGMA table_info("CaseMarketplaceOffer")`);
+    const hasOfferColumn = (name: string) => offerColumns.some((column) => column.name === name);
+    if (!hasOfferColumn('proposedPrice')) await prisma.$executeRawUnsafe(`ALTER TABLE "CaseMarketplaceOffer" ADD COLUMN "proposedPrice" REAL`);
+    if (!hasOfferColumn('evaluationDuration')) await prisma.$executeRawUnsafe(`ALTER TABLE "CaseMarketplaceOffer" ADD COLUMN "evaluationDuration" TEXT`);
+    if (!hasOfferColumn('paymentMethod')) await prisma.$executeRawUnsafe(`ALTER TABLE "CaseMarketplaceOffer" ADD COLUMN "paymentMethod" TEXT`);
+    if (!hasOfferColumn('requestedDocuments')) await prisma.$executeRawUnsafe(`ALTER TABLE "CaseMarketplaceOffer" ADD COLUMN "requestedDocuments" TEXT`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceListing_client_status_idx" ON "CaseMarketplaceListing"("clientId", "status", "createdAt")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceListing_status_category_idx" ON "CaseMarketplaceListing"("status", "category", "createdAt")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceOffer_lawyer_status_idx" ON "CaseMarketplaceOffer"("lawyerId", "status", "createdAt")`);
@@ -407,6 +417,7 @@ async function startServer() {
   const mapMarketplaceListing = (item: any) => ({
     ...item,
     budget: Number(item.budget || 0),
+    proposedPrice: item.proposedPrice == null ? null : Number(item.proposedPrice || 0),
     readiness: Number(item.readiness || 0),
     acceptedCount: Number(item.acceptedCount || 0),
     rejectedCount: Number(item.rejectedCount || 0),
@@ -1146,11 +1157,17 @@ async function startServer() {
         SELECT l.*,
           u.name as clientName,
           lawyer.name as selectedLawyerName,
+          selectedOffer.note as offerNote,
+          selectedOffer."proposedPrice" as proposedPrice,
+          selectedOffer."evaluationDuration" as evaluationDuration,
+          selectedOffer."paymentMethod" as paymentMethod,
+          selectedOffer."requestedDocuments" as requestedDocuments,
           (SELECT COUNT(*) FROM "CaseMarketplaceOffer" o WHERE o."listingId" = l.id AND o.status = 'accepted') as acceptedCount,
           (SELECT COUNT(*) FROM "CaseMarketplaceOffer" o WHERE o."listingId" = l.id AND o.status = 'rejected') as rejectedCount
         FROM "CaseMarketplaceListing" l
         JOIN "User" u ON u.id = l."clientId"
         LEFT JOIN "User" lawyer ON lawyer.id = l."selectedLawyerId"
+        LEFT JOIN "CaseMarketplaceOffer" selectedOffer ON selectedOffer."listingId" = l.id AND selectedOffer."lawyerId" = l."selectedLawyerId"
         WHERE l."clientId" = ?
         ORDER BY l."createdAt" DESC
         `,
@@ -1187,6 +1204,10 @@ async function startServer() {
           u.location as clientLocation,
           o.status as offerStatus,
           o.note as offerNote,
+          o."proposedPrice" as proposedPrice,
+          o."evaluationDuration" as evaluationDuration,
+          o."paymentMethod" as paymentMethod,
+          o."requestedDocuments" as requestedDocuments,
           CASE WHEN LOWER(l.category) LIKE LOWER(?) THEN 1 ELSE 0 END as suggested,
           CASE WHEN l.location IS NOT NULL AND l.location != '' AND LOWER(l.location) LIKE LOWER(?) THEN 1 ELSE 0 END as nearby
         FROM "CaseMarketplaceListing" l
@@ -1283,20 +1304,27 @@ async function startServer() {
 
       const decision = req.body.decision === 'reject' ? 'rejected' : 'accepted';
       const note = String(req.body.note || '').trim().slice(0, 1000);
+      const proposedPrice = Number(String(req.body.proposedPrice || '').replace(/[^\d.]/g, ''));
+      const evaluationDuration = String(req.body.evaluationDuration || '').trim().slice(0, 120);
+      const paymentMethod = String(req.body.paymentMethod || '').trim().slice(0, 120);
+      const requestedDocuments = String(req.body.requestedDocuments || '').trim().slice(0, 1000);
       const rows = await prisma.$queryRawUnsafe<any[]>(`SELECT * FROM "CaseMarketplaceListing" WHERE id = ?`, req.params.id);
       const listing = rows[0];
       if (!listing) return res.status(404).json({ error: 'الدعوى غير موجودة.' });
       if (listing.status !== 'open' && decision === 'accepted') {
         return res.status(409).json({ error: 'تم اختيار محام لهذه الدعوى مسبقاً.' });
       }
+      if (decision === 'accepted' && (!Number.isFinite(proposedPrice) || proposedPrice <= 0 || !evaluationDuration || !paymentMethod)) {
+        return res.status(400).json({ error: 'السعر المقترح ومدة التقييم وطريقة الدفع مطلوبة لتقديم العرض.' });
+      }
 
       let createdCase: any = null;
       if (decision === 'accepted') {
         createdCase = await createClientCase(listing.clientId, {
           title: listing.title,
-          matter: `${listing.matter}\n\nملاحظات العميل: ${listing.notes || 'لا توجد'}\nالمبلغ المقترح: ${Number(listing.budget || 0).toLocaleString('en-US')} د.ع`,
+          matter: `${listing.matter}\n\nملاحظات العميل: ${listing.notes || 'لا توجد'}\nعرض المحامي:\nالسعر المقترح: ${proposedPrice.toLocaleString('en-US')} د.ع\nمدة التقييم: ${evaluationDuration}\nطريقة الدفع: ${paymentMethod}\nوثائق إضافية مطلوبة: ${requestedDocuments || 'لا توجد'}${note ? `\nملاحظة المحامي: ${note}` : ''}`,
           lawyerId: currentUser.userId,
-          totalAgreedFee: Number(listing.budget || 0),
+          totalAgreedFee: proposedPrice,
           caseType: listing.category,
         });
 
@@ -1338,8 +1366,8 @@ async function startServer() {
         await prisma.notification.create({
           data: {
             userId: listing.clientId,
-            title: 'تم قبول الدعوى',
-            message: `قبل أحد المحامين دعوى: ${listing.title}`,
+            title: 'وصل عرض محام على الدعوى',
+            message: `قدم أحد المحامين عرضاً على دعوى: ${listing.title}`,
             type: 'success',
             link: '/cases',
           },
@@ -1349,11 +1377,15 @@ async function startServer() {
       const offerId = crypto.randomUUID();
       await prisma.$executeRawUnsafe(
         `
-        INSERT INTO "CaseMarketplaceOffer" ("id", "listingId", "lawyerId", "status", "note", "createdCaseId", "createdAt", "updatedAt")
-        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO "CaseMarketplaceOffer" ("id", "listingId", "lawyerId", "status", "note", "proposedPrice", "evaluationDuration", "paymentMethod", "requestedDocuments", "createdCaseId", "createdAt", "updatedAt")
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT("listingId", "lawyerId") DO UPDATE SET
           status = excluded.status,
           note = excluded.note,
+          "proposedPrice" = excluded."proposedPrice",
+          "evaluationDuration" = excluded."evaluationDuration",
+          "paymentMethod" = excluded."paymentMethod",
+          "requestedDocuments" = excluded."requestedDocuments",
           "createdCaseId" = excluded."createdCaseId",
           "updatedAt" = CURRENT_TIMESTAMP
         `,
@@ -1362,10 +1394,14 @@ async function startServer() {
         currentUser.userId,
         decision,
         note,
+        decision === 'accepted' ? proposedPrice : null,
+        decision === 'accepted' ? evaluationDuration : null,
+        decision === 'accepted' ? paymentMethod : null,
+        decision === 'accepted' ? requestedDocuments : null,
         createdCase?.id || null,
       );
 
-      res.json({ data: { status: decision, case: createdCase }, message: decision === 'accepted' ? 'تم قبول الدعوى وإنشاء ملف قضية.' : 'تم تسجيل رفض الدعوى.' });
+      res.json({ data: { status: decision, case: createdCase }, message: decision === 'accepted' ? 'تم تقديم العرض وإنشاء ملف قضية بالسعر المقترح.' : 'تم تسجيل رفض الدعوى.' });
     } catch (error) {
       console.error('Marketplace response error:', error);
       res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر حفظ القرار.' });

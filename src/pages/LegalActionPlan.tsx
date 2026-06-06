@@ -157,10 +157,16 @@ export default function LegalActionPlan() {
     }
   };
 
-  const respondToListing = async (id: string, decision: 'accept' | 'reject') => {
+  const respondToListing = async (item: any, decision: 'accept' | 'reject') => {
+    const id = item.id;
     setRespondingId(`${id}-${decision}`);
     try {
-      await apiClient.respondToCaseMarketplaceListing(id, { decision });
+      await apiClient.respondToCaseMarketplaceListing(id, {
+        decision,
+        proposedPrice: decision === 'accept' ? Number(item.budget || 0) : undefined,
+        evaluationDuration: decision === 'accept' ? '48 ساعة' : undefined,
+        paymentMethod: decision === 'accept' ? 'حسب اتفاق العميل' : undefined,
+      });
       await loadMarketplace();
     } finally {
       setRespondingId('');
@@ -426,7 +432,7 @@ export default function LegalActionPlan() {
                           <div className="flex gap-2">
                             <button
                               type="button"
-                              onClick={() => respondToListing(item.id, 'reject')}
+                              onClick={() => respondToListing(item, 'reject')}
                               disabled={Boolean(respondingId)}
                               className="rounded-xl bg-red-50 px-3 py-2 text-xs font-black text-red-600"
                             >
@@ -434,7 +440,7 @@ export default function LegalActionPlan() {
                             </button>
                             <button
                               type="button"
-                              onClick={() => respondToListing(item.id, 'accept')}
+                              onClick={() => respondToListing(item, 'accept')}
                               disabled={Boolean(respondingId)}
                               className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white"
                             >
@@ -470,6 +476,14 @@ function MarketplaceListingCard({ item, action }: { item: any; action?: React.Re
         </div>
       </div>
       <p className="mt-3 line-clamp-2 text-xs font-bold leading-6 text-slate-500">{item.matter}</p>
+      {item.status === 'assigned' && item.proposedPrice ? (
+        <div className="mt-3 grid gap-2 rounded-xl bg-white p-3 text-xs font-black text-slate-600 sm:grid-cols-2">
+          <span>السعر: {Number(item.proposedPrice || 0).toLocaleString('en-US')} د.ع</span>
+          <span>مدة التقييم: {item.evaluationDuration || 'غير محددة'}</span>
+          <span>الدفع: {item.paymentMethod || 'غير محدد'}</span>
+          <span>وثائق مطلوبة: {item.requestedDocuments || 'لا توجد'}</span>
+        </div>
+      ) : null}
       <div className="mt-3 flex flex-wrap justify-end gap-2">
         {item.nearby && <span className="rounded-lg bg-blue-50 px-2 py-1 text-[11px] font-black text-blue-700">قريب</span>}
         {item.suggested && <span className="rounded-lg bg-brand-gold/10 px-2 py-1 text-[11px] font-black text-brand-gold">مقترح</span>}
