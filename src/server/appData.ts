@@ -121,14 +121,121 @@ function normalizeHighlights(value: unknown) {
   );
 }
 
+function parseMoney(value?: string | number | null) {
+  const numericValue = typeof value === 'number' ? value : Number(String(value || '').replace(/[^\d.]/g, ''));
+  return Number.isFinite(numericValue) ? numericValue : 0;
+}
+
+function parseResponseMinutes(value?: string | null) {
+  const text = String(value || '');
+  const number = Number(text.replace(/[^\d.]/g, ''));
+  if (!Number.isFinite(number) || number <= 0) return 90;
+  if (text.includes('ساعة')) return number * 60;
+  return number;
+}
+
+function normalizeMatchText(value?: string | null) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function includesMatch(source?: string | null, target?: string | null) {
+  const left = normalizeMatchText(source);
+  const right = normalizeMatchText(target);
+  return Boolean(left && right && (left.includes(right) || right.includes(left)));
+}
+
+type LawyerMatchContext = {
+  city?: string;
+  caseType?: string;
+  budget?: number;
+};
+
+type LawyerAcceptanceStats = {
+  total: number;
+  accepted: number;
+  similarTotal: number;
+  similarAccepted: number;
+};
+
+function calculateLawyerMatch(user: any, context: LawyerMatchContext, acceptanceStats?: LawyerAcceptanceStats) {
+  const profile = user.lawyerProfile;
+  const reasons: string[] = [];
+  let score = 0;
+
+  if (context.city && includesMatch(user.location, context.city)) {
+    score += 20;
+    reasons.push('نفس المدينة');
+  } else if (context.city) {
+    reasons.push('مدينة مختلفة');
+  }
+
+  if (context.caseType && includesMatch(profile?.specialty, context.caseType)) {
+    score += 25;
+    reasons.push('مناسب لنوع القضية');
+  } else if (context.caseType) {
+    reasons.push('تخصص قريب يحتاج مراجعة');
+  }
+
+  const fee = parseMoney(profile?.consultationFee);
+  if (context.budget && fee > 0) {
+    if (fee <= context.budget) {
+      score += 15;
+      reasons.push('ضمن ميزانيتك');
+    } else if (fee <= context.budget * 1.25) {
+      score += 8;
+      reasons.push('قريب من الميزانية');
+    } else {
+      reasons.push('أعلى من الميزانية');
+    }
+  }
+
+  const responseMinutes = parseResponseMinutes(profile?.responseTime);
+  if (profile?.isOnline || responseMinutes <= 30) {
+    score += 15;
+    reasons.push('رد سريع');
+  } else if (responseMinutes <= 60) {
+    score += 10;
+    reasons.push('رد خلال ساعة');
+  } else {
+    score += 5;
+  }
+
+  const similarTotal = acceptanceStats?.similarTotal || 0;
+  const similarAccepted = acceptanceStats?.similarAccepted || 0;
+  const total = acceptanceStats?.total || 0;
+  const accepted = acceptanceStats?.accepted || 0;
+  const similarAcceptanceRate = similarTotal > 0 ? Math.round((similarAccepted / similarTotal) * 100) : total > 0 ? Math.round((accepted / total) * 100) : 0;
+  if (similarAcceptanceRate >= 70) {
+    score += 15;
+    reasons.push('قبول عال للقضايا المشابهة');
+  } else if (similarAcceptanceRate >= 40) {
+    score += 10;
+    reasons.push('قبول جيد للقضايا المشابهة');
+  } else if (similarAcceptanceRate > 0) {
+    score += 5;
+  }
+
+  score += Math.min(10, Math.round(((profile?.rating || 0) / 5) * 6) + (user.verified ? 4 : 0));
+  if (user.verified) reasons.push('محام موثق');
+
+  return {
+    matchScore: Math.max(0, Math.min(100, score)),
+    matchReasons: reasons.slice(0, 6),
+    responseMinutes,
+    similarAcceptanceRate,
+    budgetFit: context.budget && fee > 0 ? fee <= context.budget : null,
+  };
+}
+
 function normalizeExperienceYears(value: unknown) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return 0;
   return Math.max(0, Math.min(60, Math.round(numericValue)));
 }
 
-function buildLawyerCard(user: any, followerCount: number, reviewCount: number, isFollowing = false) {
+function buildLawyerCard(user: any, followerCount: number, reviewCount: number, isFollowing = false, matchContext: LawyerMatchContext = {}, acceptanceStats?: LawyerAcceptanceStats) {
   const profile = user.lawyerProfile;
+  const match = calculateLawyerMatch(user, matchContext, acceptanceStats);
   const role = user.role || 'user';
   const isProfessional = role === 'pro';
   const isAdmin = role === 'admin';
@@ -167,6 +274,11 @@ function buildLawyerCard(user: any, followerCount: number, reviewCount: number, 
     tagline: profile?.tagline || user.roleDescription || (isProfessional ? 'استشارات قانونية مهنية' : isAdmin ? 'إدارة وتشغيل المنصة' : 'عضو في منصة القسطاس'),
     followers: followerCount,
     responseTime: isProfessional ? (profile?.responseTime || 'يرد خلال ساعة') : 'نشاط داخل المنصة',
+    responseMinutes: match.responseMinutes,
+    matchScore: match.matchScore,
+    matchReasons: match.matchReasons,
+    similarAcceptanceRate: match.similarAcceptanceRate,
+    budgetFit: match.budgetFit,
     bio: profile?.bio || defaultBio,
     highlights: parseJsonArray(profile?.highlights).length ? parseJsonArray(profile?.highlights) : fallbackHighlights,
     license: isProfessional ? (profile?.licenseNumber || 'غير مضاف') : user.id.slice(0, 8).toUpperCase(),
@@ -415,8 +527,43 @@ export async function revokeSession(userId: string, sessionId: string) {
   });
 }
 
-export async function getLawyers(currentUserId?: string, search?: string) {
-  const [lawyers, follows] = await Promise.all([
+async function getLawyerAcceptanceStats(lawyerIds: string[], caseType?: string): Promise<Record<string, LawyerAcceptanceStats>> {
+  if (lawyerIds.length === 0) return {};
+  try {
+    const placeholders = lawyerIds.map(() => '?').join(', ');
+    const rows = await prisma.$queryRawUnsafe<any[]>(
+      `
+      SELECT
+        o."lawyerId" as lawyerId,
+        COUNT(*) as total,
+        SUM(CASE WHEN o.status = 'accepted' THEN 1 ELSE 0 END) as accepted,
+        SUM(CASE WHEN LOWER(l.category) LIKE LOWER(?) THEN 1 ELSE 0 END) as similarTotal,
+        SUM(CASE WHEN LOWER(l.category) LIKE LOWER(?) AND o.status = 'accepted' THEN 1 ELSE 0 END) as similarAccepted
+      FROM "CaseMarketplaceOffer" o
+      JOIN "CaseMarketplaceListing" l ON l.id = o."listingId"
+      WHERE o."lawyerId" IN (${placeholders})
+      GROUP BY o."lawyerId"
+      `,
+      `%${caseType || ''}%`,
+      `%${caseType || ''}%`,
+      ...lawyerIds,
+    );
+    return rows.reduce<Record<string, LawyerAcceptanceStats>>((acc, row) => {
+      acc[row.lawyerId] = {
+        total: Number(row.total || 0),
+        accepted: Number(row.accepted || 0),
+        similarTotal: caseType ? Number(row.similarTotal || 0) : Number(row.total || 0),
+        similarAccepted: caseType ? Number(row.similarAccepted || 0) : Number(row.accepted || 0),
+      };
+      return acc;
+    }, {});
+  } catch {
+    return {};
+  }
+}
+
+export async function getLawyers(currentUserId?: string, search?: string, matchContext: LawyerMatchContext = {}) {
+  const [lawyers, follows, currentUser] = await Promise.all([
     prisma.user.findMany({
       where: {
         role: { in: ['pro', 'admin'] },
@@ -455,17 +602,27 @@ export async function getLawyers(currentUserId?: string, search?: string) {
     currentUserId
       ? prisma.userFollow.findMany({ where: { followerId: currentUserId }, select: { lawyerId: true } })
       : Promise.resolve([]),
+    currentUserId
+      ? prisma.user.findUnique({ where: { id: currentUserId }, select: { location: true } })
+      : Promise.resolve(null),
   ]);
 
   const followedSet = new Set(follows.map((item) => item.lawyerId));
+  const effectiveContext = {
+    ...matchContext,
+    city: matchContext.city || currentUser?.location || '',
+  };
+  const acceptanceStats = await getLawyerAcceptanceStats(lawyers.map((item) => item.id), effectiveContext.caseType);
   return lawyers.map((user) =>
     buildLawyerCard(
       user,
       getRelatedCount(user, 'followers'),
       getRelatedCount(user, 'reviewsReceived'),
       followedSet.has(user.id),
+      effectiveContext,
+      acceptanceStats[user.id],
     ),
-  );
+  ).sort((left, right) => (right.matchScore || 0) - (left.matchScore || 0));
 }
 
 export async function getFollowingLawyers(userId: string) {

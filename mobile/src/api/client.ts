@@ -129,8 +129,13 @@ class ApiClient {
     return this.request<any>('/api/app/dashboard');
   }
 
-  getLawyers(search = '') {
-    const query = search ? `?search=${encodeURIComponent(search)}` : '';
+  getLawyers(search = '', match: { city?: string; caseType?: string; budget?: string | number } = {}) {
+    const params = new URLSearchParams();
+    if (search) params.set('search', search);
+    if (match.city) params.set('city', match.city);
+    if (match.caseType) params.set('caseType', match.caseType);
+    if (match.budget) params.set('budget', String(match.budget));
+    const query = params.toString() ? `?${params.toString()}` : '';
     return this.request<any[]>(`/api/app/lawyers${query}`);
   }
 

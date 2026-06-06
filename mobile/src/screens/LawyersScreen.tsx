@@ -57,6 +57,9 @@ const paymentMethods = [
 
 export function LawyersScreen({ onOpen }: LawyersScreenProps) {
   const [query, setQuery] = useState('');
+  const [matchCity, setMatchCity] = useState('');
+  const [matchCaseType, setMatchCaseType] = useState('');
+  const [matchBudget, setMatchBudget] = useState('');
   const [lawyers, setLawyers] = useState<any[]>([]);
   const [followedIds, setFollowedIds] = useState<string[]>([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -81,7 +84,11 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
     setLoadError('');
     try {
       const [lawyersResponse, followingResponse] = await Promise.all([
-        apiClient.getLawyers(),
+        apiClient.getLawyers(query, {
+          city: matchCity,
+          caseType: matchCaseType,
+          budget: matchBudget,
+        }),
         apiClient.getFollowing().catch(() => ({ data: [] })),
       ]);
       const nextLawyers = lawyersResponse.data || [];
@@ -90,6 +97,26 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
       setSelectedLawyerId((current) => current || nextLawyers[0]?.id || '');
     } catch {
       setLoadError('تعذر تحميل قائمة المحامين حالياً. حاول تحديث الصفحة.');
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const loadSmartMatches = async () => {
+    setRefreshing(true);
+    setLoadError('');
+    try {
+      const lawyersResponse = await apiClient.getLawyers(query, {
+        city: matchCity,
+        caseType: matchCaseType,
+        budget: matchBudget,
+      });
+      const nextLawyers = lawyersResponse.data || [];
+      setLawyers(nextLawyers);
+      setSelectedLawyerId(nextLawyers[0]?.id || '');
+      setFiltersOpen(false);
+    } catch {
+      setLoadError('تعذر تحديث المطابقة الذكية حالياً.');
     } finally {
       setRefreshing(false);
     }
@@ -121,10 +148,11 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
 
     return next.sort((left, right) => {
       if (sortMode === 'rating') return (right.rating || 0) - (left.rating || 0);
-      if (sortMode === 'response') return Number(right.isOnline) - Number(left.isOnline) || (right.followers || 0) - (left.followers || 0);
+      if (sortMode === 'response') return (left.responseMinutes || 999) - (right.responseMinutes || 999) || Number(right.isOnline) - Number(left.isOnline);
 
       const leftFollowed = followedIds.includes(left.id) ? 1 : 0;
       const rightFollowed = followedIds.includes(right.id) ? 1 : 0;
+      if ((left.matchScore || 0) !== (right.matchScore || 0)) return (right.matchScore || 0) - (left.matchScore || 0);
       if (leftFollowed !== rightFollowed) return rightFollowed - leftFollowed;
       if (left.verified !== right.verified) return Number(right.verified) - Number(left.verified);
       if (left.isOnline !== right.isOnline) return Number(right.isOnline) - Number(left.isOnline);
@@ -140,12 +168,24 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
 
   const selectedLawyer = filteredLawyers.find((lawyer) => lawyer.id === selectedLawyerId) || filteredLawyers[0] || null;
   const recommendedLawyer = filteredLawyers[0] || null;
-  const activeFilterCount = [query.trim().length > 0, specialty !== 'الكل', verifiedOnly, onlineOnly, sortMode !== 'best'].filter(Boolean).length;
+  const activeFilterCount = [
+    query.trim().length > 0,
+    matchCity.trim().length > 0,
+    matchCaseType.trim().length > 0,
+    matchBudget.trim().length > 0,
+    specialty !== 'الكل',
+    verifiedOnly,
+    onlineOnly,
+    sortMode !== 'best',
+  ].filter(Boolean).length;
   const onlineCount = filteredLawyers.filter((lawyer) => lawyer.isOnline).length;
   const verifiedCount = filteredLawyers.filter((lawyer) => lawyer.verified).length;
 
   const resetFilters = () => {
     setQuery('');
+    setMatchCity('');
+    setMatchCaseType('');
+    setMatchBudget('');
     setSpecialty('الكل');
     setVerifiedOnly(false);
     setOnlineOnly(false);
@@ -154,6 +194,9 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
 
   const activeFilters = [
     query.trim() ? `بحث: ${query.trim()}` : '',
+    matchCity.trim() ? `مدينة: ${matchCity.trim()}` : '',
+    matchCaseType.trim() ? `نوع: ${matchCaseType.trim()}` : '',
+    matchBudget.trim() ? `ميزانية: ${matchBudget.trim()}` : '',
     specialty !== 'الكل' ? specialty : '',
     verifiedOnly ? 'موثقون فقط' : '',
     onlineOnly ? 'متاحون الآن' : '',
@@ -290,6 +333,33 @@ export function LawyersScreen({ onOpen }: LawyersScreenProps) {
 
         {filtersOpen ? (
           <Card>
+            <Text style={styles.controlLabel}>المطابقة الذكية</Text>
+            <View style={styles.smartMatchBox}>
+              <TextInput
+                value={matchCity}
+                onChangeText={setMatchCity}
+                placeholder="مدينة العميل"
+                placeholderTextColor={colors.subtle}
+                style={styles.smartInput}
+              />
+              <TextInput
+                value={matchCaseType}
+                onChangeText={setMatchCaseType}
+                placeholder="نوع القضية"
+                placeholderTextColor={colors.subtle}
+                style={styles.smartInput}
+              />
+              <TextInput
+                value={matchBudget}
+                onChangeText={setMatchBudget}
+                keyboardType="numeric"
+                placeholder="ميزانية العميل"
+                placeholderTextColor={colors.subtle}
+                style={styles.smartInput}
+              />
+              <Button title="تحديث المطابقة" onPress={loadSmartMatches} />
+            </View>
+
             <Text style={styles.controlLabel}>التخصص</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
               {specialties.map((item) => (
@@ -406,6 +476,7 @@ function LawyerCard({
   onOpenProfile: () => void;
 }) {
   const readiness = Math.min(100, Math.round(((lawyer.rating || 0) / 5) * 72 + (lawyer.isOnline ? 14 : 0) + (lawyer.verified ? 14 : 0)));
+  const matchScore = Math.round(lawyer.matchScore || 0);
 
   return (
     <InteractiveCard onPress={onSelect} style={[styles.lawyerCard, selected && styles.lawyerCardSelected]}>
@@ -435,6 +506,12 @@ function LawyerCard({
 
       <View style={styles.scoreStrip}>
         <View style={styles.scoreItem}>
+          <Ionicons name="sparkles-outline" size={15} color={colors.gold} />
+          <Text style={styles.scoreValue}>{matchScore}%</Text>
+          <Text style={styles.scoreLabel}>تطابق</Text>
+        </View>
+        <View style={styles.scoreDivider} />
+        <View style={styles.scoreItem}>
           <Ionicons name="star" size={15} color={colors.gold} />
           <Text style={styles.scoreValue}>{Number(lawyer.rating || 0).toFixed(1)}</Text>
           <Text style={styles.scoreLabel}>التقييم</Text>
@@ -451,6 +528,20 @@ function LawyerCard({
           <Text style={styles.scoreValue}>{Number(lawyer.reviewCount || 0).toLocaleString('ar-IQ')}</Text>
           <Text style={styles.scoreLabel}>مراجعة</Text>
         </View>
+      </View>
+
+      <View style={styles.matchReasonBox}>
+        <View style={styles.progressTrack}>
+          <View style={[styles.progressFill, { width: `${matchScore}%` }]} />
+        </View>
+        <View style={styles.reasonRow}>
+          {(lawyer.matchReasons || ['تقييم وتوفر مناسب']).slice(0, 4).map((reason: string) => (
+            <Text key={reason} style={styles.reasonPill}>{reason}</Text>
+          ))}
+        </View>
+        {(lawyer.similarAcceptanceRate || 0) > 0 ? (
+          <Text style={styles.acceptanceText}>قبول القضايا المشابهة {lawyer.similarAcceptanceRate}%</Text>
+        ) : null}
       </View>
 
       {selected ? (
@@ -827,6 +918,24 @@ const styles = StyleSheet.create({
     marginTop: 12,
     textAlign: 'right',
   },
+  smartMatchBox: {
+    backgroundColor: colors.tint,
+    borderRadius: 12,
+    gap: 8,
+    padding: 10,
+  },
+  smartInput: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '800',
+    minHeight: 44,
+    paddingHorizontal: 12,
+    textAlign: 'right',
+  },
   error: {
     color: colors.red,
   },
@@ -1196,6 +1305,34 @@ const styles = StyleSheet.create({
     height: 7,
     marginTop: 8,
     overflow: 'hidden',
+  },
+  matchReasonBox: {
+    backgroundColor: colors.tint,
+    borderRadius: 12,
+    marginTop: 10,
+    padding: 10,
+  },
+  reasonRow: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: 8,
+  },
+  reasonPill: {
+    backgroundColor: colors.paper,
+    borderRadius: 999,
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: '900',
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+  },
+  acceptanceText: {
+    color: colors.green,
+    fontSize: 11,
+    fontWeight: '900',
+    marginTop: 8,
+    textAlign: 'right',
   },
   recommendedCard: {
     backgroundColor: 'rgba(184,137,46,0.08)',

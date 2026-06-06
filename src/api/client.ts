@@ -185,8 +185,8 @@ class ApiClient {
         return response.data;
     }
 
-    async getLawyers(search?: string): Promise<ApiResponse<any[]>> {
-        return this.cachedGet<ApiResponse<any[]>>('/api/app/lawyers', { search });
+    async getLawyers(search?: string, match?: { city?: string; caseType?: string; budget?: string | number }): Promise<ApiResponse<any[]>> {
+        return this.cachedGet<ApiResponse<any[]>>('/api/app/lawyers', { search, ...match });
     }
 
     async getFollowing(): Promise<ApiResponse<any[]>> {

@@ -39,6 +39,11 @@ type LawyerItem = {
   tagline: string;
   followers: number;
   responseTime: string;
+  responseMinutes?: number;
+  matchScore?: number;
+  matchReasons?: string[];
+  similarAcceptanceRate?: number;
+  budgetFit?: boolean | null;
 };
 
 type SortMode = 'best' | 'rating' | 'response';
@@ -48,6 +53,9 @@ export default function Lawyers() {
   const { followedIds, isPending, toggleFollow } = useFollowedLawyers();
   const [lawyers, setLawyers] = useState<LawyerItem[]>([]);
   const [query, setQuery] = useState('');
+  const [matchCity, setMatchCity] = useState('');
+  const [matchCaseType, setMatchCaseType] = useState('');
+  const [matchBudget, setMatchBudget] = useState('');
   const [specialty, setSpecialty] = useState('الكل');
   const [verifiedOnly, setVerifiedOnly] = useState(false);
   const [onlineOnly, setOnlineOnly] = useState(false);
@@ -67,7 +75,11 @@ export default function Lawyers() {
       setIsLoadingLawyers(true);
       setLoadError('');
       try {
-        const response = await apiClient.getLawyers();
+        const response = await apiClient.getLawyers(query, {
+          city: matchCity,
+          caseType: matchCaseType,
+          budget: matchBudget,
+        });
         setLawyers(response.data || []);
         setSelectedLawyerId((response.data || [])[0]?.id || '');
       } catch (error) {
@@ -80,6 +92,24 @@ export default function Lawyers() {
 
     load();
   }, []);
+
+  const loadSmartMatches = async () => {
+    setIsLoadingLawyers(true);
+    setLoadError('');
+    try {
+      const response = await apiClient.getLawyers(query, {
+        city: matchCity,
+        caseType: matchCaseType,
+        budget: matchBudget,
+      });
+      setLawyers(response.data || []);
+      setSelectedLawyerId((response.data || [])[0]?.id || '');
+    } catch {
+      setLoadError('تعذر تحديث المطابقة الذكية حالياً.');
+    } finally {
+      setIsLoadingLawyers(false);
+    }
+  };
 
   useEffect(() => {
     const handleFollowStateChange = (event: Event) => {
@@ -124,10 +154,11 @@ export default function Lawyers() {
 
     return next.sort((left, right) => {
       if (sortMode === 'rating') return right.rating - left.rating;
-      if (sortMode === 'response') return Number(right.isOnline) - Number(left.isOnline) || right.followers - left.followers;
+      if (sortMode === 'response') return (left.responseMinutes || 999) - (right.responseMinutes || 999) || Number(right.isOnline) - Number(left.isOnline);
 
       const leftFollowed = followedIds.includes(left.id) ? 1 : 0;
       const rightFollowed = followedIds.includes(right.id) ? 1 : 0;
+      if ((left.matchScore || 0) !== (right.matchScore || 0)) return (right.matchScore || 0) - (left.matchScore || 0);
       if (leftFollowed !== rightFollowed) return rightFollowed - leftFollowed;
       if (left.verified !== right.verified) return Number(right.verified) - Number(left.verified);
       if (left.isOnline !== right.isOnline) return Number(right.isOnline) - Number(left.isOnline);
@@ -145,6 +176,9 @@ export default function Lawyers() {
   const recommendedLawyer = filteredLawyers[0] || null;
   const activeFilterCount = [
     query.trim().length > 0,
+    matchCity.trim().length > 0,
+    matchCaseType.trim().length > 0,
+    matchBudget.trim().length > 0,
     specialty !== 'الكل',
     verifiedOnly,
     onlineOnly,
@@ -159,6 +193,9 @@ export default function Lawyers() {
 
   const resetFilters = () => {
     setQuery('');
+    setMatchCity('');
+    setMatchCaseType('');
+    setMatchBudget('');
     setSpecialty('الكل');
     setVerifiedOnly(false);
     setOnlineOnly(false);
@@ -318,6 +355,53 @@ export default function Lawyers() {
               </label>
             </div>
 
+            <div className="mt-4 rounded-2xl border border-brand-navy/10 bg-brand-navy/5 p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <button
+                  type="button"
+                  onClick={loadSmartMatches}
+                  className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-brand-navy px-4 text-xs font-black text-white transition hover:bg-brand-dark"
+                >
+                  <i className="fa-solid fa-wand-magic-sparkles text-[11px]"></i>
+                  تحديث المطابقة
+                </button>
+                <div className="text-right">
+                  <p className="text-sm font-black text-brand-dark">المطابقة الذكية</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">المدينة، نوع القضية، الميزانية، سرعة الرد، ونسبة قبول القضايا المشابهة.</p>
+                </div>
+              </div>
+              <div className="grid gap-3 md:grid-cols-3">
+                <label className="text-right">
+                  <span className="mb-2 block text-[11px] font-black uppercase tracking-widest text-slate-400">مدينة العميل</span>
+                  <input
+                    value={matchCity}
+                    onChange={(event) => setMatchCity(event.target.value)}
+                    placeholder="مثال: بغداد"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                  />
+                </label>
+                <label className="text-right">
+                  <span className="mb-2 block text-[11px] font-black uppercase tracking-widest text-slate-400">نوع القضية</span>
+                  <input
+                    value={matchCaseType}
+                    onChange={(event) => setMatchCaseType(event.target.value)}
+                    placeholder="مثال: عقارات أو أحوال شخصية"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                  />
+                </label>
+                <label className="text-right">
+                  <span className="mb-2 block text-[11px] font-black uppercase tracking-widest text-slate-400">ميزانية العميل</span>
+                  <input
+                    value={matchBudget}
+                    onChange={(event) => setMatchBudget(event.target.value)}
+                    inputMode="numeric"
+                    placeholder="مثال: 500000"
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-bold text-slate-700 outline-none transition focus:border-brand-navy"
+                  />
+                </label>
+              </div>
+            </div>
+
             <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
               {specialties.map((item) => (
                 <button
@@ -447,6 +531,9 @@ export default function Lawyers() {
                             <p className="mt-0.5 truncate text-xs font-bold text-slate-500">{lawyer.specialty}</p>
                           </div>
                           <div className="flex shrink-0 flex-col items-end gap-1">
+                            <div className="rounded-full bg-brand-navy px-2 py-1 text-[11px] font-black text-white">
+                              {Math.round(lawyer.matchScore || 0)}% تطابق
+                            </div>
                             <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 text-[11px] font-black text-amber-700">
                               <i className="fa-solid fa-star text-[9px]"></i>
                               {lawyer.rating.toFixed(1)}
@@ -458,6 +545,7 @@ export default function Lawyers() {
 
                         <div className="mt-3 flex flex-wrap items-center justify-end gap-1.5">
                           {index === 0 && sortMode === 'best' && <StatusBadge tone="warning" className="px-2 py-1 text-[10px]">أفضل</StatusBadge>}
+                          {(lawyer.similarAcceptanceRate || 0) > 0 && <StatusBadge tone="success" className="px-2 py-1 text-[10px]">قبول مشابه {lawyer.similarAcceptanceRate}%</StatusBadge>}
                           {lawyer.verified && <StatusBadge tone="info" className="px-2 py-1 text-[10px]">موثق</StatusBadge>}
                           {followedIds.includes(lawyer.id) && <StatusBadge tone="warning" className="px-2 py-1 text-[10px]">محفوظ</StatusBadge>}
                           <StatusBadge tone={lawyer.isOnline ? 'success' : 'neutral'} className="px-2 py-1 text-[10px]">
@@ -496,6 +584,21 @@ export default function Lawyers() {
                     <span className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 ring-1 ring-slate-100">
                       {lawyer.isOnline ? 'متاح للاستشارة' : 'حسب الجدول'}
                     </span>
+                  </div>
+
+                  <div className="mt-3 rounded-2xl bg-brand-navy/5 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-xs font-black text-brand-navy">{Math.round(lawyer.matchScore || 0)}%</span>
+                      <span className="text-xs font-black text-brand-dark">سبب المطابقة</span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-white">
+                      <div className="h-full rounded-full bg-brand-gold" style={{ width: `${Math.round(lawyer.matchScore || 0)}%` }} />
+                    </div>
+                    <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                      {(lawyer.matchReasons || ['تقييم وتوفر مناسب']).slice(0, 4).map((reason) => (
+                        <span key={reason} className="rounded-full bg-white px-2.5 py-1 text-[10px] font-black text-slate-500 ring-1 ring-slate-100">{reason}</span>
+                      ))}
+                    </div>
                   </div>
 
                   <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,1fr)]">

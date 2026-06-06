@@ -864,7 +864,10 @@ async function startServer() {
     try {
       const currentUser = (req as any).user;
       const search = typeof req.query.search === 'string' ? req.query.search : undefined;
-      res.json({ data: await getLawyers(currentUser.userId, search) });
+      const city = typeof req.query.city === 'string' ? req.query.city : undefined;
+      const caseType = typeof req.query.caseType === 'string' ? req.query.caseType : undefined;
+      const budget = typeof req.query.budget === 'string' ? Number(String(req.query.budget).replace(/[^\d.]/g, '')) : undefined;
+      res.json({ data: await getLawyers(currentUser.userId, search, { city, caseType, budget: Number.isFinite(budget) ? budget : undefined }) });
     } catch (error) {
       console.error('Lawyers listing error:', error);
       res.status(500).json({ error: 'Failed to fetch lawyers' });
