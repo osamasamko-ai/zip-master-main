@@ -69,6 +69,29 @@ function includesAny(text: string, words: string[]) {
   return words.some((word) => text.includes(word.toLowerCase()));
 }
 
+function buildShareableBrief(problem: string, matched: Pick<CategoryRule, 'category' | 'specialty' | 'documents' | 'steps' | 'cost'>, urgencyLabel: string) {
+  const cleanProblem = problem.trim().replace(/\s+/g, ' ');
+  const problemText = cleanProblem.length > 360 ? `${cleanProblem.slice(0, 360)}...` : cleanProblem;
+
+  return [
+    'موجز قانوني أولي',
+    '',
+    `المشكلة: ${problemText}`,
+    `التصنيف المتوقع: ${matched.category}`,
+    `درجة الأولوية: ${urgencyLabel}`,
+    `التخصص المناسب: ${matched.specialty}`,
+    `التكلفة المتوقعة: ${matched.cost}`,
+    '',
+    'المستندات المطلوبة:',
+    ...matched.documents.slice(0, 4).map((item, index) => `${index + 1}. ${item}`),
+    '',
+    'الخطوات المقترحة:',
+    ...matched.steps.slice(0, 4).map((item, index) => `${index + 1}. ${item}`),
+    '',
+    'ملاحظة: هذا موجز تنظيمي أولي وليس استشارة قانونية نهائية.',
+  ].join('\n');
+}
+
 export function buildLegalActionPlan(problem: string): LegalPlan {
   const text = problem.trim().toLowerCase();
   const matched =
@@ -84,7 +107,6 @@ export function buildLegalActionPlan(problem: string): LegalPlan {
 
   const urgency: LegalPlan['urgency'] = includesAny(text, criticalWords) ? 'critical' : includesAny(text, highWords) ? 'high' : 'medium';
   const urgencyLabel = urgency === 'critical' ? 'عاجل جداً' : urgency === 'high' ? 'مرتفع' : 'متوسط';
-  const shortProblem = problem.trim().slice(0, 110);
 
   return {
     category: matched.category,
@@ -95,6 +117,6 @@ export function buildLegalActionPlan(problem: string): LegalPlan {
     nextSteps: matched.steps,
     matchingSpecialties: [matched.specialty, 'محام موثق', 'مراجعة مستندات'],
     summary: `يبدو أن المسألة أقرب إلى ${matched.category}. الأولوية الآن هي تثبيت الوقائع، تجهيز الأدلة، ثم اختيار مسار تفاوض أو إنذار أو دعوى حسب رد الطرف الآخر.`,
-    shareText: `مشكلتي: ${shortProblem}\nالتصنيف: ${matched.category}\nالأولوية: ${urgencyLabel}\nالخطوة التالية: ${matched.steps[0]}`,
+    shareText: buildShareableBrief(problem, matched, urgencyLabel),
   };
 }

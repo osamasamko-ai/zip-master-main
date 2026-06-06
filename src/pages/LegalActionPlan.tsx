@@ -78,6 +78,7 @@ export default function LegalActionPlan() {
   const [caseFiles, setCaseFiles] = useState<File[]>([]);
   const [marketplaceMessage, setMarketplaceMessage] = useState('');
   const [marketplaceError, setMarketplaceError] = useState('');
+  const [shareFeedback, setShareFeedback] = useState('');
   const [publishing, setPublishing] = useState(false);
   const [clientListings, setClientListings] = useState<any[]>([]);
   const [lawyerListings, setLawyerListings] = useState<any[]>([]);
@@ -164,6 +165,7 @@ export default function LegalActionPlan() {
     setSubmittedProblem(problem.trim());
     setCompletedRequirements({});
     setCaseNotes('');
+    setShareFeedback('');
   };
 
   const toggleRequirement = (id: string) => {
@@ -237,6 +239,30 @@ export default function LegalActionPlan() {
     } finally {
       setRespondingId('');
     }
+  };
+
+  const copyShareBrief = async () => {
+    if (!plan) return;
+    try {
+      await navigator.clipboard.writeText(plan.shareText);
+      setShareFeedback('تم نسخ الموجز.');
+    } catch {
+      setShareFeedback('تعذر النسخ تلقائياً، يمكنك تحديد النص ونسخه.');
+    }
+  };
+
+  const shareBrief = async () => {
+    if (!plan) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: 'موجز قانوني أولي', text: plan.shareText });
+        setShareFeedback('تم فتح نافذة المشاركة.');
+        return;
+      } catch {
+        return;
+      }
+    }
+    await copyShareBrief();
   };
 
   const openNegotiation = async (item: any) => {
@@ -386,7 +412,26 @@ export default function LegalActionPlan() {
                   <ActionCard icon="fa-robot" title="اسأل المساعد" note="حوّل الخطة إلى سؤال تفصيلي." onClick={() => navigate('/aichat')} />
                 </div>
                 <div className="mt-4 rounded-xl border border-dashed border-slate-200 bg-slate-50 p-4">
-                  <p className="text-xs font-black text-slate-400">نص قابل للمشاركة</p>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={copyShareBrief}
+                        className="rounded-xl bg-white px-3 py-2 text-xs font-black text-brand-navy shadow-sm transition hover:bg-brand-navy hover:text-white"
+                      >
+                        نسخ
+                      </button>
+                      <button
+                        type="button"
+                        onClick={shareBrief}
+                        className="rounded-xl bg-brand-navy px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-brand-dark"
+                      >
+                        مشاركة
+                      </button>
+                      {shareFeedback ? <span className="text-xs font-black text-emerald-700">{shareFeedback}</span> : null}
+                    </div>
+                    <p className="text-xs font-black text-slate-400">موجز قانوني قابل للمشاركة</p>
+                  </div>
                   <p className="mt-2 whitespace-pre-line text-sm font-bold leading-7 text-slate-600">{plan.shareText}</p>
                 </div>
               </div>

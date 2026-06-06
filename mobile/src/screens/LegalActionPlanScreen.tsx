@@ -339,11 +339,8 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
                 value={caseNotes}
               />
               <View style={styles.briefBox}>
-                <Text style={styles.briefTitle}>ملخص جاهز للمحامي</Text>
-                <Text style={styles.briefText}>التصنيف: {plan.category}</Text>
-                <Text style={styles.briefText}>الأولوية: {plan.urgencyLabel}</Text>
-                <Text style={styles.briefText}>الجاهزية: {readinessAssessment.score}% - {readinessAssessment.label}</Text>
-                <Text style={styles.briefText}>ملاحظات: {caseNotes.trim() || 'لم تتم إضافة ملاحظات بعد'}</Text>
+                <Text style={styles.briefTitle}>موجز قانوني قابل للمشاركة</Text>
+                <Text style={styles.briefText}>{plan.shareText}</Text>
               </View>
               <Button title={readinessAssessment.score >= 60 ? 'اختيار محام مناسب' : 'إكمال التفاصيل مع المساعد'} onPress={() => onOpen?.(readinessAssessment.score >= 60 ? 'lawyers' : 'ai')} />
             </Card>
