@@ -157,6 +157,11 @@ type LawyerAcceptanceStats = {
   similarAccepted: number;
 };
 
+type LawyerCaseStats = {
+  total: number;
+  closed: number;
+};
+
 function calculateLawyerMatch(user: any, context: LawyerMatchContext, acceptanceStats?: LawyerAcceptanceStats) {
   const profile = user.lawyerProfile;
   const reasons: string[] = [];
@@ -233,7 +238,7 @@ function normalizeExperienceYears(value: unknown) {
   return Math.max(0, Math.min(60, Math.round(numericValue)));
 }
 
-function buildLawyerCard(user: any, followerCount: number, reviewCount: number, isFollowing = false, matchContext: LawyerMatchContext = {}, acceptanceStats?: LawyerAcceptanceStats) {
+function buildLawyerCard(user: any, followerCount: number, reviewCount: number, isFollowing = false, matchContext: LawyerMatchContext = {}, acceptanceStats?: LawyerAcceptanceStats, caseStats?: LawyerCaseStats) {
   const profile = user.lawyerProfile;
   const match = calculateLawyerMatch(user, matchContext, acceptanceStats);
   const role = user.role || 'user';
@@ -250,6 +255,24 @@ function buildLawyerCard(user: any, followerCount: number, reviewCount: number, 
     : isAdmin
       ? ['إدارة المنصة', 'متابعة الجودة', 'دعم المستخدمين']
       : ['عضو في المنصة', 'متابعة القضايا', 'تواصل قانوني'];
+  const acceptedCases = acceptanceStats?.accepted || 0;
+  const totalCases = caseStats?.total || Number(profile?.openCases || 0) || acceptedCases;
+  const closedCases = caseStats?.closed || 0;
+  const closureRate = totalCases > 0 ? Math.round((closedCases / totalCases) * 100) : 0;
+  const licenseStatus = isProfessional
+    ? profile?.licenseStatus === 'verified' ? 'approved' : profile?.licenseStatus === 'rejected' ? 'rejected' : 'pending'
+    : user.verified ? 'approved' : 'pending';
+  const trustScore = Math.min(
+    100,
+    Math.round(
+      (licenseStatus === 'approved' ? 24 : 8) +
+      Math.min(18, acceptedCases * 3) +
+      Math.min(18, closureRate * 0.18) +
+      Math.min(16, Math.round(((profile?.rating || 0) / 5) * 16)) +
+      Math.min(12, reviewCount * 2) +
+      (match.responseMinutes <= 30 ? 12 : match.responseMinutes <= 60 ? 9 : 5),
+    ),
+  );
 
   return {
     id: user.id,
@@ -283,11 +306,23 @@ function buildLawyerCard(user: any, followerCount: number, reviewCount: number, 
     highlights: parseJsonArray(profile?.highlights).length ? parseJsonArray(profile?.highlights) : fallbackHighlights,
     license: isProfessional ? (profile?.licenseNumber || 'غير مضاف') : user.id.slice(0, 8).toUpperCase(),
     attachments: isProfessional ? ['هوية نقابية', 'رخصة ممارسة', 'اعتماد'] : ['هوية الحساب', 'نشاط المنصة', 'إعدادات الأمان'],
-    status: isProfessional
-      ? profile?.licenseStatus === 'verified' ? 'approved' : profile?.licenseStatus === 'rejected' ? 'rejected' : 'pending'
-      : user.verified ? 'approved' : 'pending',
+    status: licenseStatus,
     submittedAt: profile?.submittedAt || formatRelativeDate(user.createdAt),
     profileScore: profile?.profileScore || (user.verified ? 85 : 45),
+    trustProfile: {
+      score: trustScore,
+      specialty: roleLabel,
+      licenseStatus,
+      licenseLabel: licenseStatus === 'approved' ? 'مرخص وموثق' : licenseStatus === 'rejected' ? 'ترخيص مرفوض' : 'ترخيص قيد المراجعة',
+      acceptedCases,
+      acceptedCasesLabel: acceptedCases > 0 ? `${acceptedCases.toLocaleString('ar-IQ')} قضية مقبولة` : 'لا توجد قبولات بعد',
+      responseTime: isProfessional ? (profile?.responseTime || 'يرد خلال ساعة') : 'نشاط داخل المنصة',
+      closureRate,
+      closureRateLabel: totalCases > 0 ? `${closureRate.toLocaleString('ar-IQ')}% إغلاق` : 'لا توجد قضايا مكتملة بعد',
+      rating: profile?.rating || 0,
+      reviewCount,
+      ratingLabel: `${Number(profile?.rating || 0).toFixed(1)} من 5 · ${reviewCount.toLocaleString('ar-IQ')} مراجعة`,
+    },
     isFollowing,
   };
 }
@@ -562,6 +597,24 @@ async function getLawyerAcceptanceStats(lawyerIds: string[], caseType?: string):
   }
 }
 
+async function getLawyerCaseStats(lawyerIds: string[]): Promise<Record<string, LawyerCaseStats>> {
+  if (lawyerIds.length === 0) return {};
+  const rows = await prisma.case.groupBy({
+    by: ['lawyerId', 'status'],
+    where: { lawyerId: { in: lawyerIds } },
+    _count: { _all: true },
+  });
+
+  return rows.reduce<Record<string, LawyerCaseStats>>((acc, row) => {
+    const current = acc[row.lawyerId] || { total: 0, closed: 0 };
+    const count = row._count._all;
+    current.total += count;
+    if (row.status === 'closed') current.closed += count;
+    acc[row.lawyerId] = current;
+    return acc;
+  }, {});
+}
+
 export async function getLawyers(currentUserId?: string, search?: string, matchContext: LawyerMatchContext = {}) {
   const [lawyers, follows, currentUser] = await Promise.all([
     prisma.user.findMany({
@@ -613,6 +666,7 @@ export async function getLawyers(currentUserId?: string, search?: string, matchC
     city: matchContext.city || currentUser?.location || '',
   };
   const acceptanceStats = await getLawyerAcceptanceStats(lawyers.map((item) => item.id), effectiveContext.caseType);
+  const caseStats = await getLawyerCaseStats(lawyers.map((item) => item.id));
   return lawyers.map((user) =>
     buildLawyerCard(
       user,
@@ -621,6 +675,7 @@ export async function getLawyers(currentUserId?: string, search?: string, matchC
       followedSet.has(user.id),
       effectiveContext,
       acceptanceStats[user.id],
+      caseStats[user.id],
     ),
   ).sort((left, right) => (right.matchScore || 0) - (left.matchScore || 0));
 }
@@ -811,6 +866,10 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
   const isFollowing = currentUserId
     ? (await prisma.userFollow.count({ where: { followerId: currentUserId, lawyerId } })) > 0
     : false;
+  const [acceptanceStats, caseStats] = await Promise.all([
+    getLawyerAcceptanceStats([lawyerId]),
+    getLawyerCaseStats([lawyerId]),
+  ]);
 
   return {
     lawyer: buildLawyerCard(
@@ -818,6 +877,9 @@ export async function getLawyerProfile(lawyerId: string, currentUserId?: string)
       getRelatedCount(user, 'followers'),
       getRelatedCount(user, 'reviewsReceived'),
       isFollowing,
+      {},
+      acceptanceStats[lawyerId],
+      caseStats[lawyerId],
     ),
     reviews: user.reviewsReceived.map((review) => ({
       id: review.id,

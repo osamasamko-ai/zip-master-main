@@ -663,6 +663,35 @@ export default function Profile() {
               </div>
             </div>
 
+            {isProfessionalProfile && lawyer.trustProfile ? (
+              <div className="rounded-[2rem] border border-brand-gold/25 bg-[#fffaf0] p-6 shadow-sm">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <span className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white">
+                    ثقة {lawyer.trustProfile.score}%
+                  </span>
+                  <div>
+                    <p className="text-xs font-black text-brand-gold">ملف ثقة المحامي</p>
+                    <h3 className="mt-1 text-xl font-black text-brand-dark">{lawyer.trustProfile.specialty}</h3>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-3 md:grid-cols-3">
+                  {[
+                    ['الترخيص', lawyer.trustProfile.licenseLabel],
+                    ['القضايا المقبولة', lawyer.trustProfile.acceptedCasesLabel],
+                    ['سرعة الرد', lawyer.trustProfile.responseTime],
+                    ['نسبة إغلاق القضايا', lawyer.trustProfile.closureRateLabel],
+                    ['تقييم العملاء', lawyer.trustProfile.ratingLabel],
+                    ['التخصص', lawyer.trustProfile.specialty],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-[1.5rem] bg-white px-4 py-4">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-slate-400">{label}</p>
+                      <p className="mt-2 truncate text-sm font-black text-brand-dark">{value}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+
             {isProfessionalProfile && <SchedulingCalendar />}
           </div>
 

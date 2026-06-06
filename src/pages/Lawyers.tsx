@@ -44,6 +44,20 @@ type LawyerItem = {
   matchReasons?: string[];
   similarAcceptanceRate?: number;
   budgetFit?: boolean | null;
+  trustProfile?: {
+    score: number;
+    specialty: string;
+    licenseStatus: 'approved' | 'pending' | 'rejected' | string;
+    licenseLabel: string;
+    acceptedCases: number;
+    acceptedCasesLabel: string;
+    responseTime: string;
+    closureRate: number;
+    closureRateLabel: string;
+    rating: number;
+    reviewCount: number;
+    ratingLabel: string;
+  };
 };
 
 type SortMode = 'best' | 'rating' | 'response';
@@ -601,6 +615,35 @@ export default function Lawyers() {
                     </div>
                   </div>
 
+                  {lawyer.trustProfile ? (
+                    <div className="mt-3 rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="rounded-full bg-brand-navy px-2.5 py-1 text-[10px] font-black text-white">
+                          ثقة {lawyer.trustProfile.score.toLocaleString('ar-IQ')}%
+                        </span>
+                        <div className="text-right">
+                          <p className="text-[10px] font-black text-brand-gold">ملف ثقة المحامي</p>
+                          <p className="mt-0.5 text-xs font-black text-brand-dark">{lawyer.trustProfile.specialty}</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-2 gap-2 lg:grid-cols-3">
+                        {[
+                          ['الترخيص', lawyer.trustProfile.licenseLabel],
+                          ['القضايا المقبولة', lawyer.trustProfile.acceptedCasesLabel],
+                          ['سرعة الرد', lawyer.trustProfile.responseTime],
+                          ['إغلاق القضايا', lawyer.trustProfile.closureRateLabel],
+                          ['تقييم العملاء', lawyer.trustProfile.ratingLabel],
+                          ['التخصص', lawyer.trustProfile.specialty],
+                        ].map(([label, value]) => (
+                          <div key={label} className="rounded-xl bg-slate-50 px-3 py-2">
+                            <p className="text-[9px] font-black text-slate-400">{label}</p>
+                            <p className="mt-0.5 truncate text-[11px] font-black text-brand-dark">{value}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
                   <div className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1.45fr)_minmax(0,1fr)_minmax(0,1fr)]">
                     <div
                       onClick={(event) => event.stopPropagation()}
@@ -708,6 +751,31 @@ export default function Lawyers() {
                     <p className="mt-1 text-sm font-black text-brand-dark">{selectedLawyer.followers.toLocaleString('ar-IQ')} متابع</p>
                   </div>
                 </div>
+
+                {selectedLawyer.trustProfile ? (
+                  <div className="rounded-2xl border border-brand-gold/20 bg-[#fffaf0] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="rounded-xl bg-brand-navy px-3 py-2 text-xs font-black text-white">{selectedLawyer.trustProfile.score}%</span>
+                      <div>
+                        <p className="text-[11px] font-black text-brand-gold">ملف ثقة المحامي</p>
+                        <h3 className="mt-1 text-sm font-black text-brand-dark">{selectedLawyer.trustProfile.licenseLabel}</h3>
+                      </div>
+                    </div>
+                    <div className="mt-3 space-y-2">
+                      {[
+                        ['القضايا المقبولة', selectedLawyer.trustProfile.acceptedCasesLabel],
+                        ['سرعة الرد', selectedLawyer.trustProfile.responseTime],
+                        ['نسبة الإغلاق', selectedLawyer.trustProfile.closureRateLabel],
+                        ['تقييم العملاء', selectedLawyer.trustProfile.ratingLabel],
+                      ].map(([label, value]) => (
+                        <div key={label} className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2 text-xs">
+                          <span className="font-black text-brand-dark">{value}</span>
+                          <span className="font-bold text-slate-400">{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="grid gap-3">
                   <ActionButton onClick={() => handleOpenConsultation(selectedLawyer)} variant="primary" className="w-full">

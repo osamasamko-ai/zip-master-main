@@ -553,6 +553,25 @@ function LawyerCard({
         </View>
       ) : null}
 
+      {selected && lawyer.trustProfile ? (
+        <View style={styles.trustPanel}>
+          <View style={styles.trustHeader}>
+            <Text style={styles.trustScore}>ثقة {lawyer.trustProfile.score}%</Text>
+            <View style={styles.flex}>
+              <Text style={styles.trustTitle}>ملف ثقة المحامي</Text>
+              <Text style={styles.trustSubtitle} numberOfLines={1}>{lawyer.trustProfile.licenseLabel}</Text>
+            </View>
+          </View>
+          <View style={styles.trustGrid}>
+            <TrustFact label="التخصص" value={lawyer.trustProfile.specialty} />
+            <TrustFact label="قضايا مقبولة" value={lawyer.trustProfile.acceptedCasesLabel} />
+            <TrustFact label="سرعة الرد" value={lawyer.trustProfile.responseTime} />
+            <TrustFact label="الإغلاق" value={lawyer.trustProfile.closureRateLabel} />
+            <TrustFact label="تقييم العملاء" value={lawyer.trustProfile.ratingLabel} />
+          </View>
+        </View>
+      ) : null}
+
       <View style={styles.pricePanel}>
         <View style={styles.flex}>
           <Text style={styles.priceText} numberOfLines={1}>{lawyer.consultationFee || 'غير محدد'}</Text>
@@ -590,6 +609,15 @@ function Fact({ icon, label, value }: { icon: keyof typeof Ionicons.glyphMap; la
         <Text style={styles.factLabel}>{label}</Text>
         <Text style={styles.factValue} numberOfLines={1}>{value || '-'}</Text>
       </View>
+    </View>
+  );
+}
+
+function TrustFact({ label, value }: { label: string; value?: string | number }) {
+  return (
+    <View style={styles.trustFact}>
+      <Text style={styles.trustFactLabel}>{label}</Text>
+      <Text style={styles.trustFactValue} numberOfLines={1}>{value || '-'}</Text>
     </View>
   );
 }
@@ -1514,6 +1542,66 @@ const styles = StyleSheet.create({
     fontSize: 12,
     lineHeight: 19,
     marginTop: 5,
+    textAlign: 'right',
+  },
+  trustFact: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    flexBasis: '48%',
+    flexGrow: 1,
+    padding: 10,
+  },
+  trustFactLabel: {
+    color: colors.subtle,
+    fontSize: 10,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  trustFactValue: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  trustGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  trustHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  trustPanel: {
+    backgroundColor: colors.goldTint,
+    borderRadius: 16,
+    marginTop: 10,
+    padding: 12,
+  },
+  trustScore: {
+    backgroundColor: colors.navy,
+    borderRadius: 999,
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  trustSubtitle: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '900',
+    marginTop: 3,
+    textAlign: 'right',
+  },
+  trustTitle: {
+    color: colors.gold,
+    fontSize: 11,
+    fontWeight: '900',
     textAlign: 'right',
   },
   toggle: {

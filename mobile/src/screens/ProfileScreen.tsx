@@ -489,6 +489,14 @@ function OverviewTab({ profile, isOwnProfile, isProfessionalProfile, highlights,
       <Section title="إشارات الثقة">
         <TrustRow label="التحقق" value={profile?.verified ? 'موثق' : 'بانتظار التوثيق'} tone={profile?.verified ? 'green' : 'gold'} />
         <TrustRow label="المراجعات" value={`${profile?.reviewCount || 0} مراجعة`} />
+        {isProfessionalProfile && profile?.trustProfile ? (
+          <>
+            <TrustRow label="القضايا المقبولة" value={profile.trustProfile.acceptedCasesLabel} />
+            <TrustRow label="سرعة الرد" value={profile.trustProfile.responseTime} />
+            <TrustRow label="نسبة الإغلاق" value={profile.trustProfile.closureRateLabel} />
+            <TrustRow label="تقييم العملاء" value={profile.trustProfile.ratingLabel} />
+          </>
+        ) : null}
         <TrustRow label={isProfessionalProfile ? 'سعر الاستشارة' : 'نوع الحساب'} value={isProfessionalProfile ? profile?.consultationFee : profile?.specialty} />
         <TrustRow label="الرصيد" value={`${profile?.accountBalance ?? 0}`} />
       </Section>
