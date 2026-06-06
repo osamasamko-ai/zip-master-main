@@ -179,9 +179,8 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
         paymentMethod,
         requestedDocuments,
       });
-      setNotice(response.message || (decision === 'accept' ? 'تم قبول الدعوى.' : 'تم تسجيل الرفض.'));
+      setNotice(response.message || (decision === 'accept' ? 'تم فتح غرفة تفاوض أولية.' : 'تم تسجيل الرفض.'));
       await loadListings();
-      if (decision === 'accept') onOpen('cases');
     } catch (err: any) {
       setNotice(err?.message || 'تعذر حفظ القرار.');
     } finally {
@@ -388,7 +387,7 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
                   onPress={() => respond('accept')}
                   style={[styles.actionButton, styles.acceptButton, (selected.offerStatus || responding) && styles.disabled]}
                 >
-                  <Text style={styles.acceptText}>{responding === 'accept' ? 'جار القبول...' : 'قبول الدعوى'}</Text>
+                  <Text style={styles.acceptText}>{responding === 'accept' ? 'جار فتح التفاوض...' : 'قبول مبدئي'}</Text>
                 </Pressable>
               </View>
             </View>

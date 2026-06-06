@@ -284,6 +284,21 @@ class ApiClient {
         return response.data;
     }
 
+    async getCaseMarketplaceNegotiation(id: string): Promise<ApiResponse<any>> {
+        const response = await this.client.get(`/api/app/case-marketplace/${id}/negotiation`);
+        return response.data;
+    }
+
+    async sendCaseMarketplaceNegotiationMessage(id: string, text: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/case-marketplace/${id}/negotiation/messages`, { text });
+        return response.data;
+    }
+
+    async finalizeCaseMarketplaceNegotiation(id: string): Promise<ApiResponse<any>> {
+        const response = await this.client.post(`/api/app/case-marketplace/${id}/finalize`);
+        return response.data;
+    }
+
     async payCaseInstallment(caseId: string, installments: 1 | 2 | 3): Promise<ApiResponse<any>> {
         const response = await this.client.post(`/api/app/workspace/cases/${caseId}/payments`, { installments });
         return response.data;

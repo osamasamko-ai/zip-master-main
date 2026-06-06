@@ -388,6 +388,7 @@ async function startServer() {
         "evaluationDuration" TEXT,
         "paymentMethod" TEXT,
         "requestedDocuments" TEXT,
+        "negotiationSessionId" TEXT,
         "createdCaseId" TEXT,
         "createdAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         "updatedAt" TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -400,6 +401,7 @@ async function startServer() {
     if (!hasOfferColumn('evaluationDuration')) await prisma.$executeRawUnsafe(`ALTER TABLE "CaseMarketplaceOffer" ADD COLUMN "evaluationDuration" TEXT`);
     if (!hasOfferColumn('paymentMethod')) await prisma.$executeRawUnsafe(`ALTER TABLE "CaseMarketplaceOffer" ADD COLUMN "paymentMethod" TEXT`);
     if (!hasOfferColumn('requestedDocuments')) await prisma.$executeRawUnsafe(`ALTER TABLE "CaseMarketplaceOffer" ADD COLUMN "requestedDocuments" TEXT`);
+    if (!hasOfferColumn('negotiationSessionId')) await prisma.$executeRawUnsafe(`ALTER TABLE "CaseMarketplaceOffer" ADD COLUMN "negotiationSessionId" TEXT`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceListing_client_status_idx" ON "CaseMarketplaceListing"("clientId", "status", "createdAt")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceListing_status_category_idx" ON "CaseMarketplaceListing"("status", "category", "createdAt")`);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS "CaseMarketplaceOffer_lawyer_status_idx" ON "CaseMarketplaceOffer"("lawyerId", "status", "createdAt")`);
@@ -418,6 +420,7 @@ async function startServer() {
     ...item,
     budget: Number(item.budget || 0),
     proposedPrice: item.proposedPrice == null ? null : Number(item.proposedPrice || 0),
+    negotiationSessionId: item.negotiationSessionId || null,
     readiness: Number(item.readiness || 0),
     opportunityScore: Number(item.opportunityScore || 0),
     acceptedCount: Number(item.acceptedCount || 0),
@@ -1166,6 +1169,7 @@ async function startServer() {
           selectedOffer."evaluationDuration" as evaluationDuration,
           selectedOffer."paymentMethod" as paymentMethod,
           selectedOffer."requestedDocuments" as requestedDocuments,
+          selectedOffer."negotiationSessionId" as negotiationSessionId,
           (SELECT COUNT(*) FROM "CaseMarketplaceOffer" o WHERE o."listingId" = l.id AND o.status = 'accepted') as acceptedCount,
           (SELECT COUNT(*) FROM "CaseMarketplaceOffer" o WHERE o."listingId" = l.id AND o.status = 'rejected') as rejectedCount
         FROM "CaseMarketplaceListing" l
@@ -1212,6 +1216,7 @@ async function startServer() {
           o."evaluationDuration" as evaluationDuration,
           o."paymentMethod" as paymentMethod,
           o."requestedDocuments" as requestedDocuments,
+          o."negotiationSessionId" as negotiationSessionId,
           CASE WHEN LOWER(l.category) LIKE LOWER(?) THEN 1 ELSE 0 END as suggested,
           CASE WHEN l.location IS NOT NULL AND l.location != '' AND LOWER(l.location) LIKE LOWER(?) THEN 1 ELSE 0 END as nearby,
           (
@@ -1343,58 +1348,48 @@ async function startServer() {
         return res.status(400).json({ error: 'السعر المقترح ومدة التقييم وطريقة الدفع مطلوبة لتقديم العرض.' });
       }
 
-      let createdCase: any = null;
+      let negotiationSessionId: string | null = null;
       if (decision === 'accepted') {
-        createdCase = await createClientCase(listing.clientId, {
-          title: listing.title,
-          matter: `${listing.matter}\n\nملاحظات العميل: ${listing.notes || 'لا توجد'}\nعرض المحامي:\nالسعر المقترح: ${proposedPrice.toLocaleString('en-US')} د.ع\nمدة التقييم: ${evaluationDuration}\nطريقة الدفع: ${paymentMethod}\nوثائق إضافية مطلوبة: ${requestedDocuments || 'لا توجد'}${note ? `\nملاحظة المحامي: ${note}` : ''}`,
-          lawyerId: currentUser.userId,
-          totalAgreedFee: proposedPrice,
-          caseType: listing.category,
-        });
-
-        const documents = parseMarketplaceDocuments(listing.documentsJson);
-        for (const doc of documents) {
-          await prisma.document.create({
-            data: {
-              caseId: createdCase.id,
-              name: doc.name || 'وثيقة مرفوعة',
-              fileUrl: doc.url,
-              previewUrl: doc.url,
-              size: `${((Number(doc.size || 0) || 0) / (1024 * 1024)).toFixed(2)} MB`,
-              type: String(doc.mimeType || '').includes('pdf') ? 'pdf' : String(doc.mimeType || '').includes('image') ? 'image' : 'other',
-              status: 'Draft',
-              tags: '[]',
-            },
-          });
-        }
-
-        await prisma.caseTimelineEntry.create({
+        const session = await prisma.chatSession.create({
           data: {
-            caseId: createdCase.id,
-            dateLabel: 'اليوم',
-            title: 'قبول الدعوى',
-            detail: 'قبل المحامي الدعوى المنشورة وتم تحويلها إلى ملف قضية.',
-            type: 'system',
+            userId: listing.clientId,
+          },
+        });
+        negotiationSessionId = session.id;
+
+        await prisma.message.create({
+          data: {
+            sessionId: session.id,
+            senderId: currentUser.userId,
+            senderRole: 'lawyer',
+            text: [
+              `تم قبول الدعوى مبدئياً وفتح غرفة تفاوض قصيرة قبل إنشاء القضية رسمياً.`,
+              `السعر المقترح: ${proposedPrice.toLocaleString('en-US')} د.ع`,
+              `مدة التقييم: ${evaluationDuration}`,
+              `طريقة الدفع: ${paymentMethod}`,
+              `وثائق إضافية مطلوبة: ${requestedDocuments || 'لا توجد'}`,
+              note ? `ملاحظة المحامي: ${note}` : '',
+            ].filter(Boolean).join('\n'),
+            unread: true,
+            priority: 'High',
+            channel: 'تفاوض أولي',
+            awaitingResponse: true,
           },
         });
 
-        createdCase = await getCaseWorkspace(createdCase.id);
-
         await prisma.$executeRawUnsafe(
-          `UPDATE "CaseMarketplaceListing" SET status = 'assigned', "selectedLawyerId" = ?, "createdCaseId" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE id = ?`,
+          `UPDATE "CaseMarketplaceListing" SET status = 'negotiating', "selectedLawyerId" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE id = ?`,
           currentUser.userId,
-          createdCase.id,
           req.params.id,
         );
 
         await prisma.notification.create({
           data: {
             userId: listing.clientId,
-            title: 'وصل عرض محام على الدعوى',
-            message: `قدم أحد المحامين عرضاً على دعوى: ${listing.title}`,
+            title: 'تم فتح غرفة تفاوض أولية',
+            message: `قبل المحامي دعوى "${listing.title}" مبدئياً. راجع العرض واتفقا قبل إنشاء القضية.`,
             type: 'success',
-            link: '/cases',
+            link: '/plan',
           },
         });
       }
@@ -1402,8 +1397,8 @@ async function startServer() {
       const offerId = crypto.randomUUID();
       await prisma.$executeRawUnsafe(
         `
-        INSERT INTO "CaseMarketplaceOffer" ("id", "listingId", "lawyerId", "status", "note", "proposedPrice", "evaluationDuration", "paymentMethod", "requestedDocuments", "createdCaseId", "createdAt", "updatedAt")
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        INSERT INTO "CaseMarketplaceOffer" ("id", "listingId", "lawyerId", "status", "note", "proposedPrice", "evaluationDuration", "paymentMethod", "requestedDocuments", "negotiationSessionId", "createdCaseId", "createdAt", "updatedAt")
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ON CONFLICT("listingId", "lawyerId") DO UPDATE SET
           status = excluded.status,
           note = excluded.note,
@@ -1411,25 +1406,254 @@ async function startServer() {
           "evaluationDuration" = excluded."evaluationDuration",
           "paymentMethod" = excluded."paymentMethod",
           "requestedDocuments" = excluded."requestedDocuments",
+          "negotiationSessionId" = excluded."negotiationSessionId",
           "createdCaseId" = excluded."createdCaseId",
           "updatedAt" = CURRENT_TIMESTAMP
         `,
         offerId,
         req.params.id,
         currentUser.userId,
-        decision,
+        decision === 'accepted' ? 'negotiating' : decision,
         note,
         decision === 'accepted' ? proposedPrice : null,
         decision === 'accepted' ? evaluationDuration : null,
         decision === 'accepted' ? paymentMethod : null,
         decision === 'accepted' ? requestedDocuments : null,
-        createdCase?.id || null,
+        negotiationSessionId,
+        null,
       );
 
-      res.json({ data: { status: decision, case: createdCase }, message: decision === 'accepted' ? 'تم تقديم العرض وإنشاء ملف قضية بالسعر المقترح.' : 'تم تسجيل رفض الدعوى.' });
+      res.json({
+        data: { status: decision === 'accepted' ? 'negotiating' : decision, negotiationSessionId },
+        message: decision === 'accepted' ? 'تم قبول الدعوى مبدئياً وفتح غرفة تفاوض قبل إنشاء القضية.' : 'تم تسجيل رفض الدعوى.',
+      });
     } catch (error) {
       console.error('Marketplace response error:', error);
       res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر حفظ القرار.' });
+    }
+  });
+
+  app.get('/api/app/case-marketplace/:id/negotiation', authenticateToken, async (req, res) => {
+    try {
+      await ensureCaseMarketplaceTables();
+      const currentUser = (req as any).user;
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `
+        SELECT l.*,
+          u.name as clientName,
+          lawyer.name as selectedLawyerName,
+          o.id as offerId,
+          o.status as offerStatus,
+          o.note as offerNote,
+          o."proposedPrice" as proposedPrice,
+          o."evaluationDuration" as evaluationDuration,
+          o."paymentMethod" as paymentMethod,
+          o."requestedDocuments" as requestedDocuments,
+          o."negotiationSessionId" as negotiationSessionId,
+          o."createdCaseId" as offerCreatedCaseId
+        FROM "CaseMarketplaceListing" l
+        JOIN "User" u ON u.id = l."clientId"
+        LEFT JOIN "User" lawyer ON lawyer.id = l."selectedLawyerId"
+        LEFT JOIN "CaseMarketplaceOffer" o ON o."listingId" = l.id AND o."lawyerId" = l."selectedLawyerId"
+        WHERE l.id = ?
+        `,
+        req.params.id,
+      );
+      const listing = rows[0];
+      if (!listing) return res.status(404).json({ error: 'الدعوى غير موجودة.' });
+      const canAccess = listing.clientId === currentUser.userId || listing.selectedLawyerId === currentUser.userId;
+      if (!canAccess) return res.status(403).json({ error: 'غرفة التفاوض غير متاحة لهذا الحساب.' });
+      if (!listing.negotiationSessionId) return res.status(404).json({ error: 'لم يتم فتح غرفة تفاوض لهذه الدعوى بعد.' });
+
+      const messages = await prisma.message.findMany({
+        where: { sessionId: listing.negotiationSessionId },
+        include: { sender: { select: { id: true, name: true, role: true, img: true } } },
+        orderBy: { createdAt: 'asc' },
+      });
+
+      res.json({
+        data: {
+          listing: mapMarketplaceListing(listing),
+          messages: messages.map((message) => ({
+            id: message.id,
+            text: message.text,
+            senderId: message.senderId,
+            senderRole: message.senderRole,
+            senderName: message.sender?.name || '',
+            createdAt: message.createdAt,
+          })),
+        },
+      });
+    } catch (error) {
+      console.error('Marketplace negotiation error:', error);
+      res.status(500).json({ error: 'تعذر تحميل غرفة التفاوض.' });
+    }
+  });
+
+  app.post('/api/app/case-marketplace/:id/negotiation/messages', authenticateToken, async (req, res) => {
+    try {
+      await ensureCaseMarketplaceTables();
+      const currentUser = (req as any).user;
+      const text = String(req.body.text || '').trim().slice(0, 1200);
+      if (!text) return res.status(400).json({ error: 'اكتب رسالة قبل الإرسال.' });
+
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `
+        SELECT l.id, l.title, l."clientId", l."selectedLawyerId", o."negotiationSessionId"
+        FROM "CaseMarketplaceListing" l
+        LEFT JOIN "CaseMarketplaceOffer" o ON o."listingId" = l.id AND o."lawyerId" = l."selectedLawyerId"
+        WHERE l.id = ?
+        `,
+        req.params.id,
+      );
+      const listing = rows[0];
+      if (!listing?.negotiationSessionId) return res.status(404).json({ error: 'غرفة التفاوض غير موجودة.' });
+      const isClient = listing.clientId === currentUser.userId;
+      const isLawyer = listing.selectedLawyerId === currentUser.userId;
+      if (!isClient && !isLawyer) return res.status(403).json({ error: 'لا يمكنك الإرسال في هذه الغرفة.' });
+
+      await prisma.message.create({
+        data: {
+          sessionId: listing.negotiationSessionId,
+          senderId: currentUser.userId,
+          senderRole: isLawyer ? 'lawyer' : 'user',
+          text,
+          unread: true,
+          priority: 'Medium',
+          channel: 'تفاوض أولي',
+          awaitingResponse: true,
+        },
+      });
+
+      await prisma.notification.create({
+        data: {
+          userId: isLawyer ? listing.clientId : listing.selectedLawyerId,
+          title: 'رسالة جديدة في غرفة التفاوض',
+          message: `توجد رسالة تفاوض جديدة بخصوص: ${listing.title}`,
+          type: 'info',
+          link: isLawyer ? '/plan' : '/case-store',
+        },
+      });
+
+      const data = await prisma.message.findMany({
+        where: { sessionId: listing.negotiationSessionId },
+        include: { sender: { select: { id: true, name: true, role: true, img: true } } },
+        orderBy: { createdAt: 'asc' },
+      });
+      res.json({
+        data: data.map((message) => ({
+          id: message.id,
+          text: message.text,
+          senderId: message.senderId,
+          senderRole: message.senderRole,
+          senderName: message.sender?.name || '',
+          createdAt: message.createdAt,
+        })),
+      });
+    } catch (error) {
+      console.error('Marketplace negotiation message error:', error);
+      res.status(400).json({ error: 'تعذر إرسال رسالة التفاوض.' });
+    }
+  });
+
+  app.post('/api/app/case-marketplace/:id/finalize', authenticateToken, async (req, res) => {
+    try {
+      await ensureCaseMarketplaceTables();
+      const currentUser = (req as any).user;
+      const rows = await prisma.$queryRawUnsafe<any[]>(
+        `
+        SELECT l.*,
+          o.status as offerStatus,
+          o.note as offerNote,
+          o."proposedPrice" as proposedPrice,
+          o."evaluationDuration" as evaluationDuration,
+          o."paymentMethod" as paymentMethod,
+          o."requestedDocuments" as requestedDocuments,
+          o."negotiationSessionId" as negotiationSessionId,
+          o."createdCaseId" as offerCreatedCaseId
+        FROM "CaseMarketplaceListing" l
+        LEFT JOIN "CaseMarketplaceOffer" o ON o."listingId" = l.id AND o."lawyerId" = l."selectedLawyerId"
+        WHERE l.id = ?
+        `,
+        req.params.id,
+      );
+      const listing = rows[0];
+      if (!listing) return res.status(404).json({ error: 'الدعوى غير موجودة.' });
+      const canFinalize = listing.clientId === currentUser.userId || listing.selectedLawyerId === currentUser.userId;
+      if (!canFinalize) return res.status(403).json({ error: 'اعتماد الاتفاق متاح لطرفي التفاوض فقط.' });
+      if (listing.createdCaseId || listing.offerCreatedCaseId) {
+        return res.status(409).json({ error: 'تم إنشاء قضية رسمية لهذه الدعوى مسبقاً.' });
+      }
+      if (listing.status !== 'negotiating' || !listing.selectedLawyerId || !listing.negotiationSessionId) {
+        return res.status(400).json({ error: 'لا يمكن إنشاء القضية قبل فتح غرفة التفاوض.' });
+      }
+
+      const proposedPrice = Number(listing.proposedPrice || 0);
+      if (!Number.isFinite(proposedPrice) || proposedPrice <= 0) {
+        return res.status(400).json({ error: 'لا يوجد سعر متفق عليه لإنشاء القضية.' });
+      }
+
+      let createdCase = await createClientCase(listing.clientId, {
+        title: listing.title,
+        matter: `${listing.matter}\n\nملاحظات العميل: ${listing.notes || 'لا توجد'}\nاتفاق التفاوض الأولي:\nالسعر المتفق عليه: ${proposedPrice.toLocaleString('en-US')} د.ع\nمدة التقييم: ${listing.evaluationDuration || 'غير محددة'}\nطريقة الدفع: ${listing.paymentMethod || 'غير محددة'}\nوثائق إضافية مطلوبة: ${listing.requestedDocuments || 'لا توجد'}${listing.offerNote ? `\nملاحظة المحامي: ${listing.offerNote}` : ''}`,
+        lawyerId: listing.selectedLawyerId,
+        totalAgreedFee: proposedPrice,
+        caseType: listing.category,
+      });
+
+      const documents = parseMarketplaceDocuments(listing.documentsJson);
+      for (const doc of documents) {
+        await prisma.document.create({
+          data: {
+            caseId: createdCase.id,
+            name: doc.name || 'وثيقة مرفوعة',
+            fileUrl: doc.url,
+            previewUrl: doc.url,
+            size: `${((Number(doc.size || 0) || 0) / (1024 * 1024)).toFixed(2)} MB`,
+            type: String(doc.mimeType || '').includes('pdf') ? 'pdf' : String(doc.mimeType || '').includes('image') ? 'image' : 'other',
+            status: 'Draft',
+            tags: '[]',
+          },
+        });
+      }
+
+      await prisma.caseTimelineEntry.create({
+        data: {
+          caseId: createdCase.id,
+          dateLabel: 'اليوم',
+          title: 'اعتماد اتفاق التفاوض',
+          detail: 'تم اعتماد التفاوض الأولي وتحويل الدعوى إلى قضية رسمية.',
+          type: 'system',
+        },
+      });
+
+      await prisma.$executeRawUnsafe(
+        `UPDATE "CaseMarketplaceListing" SET status = 'assigned', "createdCaseId" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE id = ?`,
+        createdCase.id,
+        req.params.id,
+      );
+      await prisma.$executeRawUnsafe(
+        `UPDATE "CaseMarketplaceOffer" SET status = 'accepted', "createdCaseId" = ?, "updatedAt" = CURRENT_TIMESTAMP WHERE "listingId" = ? AND "lawyerId" = ?`,
+        createdCase.id,
+        req.params.id,
+        listing.selectedLawyerId,
+      );
+
+      await prisma.notification.create({
+        data: {
+          userId: currentUser.userId === listing.clientId ? listing.selectedLawyerId : listing.clientId,
+          title: 'تم إنشاء قضية رسمية',
+          message: `تم اعتماد التفاوض وإنشاء قضية: ${listing.title}`,
+          type: 'success',
+          link: '/cases',
+        },
+      });
+
+      createdCase = await getCaseWorkspace(createdCase.id);
+      res.json({ data: { status: 'assigned', case: createdCase }, message: 'تم اعتماد الاتفاق وإنشاء القضية الرسمية.' });
+    } catch (error) {
+      console.error('Marketplace finalize error:', error);
+      res.status(400).json({ error: error instanceof Error ? error.message : 'تعذر اعتماد الاتفاق.' });
     }
   });
 

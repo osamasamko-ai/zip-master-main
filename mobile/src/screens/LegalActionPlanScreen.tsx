@@ -422,14 +422,14 @@ export function LegalActionPlanScreen({ onOpen }: { onOpen?: (route: RouteKey) =
                 item={item}
                 action={
                   item.offerStatus ? (
-                    <Text style={styles.offerStatus}>قرارك: {item.offerStatus === 'accepted' ? 'قبول' : 'رفض'}</Text>
+                    <Text style={styles.offerStatus}>قرارك: {item.offerStatus === 'negotiating' ? 'تفاوض أولي' : item.offerStatus === 'accepted' ? 'قبول' : 'رفض'}</Text>
                   ) : (
                     <View style={styles.offerActions}>
                       <Pressable onPress={() => respondToListing(item, 'reject')} style={styles.rejectButton}>
                         <Text style={styles.rejectText}>رفض</Text>
                       </Pressable>
                       <Pressable onPress={() => respondToListing(item, 'accept')} style={styles.acceptButton}>
-                        <Text style={styles.acceptText}>{busy === `${item.id}-accept` ? 'جار القبول' : 'قبول'}</Text>
+                        <Text style={styles.acceptText}>{busy === `${item.id}-accept` ? 'جار التفاوض' : 'قبول مبدئي'}</Text>
                       </Pressable>
                     </View>
                   )

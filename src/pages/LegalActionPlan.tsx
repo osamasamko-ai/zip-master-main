@@ -82,6 +82,11 @@ export default function LegalActionPlan() {
   const [clientListings, setClientListings] = useState<any[]>([]);
   const [lawyerListings, setLawyerListings] = useState<any[]>([]);
   const [respondingId, setRespondingId] = useState('');
+  const [negotiationListing, setNegotiationListing] = useState<any | null>(null);
+  const [negotiationMessages, setNegotiationMessages] = useState<any[]>([]);
+  const [negotiationText, setNegotiationText] = useState('');
+  const [negotiationLoading, setNegotiationLoading] = useState(false);
+  const [negotiationFinalizing, setNegotiationFinalizing] = useState(false);
   const plan = useMemo(() => (submittedProblem ? buildLegalActionPlan(submittedProblem) : null), [submittedProblem]);
   const canGenerate = problem.trim().length >= 12;
   const completionItems = useMemo(() => {
@@ -231,6 +236,51 @@ export default function LegalActionPlan() {
       await loadMarketplace();
     } finally {
       setRespondingId('');
+    }
+  };
+
+  const openNegotiation = async (item: any) => {
+    setNegotiationListing(item);
+    setNegotiationLoading(true);
+    setMarketplaceError('');
+    try {
+      const response = await apiClient.getCaseMarketplaceNegotiation(item.id);
+      setNegotiationMessages(response.data?.messages || []);
+    } catch (error: any) {
+      setMarketplaceError(error?.response?.data?.error || 'تعذر فتح غرفة التفاوض.');
+    } finally {
+      setNegotiationLoading(false);
+    }
+  };
+
+  const sendNegotiationMessage = async () => {
+    if (!negotiationListing || !negotiationText.trim()) return;
+    setNegotiationLoading(true);
+    try {
+      const response = await apiClient.sendCaseMarketplaceNegotiationMessage(negotiationListing.id, negotiationText.trim());
+      setNegotiationMessages(response.data || []);
+      setNegotiationText('');
+    } catch (error: any) {
+      setMarketplaceError(error?.response?.data?.error || 'تعذر إرسال رسالة التفاوض.');
+    } finally {
+      setNegotiationLoading(false);
+    }
+  };
+
+  const finalizeNegotiation = async () => {
+    if (!negotiationListing) return;
+    setNegotiationFinalizing(true);
+    try {
+      const response = await apiClient.finalizeCaseMarketplaceNegotiation(negotiationListing.id);
+      setMarketplaceMessage(response.message || 'تم إنشاء القضية الرسمية.');
+      setNegotiationListing(null);
+      setNegotiationMessages([]);
+      await loadMarketplace();
+      navigate('/cases');
+    } catch (error: any) {
+      setMarketplaceError(error?.response?.data?.error || 'تعذر اعتماد الاتفاق.');
+    } finally {
+      setNegotiationFinalizing(false);
     }
   };
 
@@ -494,7 +544,21 @@ export default function LegalActionPlan() {
                 <h3 className="text-lg font-black text-brand-dark">دعاواي المنشورة</h3>
                 <div className="mt-4 space-y-3">
                   {clientListings.slice(0, 4).map((item) => (
-                    <MarketplaceListingCard key={item.id} item={item} />
+                    <MarketplaceListingCard
+                      key={item.id}
+                      item={item}
+                      action={
+                        item.status === 'negotiating' ? (
+                          <button
+                            type="button"
+                            onClick={() => openNegotiation(item)}
+                            className="rounded-xl bg-brand-navy px-3 py-2 text-xs font-black text-white"
+                          >
+                            فتح غرفة التفاوض
+                          </button>
+                        ) : undefined
+                      }
+                    />
                   ))}
                 </div>
               </div>
@@ -509,7 +573,7 @@ export default function LegalActionPlan() {
                       item={item}
                       action={
                         item.offerStatus ? (
-                          <span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-500">قرارك: {item.offerStatus === 'accepted' ? 'قبول' : 'رفض'}</span>
+                          <span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-black text-slate-500">قرارك: {item.offerStatus === 'negotiating' ? 'تفاوض أولي' : item.offerStatus === 'accepted' ? 'قبول' : 'رفض'}</span>
                         ) : (
                           <div className="flex gap-2">
                             <button
@@ -526,7 +590,7 @@ export default function LegalActionPlan() {
                               disabled={Boolean(respondingId)}
                               className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-black text-white"
                             >
-                              قبول الدعوى
+                              قبول مبدئي
                             </button>
                           </div>
                         )
@@ -538,8 +602,90 @@ export default function LegalActionPlan() {
             )}
           </section>
         )}
+
+        {negotiationListing ? (
+          <section className="mt-5 rounded-2xl border border-brand-gold/30 bg-[#fffaf0] p-5 shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => setNegotiationListing(null)}
+                className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-500"
+              >
+                إغلاق
+              </button>
+              <div>
+                <p className="text-xs font-black text-brand-gold">غرفة تفاوض أولية</p>
+                <h3 className="mt-1 text-lg font-black text-brand-dark">{negotiationListing.title}</h3>
+              </div>
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-3">
+              <InfoBox label="عرض المحامي" value={`${Number(negotiationListing.proposedPrice || 0).toLocaleString('en-US')} د.ع`} />
+              <InfoBox label="مدة التقييم" value={negotiationListing.evaluationDuration || 'غير محددة'} />
+              <InfoBox label="طريقة الدفع" value={negotiationListing.paymentMethod || 'غير محددة'} />
+            </div>
+            {negotiationListing.requestedDocuments ? (
+              <div className="mt-3 rounded-xl bg-white p-4">
+                <p className="text-xs font-black text-brand-gold">وثائق طلبها المحامي</p>
+                <p className="mt-2 whitespace-pre-line text-sm font-bold leading-7 text-slate-600">{negotiationListing.requestedDocuments}</p>
+              </div>
+            ) : null}
+            <div className="mt-4 max-h-72 space-y-3 overflow-y-auto rounded-2xl bg-white p-4">
+              {negotiationLoading && negotiationMessages.length === 0 ? (
+                <p className="py-6 text-center text-sm font-black text-slate-400">جار تحميل الرسائل...</p>
+              ) : negotiationMessages.length === 0 ? (
+                <p className="py-6 text-center text-sm font-black text-slate-400">لا توجد رسائل بعد.</p>
+              ) : (
+                negotiationMessages.map((message) => {
+                  const mine = message.senderRole !== 'lawyer';
+                  return (
+                    <div key={message.id} className={`flex ${mine ? 'justify-start' : 'justify-end'}`}>
+                      <div className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm font-bold leading-7 ${mine ? 'bg-brand-navy text-white' : 'bg-slate-100 text-slate-700'}`}>
+                        <p className="whitespace-pre-line">{message.text}</p>
+                        <p className={`mt-2 text-[10px] font-black ${mine ? 'text-white/55' : 'text-slate-400'}`}>{message.senderName || (mine ? 'أنت' : 'المحامي')}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_150px]">
+              <textarea
+                value={negotiationText}
+                onChange={(event) => setNegotiationText(event.target.value)}
+                rows={3}
+                className="w-full resize-none rounded-xl bg-white p-4 text-sm font-bold leading-7 text-slate-700 outline-none focus:ring-4 focus:ring-brand-navy/10"
+                placeholder="اسأل عن السعر، نطاق العمل، الوثائق، أو طريقة الدفع قبل إنشاء القضية..."
+              />
+              <button
+                type="button"
+                onClick={sendNegotiationMessage}
+                disabled={!negotiationText.trim() || negotiationLoading}
+                className="rounded-xl bg-brand-navy px-4 py-3 text-sm font-black text-white disabled:bg-slate-300"
+              >
+                {negotiationLoading ? 'جار الإرسال...' : 'إرسال'}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={finalizeNegotiation}
+              disabled={negotiationFinalizing}
+              className="mt-3 w-full rounded-xl bg-emerald-600 px-4 py-3 text-sm font-black text-white disabled:bg-slate-300"
+            >
+              {negotiationFinalizing ? 'جار إنشاء القضية...' : 'اعتماد الاتفاق وإنشاء القضية الرسمية'}
+            </button>
+          </section>
+        ) : null}
       </div>
     </main>
+  );
+}
+
+function InfoBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-white p-4">
+      <p className="text-xs font-black text-slate-400">{label}</p>
+      <p className="mt-2 text-sm font-black text-brand-dark">{value}</p>
+    </div>
   );
 }
 
@@ -548,8 +694,8 @@ function MarketplaceListingCard({ item, action }: { item: any; action?: React.Re
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         {action || (
-          <span className={`rounded-xl px-3 py-2 text-xs font-black ${item.status === 'assigned' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-            {item.status === 'assigned' ? `تم اختيار ${item.selectedLawyerName || 'محام'}` : 'بانتظار المحامين'}
+          <span className={`rounded-xl px-3 py-2 text-xs font-black ${item.status === 'assigned' ? 'bg-emerald-50 text-emerald-700' : item.status === 'negotiating' ? 'bg-brand-gold/15 text-brand-gold' : 'bg-amber-50 text-amber-700'}`}>
+            {item.status === 'assigned' ? `تم اختيار ${item.selectedLawyerName || 'محام'}` : item.status === 'negotiating' ? `تفاوض جارٍ مع ${item.selectedLawyerName || 'المحامي'}` : 'بانتظار المحامين'}
           </span>
         )}
         <div>

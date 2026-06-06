@@ -366,6 +366,23 @@ class ApiClient {
     });
   }
 
+  getCaseMarketplaceNegotiation(id: string) {
+    return this.request<any>(`/api/app/case-marketplace/${id}/negotiation`);
+  }
+
+  sendCaseMarketplaceNegotiationMessage(id: string, text: string) {
+    return this.request<any>(`/api/app/case-marketplace/${id}/negotiation/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    });
+  }
+
+  finalizeCaseMarketplaceNegotiation(id: string) {
+    return this.request<any>(`/api/app/case-marketplace/${id}/finalize`, {
+      method: 'POST',
+    });
+  }
+
   payCaseInstallment(caseId: string, installments: 1 | 2 | 3) {
     return this.request<any>(`/api/app/workspace/cases/${caseId}/payments`, {
       method: 'POST',
