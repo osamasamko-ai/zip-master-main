@@ -3081,7 +3081,25 @@ ${additionalConditions}
         orderBy: { createdAt: 'desc' },
         take: 20
       });
-      res.json({ data: notifications });
+      const workspaceCases =
+        currentUser.role === 'pro' || currentUser.role === 'admin'
+          ? await getLawyerWorkspace(currentUser.userId)
+          : await getClientWorkspace(currentUser.userId);
+      const smartNotifications = workspaceCases
+        .flatMap((item: any) =>
+          (item.smartAlerts || []).slice(0, 2).map((alert: any) => ({
+            id: `smart-${alert.id}`,
+            userId: currentUser.userId,
+            title: alert.title,
+            message: alert.message,
+            type: alert.severity === 'high' ? 'warning' : 'info',
+            link: '/cases',
+            read: false,
+            createdAt: alert.createdAt,
+          })),
+        )
+        .slice(0, 8);
+      res.json({ data: [...smartNotifications, ...notifications].slice(0, 28) });
     } catch (error) {
       res.status(500).json({ error: 'Failed to fetch notifications' });
     }

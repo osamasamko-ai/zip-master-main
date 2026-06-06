@@ -113,10 +113,11 @@ export function CasesScreen() {
       const archivedOk = showArchived ? item.isArchived : !item.isArchived;
       const pendingDocs = (item.documents || []).filter((doc: any) => doc.actionRequired || doc.expiresAt).length;
       const unread = item.unreadCount || 0;
+      const smartAlerts = item.smartAlerts?.length || 0;
       const status = String(item.status || '').toLowerCase();
       const matchesFilter =
         caseFilter === 'all' ||
-        (caseFilter === 'needs_action' && (pendingDocs > 0 || unread > 0 || item.status === 'pending')) ||
+        (caseFilter === 'needs_action' && (smartAlerts > 0 || pendingDocs > 0 || unread > 0 || item.status === 'pending')) ||
         (caseFilter === 'in_progress' && !['closed', 'completed'].includes(status)) ||
         (caseFilter === 'waiting' && (item.status === 'pending' || String(item.statusText || '').includes('انتظار'))) ||
         (caseFilter === 'completed' && ['closed', 'completed'].includes(status));
@@ -145,7 +146,9 @@ export function CasesScreen() {
       .map((item) => {
         const pendingDocs = (item.documents || []).filter((doc: any) => doc.actionRequired || doc.expiresAt).length;
         const unread = item.unreadCount || 0;
-        return { ...item, pendingDocs, unread, score: pendingDocs * 3 + unread * 2 + (item.status === 'pending' ? 1 : 0) };
+        const topAlert = item.smartAlerts?.[0] || null;
+        const alertScore = topAlert?.severity === 'high' ? 6 : topAlert?.severity === 'medium' ? 4 : topAlert ? 2 : 0;
+        return { ...item, pendingDocs, unread, topAlert, score: alertScore + pendingDocs * 3 + unread * 2 + (item.status === 'pending' ? 1 : 0) };
       })
       .filter((item) => item.score > 0)
       .sort((a, b) => b.score - a.score)
@@ -177,7 +180,7 @@ export function CasesScreen() {
     const pending = docs.filter((doc: any) => doc.actionRequired || doc.expiresAt).length;
     const paidPercent = financials.totalAgreed > 0 ? Math.round(((financials.paid || 0) / financials.totalAgreed) * 100) : 0;
     return [
-      { label: 'إجراءات', value: pending, icon: 'notifications-outline' as const, tab: 'documents' as WorkspaceTab },
+      { label: 'تنبيهات', value: selectedCase.smartAlerts?.length || pending, icon: 'notifications-outline' as const, tab: 'summary' as WorkspaceTab },
       { label: 'وثائق', value: docs.length, icon: 'folder-open-outline' as const, tab: 'documents' as WorkspaceTab },
       { label: 'موقعة', value: signed, icon: 'create-outline' as const, tab: 'documents' as WorkspaceTab },
       { label: 'السداد', value: `${paidPercent}%`, icon: 'wallet-outline' as const, tab: 'financials' as WorkspaceTab },
@@ -436,11 +439,12 @@ export function CasesScreen() {
           <View style={styles.attentionBox}>
             <Text style={styles.sectionTitle}>أولوية اليوم</Text>
             {attentionQueue.map((item) => (
-              <Pressable key={item.id} onPress={() => { setSelectedId(item.id); setActiveTab(item.pendingDocs > 0 ? 'documents' : 'chat'); if (item.pendingDocs > 0) setDocFilter('pending'); }} style={styles.attentionItem}>
+              <Pressable key={item.id} onPress={() => { setSelectedId(item.id); setActiveTab(item.topAlert?.tab === 'summary' ? 'summary' : item.topAlert?.tab || (item.pendingDocs > 0 ? 'documents' : 'chat')); if (item.pendingDocs > 0) setDocFilter('pending'); }} style={styles.attentionItem}>
                 <View style={styles.flex}>
                   <Text style={styles.cardTitle} numberOfLines={1}>{item.title}</Text>
-                  <Text style={styles.mutedText}>{item.statusText || item.status}</Text>
+                  <Text style={styles.mutedText}>{item.topAlert?.message || item.statusText || item.status}</Text>
                 </View>
+                {item.topAlert ? <Pill label={item.topAlert.title} tone={item.topAlert.severity === 'high' ? 'red' : 'gold'} /> : null}
                 {item.pendingDocs > 0 ? <Pill label={`${item.pendingDocs} وثائق`} tone="gold" /> : null}
                 {item.unread > 0 ? <Pill label={`${item.unread} رسائل`} tone="blue" /> : null}
               </Pressable>
@@ -524,6 +528,25 @@ export function CasesScreen() {
   function renderSummary() {
     return (
       <>
+        {(selectedCase.smartAlerts || []).length > 0 ? (
+          <Section title="تنبيهات ذكية">
+            {(selectedCase.smartAlerts || []).map((alert: any) => (
+              <Pressable
+                key={alert.id}
+                onPress={() => setActiveTab(alert.type === 'document' ? 'documents' : alert.tab === 'summary' ? 'summary' : alert.tab)}
+                style={styles.smartAlertItem}
+              >
+                <View style={styles.flex}>
+                  <Text style={styles.cardTitle}>{alert.title}</Text>
+                  <Text style={styles.mutedText}>{alert.message}</Text>
+                  <Text style={styles.alertAction}>{alert.action}</Text>
+                </View>
+                <Pill label={alert.severity === 'high' ? 'عالي' : alert.severity === 'medium' ? 'متوسط' : 'متابعة'} tone={alert.severity === 'high' ? 'red' : alert.severity === 'medium' ? 'gold' : 'blue'} />
+              </Pressable>
+            ))}
+          </Section>
+        ) : null}
+
         <Section title="معلومات الملف" action="إضافة" onAction={() => setModal('field')}>
           {(selectedCase.customFields || []).length === 0 ? <EmptyState title="لا توجد بيانات إضافية" note="أضف المحكمة، رقم الدعوى، أو أي معلومة مهمة." /> : null}
           {(selectedCase.customFields || []).map((field: any) => <InfoRow key={field.id} label={field.label} value={field.value} />)}
@@ -782,6 +805,7 @@ function CasePill({ item, active, onPress }: { item: any; active: boolean; onPre
       <Text style={[styles.casePillTitle, active && styles.casePillTextActive]} numberOfLines={1}>{item.title}</Text>
       <Text style={[styles.casePillMeta, active && styles.casePillTextActive]}>{item.statusText || item.status}</Text>
       <View style={styles.casePillBadges}>
+        {(item.smartAlerts || []).length > 0 ? <Text style={[styles.caseBadge, active && styles.caseBadgeActive]}>{item.smartAlerts.length} تنبيهات</Text> : null}
         {pendingDocs > 0 ? <Text style={[styles.caseBadge, active && styles.caseBadgeActive]}>{pendingDocs} وثائق</Text> : null}
         {item.unreadCount > 0 ? <Text style={[styles.caseBadge, active && styles.caseBadgeActive]}>{item.unreadCount} رسائل</Text> : null}
       </View>
@@ -919,6 +943,22 @@ const styles = StyleSheet.create({
     gap: 8,
     marginTop: 8,
     padding: 10,
+  },
+  smartAlertItem: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.goldTint,
+    borderRadius: 14,
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+    padding: 11,
+  },
+  alertAction: {
+    color: colors.navy,
+    fontSize: 11,
+    fontWeight: '900',
+    marginTop: 5,
+    textAlign: 'right',
   },
   avatar: {
     alignItems: 'center',

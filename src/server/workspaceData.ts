@@ -41,6 +41,108 @@ function parseJsonArray(value?: string | null): string[] {
   }
 }
 
+function hoursSince(value?: Date | string | null) {
+  if (!value) return 0;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return 0;
+  return Math.max(0, (Date.now() - date.getTime()) / 3_600_000);
+}
+
+function buildSmartCaseAlerts(item: any, sortedMessages: any[]) {
+  const alerts: Array<{
+    id: string;
+    type: 'response' | 'document' | 'payment' | 'hearing';
+    severity: 'high' | 'medium' | 'low';
+    title: string;
+    message: string;
+    action: string;
+    tab: 'chat' | 'summary' | 'financials';
+    createdAt: string;
+  }> = [];
+  const now = new Date().toISOString();
+  const latestUserMessage = [...sortedMessages].reverse().find((message: any) => message.senderRole !== 'lawyer');
+  const latestLawyerMessage = [...sortedMessages].reverse().find((message: any) => message.senderRole === 'lawyer');
+
+  if (
+    latestUserMessage?.createdAt &&
+    latestUserMessage.awaitingResponse &&
+    (!latestLawyerMessage || latestLawyerMessage.createdAt < latestUserMessage.createdAt)
+  ) {
+    const waitingHours = Math.round(hoursSince(latestUserMessage.createdAt));
+    if (waitingHours >= 24) {
+      alerts.push({
+        id: `${item.id}-lawyer-response-delay`,
+        type: 'response',
+        severity: 'high',
+        title: 'تأخر رد المحامي',
+        message: `هذه القضية لم يرد عليها المحامي منذ ${waitingHours.toLocaleString('ar-IQ')} ساعة.`,
+        action: 'راجع المحادثة أو أرسل تذكيراً مختصراً.',
+        tab: 'chat',
+        createdAt: now,
+      });
+    }
+  }
+
+  const documentsNeedingAction = item.documents.filter((doc: any) => doc.actionRequired || (doc.expiresAt && !doc.isSigned));
+  if (documentsNeedingAction.length > 0) {
+    alerts.push({
+      id: `${item.id}-missing-document-action`,
+      type: 'document',
+      severity: 'high',
+      title: 'يوجد مستند ناقص',
+      message: `${documentsNeedingAction.length.toLocaleString('ar-IQ')} مستند يحتاج توقيعاً أو إجراءً قبل استمرار القضية.`,
+      action: 'انتقل إلى الوثائق وأكمل المطلوب.',
+      tab: 'summary',
+      createdAt: now,
+    });
+  } else if (item.documents.length === 0 && item.status !== 'closed') {
+    alerts.push({
+      id: `${item.id}-no-documents`,
+      type: 'document',
+      severity: 'medium',
+      title: 'لا توجد وثائق مرفوعة',
+      message: 'إضافة وصل، عقد، وكالة، أو محادثات تزيد فرصة التقييم القانوني السريع.',
+      action: 'ارفع أول مستند مرتبط بالقضية.',
+      tab: 'summary',
+      createdAt: now,
+    });
+  }
+
+  const pendingInvoice = item.invoices.find((invoice: any) => invoice.status !== 'paid');
+  const remainingBalance = Math.max(0, Number(item.totalAgreedFee || 0) - Number(item.paidAmount || 0));
+  if (pendingInvoice || remainingBalance > 0) {
+    alerts.push({
+      id: `${item.id}-payment-due`,
+      type: 'payment',
+      severity: pendingInvoice ? 'medium' : 'low',
+      title: 'اقترب موعد دفعة',
+      message: pendingInvoice
+        ? `توجد دفعة معلقة بقيمة ${pendingInvoice.amount}.`
+        : `المتبقي من الأتعاب ${formatCurrencyAmount(remainingBalance)}.`,
+      action: 'راجع المالية وخطة الدفع.',
+      tab: 'financials',
+      createdAt: now,
+    });
+  }
+
+  const hearingEntry = [...item.timelineEntries].reverse().find((entry: any) => entry.type === 'hearing' || entry.type === 'meeting');
+  if (hearingEntry && item.status !== 'closed') {
+    alerts.push({
+      id: `${item.id}-upcoming-hearing`,
+      type: 'hearing',
+      severity: 'medium',
+      title: hearingEntry.type === 'hearing' ? 'اقترب موعد جلسة' : 'اقترب موعد اجتماع',
+      message: `${hearingEntry.title}: ${hearingEntry.dateLabel}.`,
+      action: 'راجع الخط الزمني وجهز المستندات اللازمة.',
+      tab: 'summary',
+      createdAt: now,
+    });
+  }
+
+  const severityRank = { high: 3, medium: 2, low: 1 };
+  return alerts.sort((left, right) => severityRank[right.severity] - severityRank[left.severity]).slice(0, 5);
+}
+
 function mapCaseStatus(status: string): 'pending' | 'review' | 'active' | 'closed' {
   if (status === 'closed') return 'closed';
   if (status === 'review') return 'review';
@@ -222,6 +324,8 @@ export function mapWorkspaceCase(item: any) {
     )
     .sort((left: any, right: any) => left._createdAt.getTime() - right._createdAt.getTime());
 
+  const smartAlerts = buildSmartCaseAlerts(item, sortedMessages);
+
   return {
     client: item.client.name,
     id: item.id,
@@ -241,6 +345,7 @@ export function mapWorkspaceCase(item: any) {
     progress: item.progress,
     createdAt: item.createdAt, // Changed to return Date object
     unreadCount: item.unreadCount,
+    smartAlerts,
     customFields: item.customFields.map((field: any) => ({
       id: field.id,
       label: field.label,

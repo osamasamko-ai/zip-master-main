@@ -106,6 +106,16 @@ interface LegalCase {
   financials: CaseFinancials;
   isArchived?: boolean;
   unreadCount?: number;
+  smartAlerts?: Array<{
+    id: string;
+    type: 'response' | 'document' | 'payment' | 'hearing';
+    severity: 'high' | 'medium' | 'low';
+    title: string;
+    message: string;
+    action: string;
+    tab: WorkspaceTab;
+    createdAt: string;
+  }>;
   collaborators?: Array<{ id: string; name: string; email: string; role: 'user' | 'lawyer'; permissions: 'view' | 'edit'; img: string; lastSeen?: string }>;
   accessLogs?: Array<{ id: string; userName: string; action: string; time: string }>;
 }
@@ -353,6 +363,7 @@ const CaseSidebar = React.memo(({
       const latestClientMessage = [...c.messages].reverse().find((message) => message.sender === 'user');
       const hasAction =
         c.status === 'pending' ||
+        (c.smartAlerts?.length ?? 0) > 0 ||
         (c.unreadCount ?? 0) > 0 ||
         c.documents.some((doc) => doc.actionRequired || doc.expiresAt) ||
         !!latestClientMessage?.awaitingResponse;
@@ -368,7 +379,7 @@ const CaseSidebar = React.memo(({
   }, [cases, searchQuery, showArchived, statusFilter]);
 
   const actionCount = useMemo(
-    () => filtered.reduce((total, item) => total + item.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length + (item.unreadCount ?? 0), 0),
+    () => filtered.reduce((total, item) => total + (item.smartAlerts?.length ?? 0), 0),
     [filtered],
   );
 
@@ -790,6 +801,41 @@ const SummaryTab = ({
           </div>
         </div>
       </div>
+
+      {activeCase.smartAlerts?.length ? (
+        <section className="rounded-[2rem] border border-brand-gold/20 bg-[#fffaf0] p-5 text-right shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span className="rounded-full bg-brand-gold/20 px-3 py-1.5 text-[10px] font-black text-brand-dark">
+              {activeCase.smartAlerts.length.toLocaleString('ar-IQ')} تنبيهات
+            </span>
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">Smart Alerts</p>
+              <h3 className="mt-1 text-lg font-black text-brand-dark">تنبيهات ذكية لهذه القضية</h3>
+            </div>
+          </div>
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {activeCase.smartAlerts.map((alert) => (
+              <button
+                key={alert.id}
+                type="button"
+                onClick={() => setActiveTab(alert.tab)}
+                className="rounded-2xl border border-white bg-white p-4 text-right shadow-sm transition hover:border-brand-gold"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className={`rounded-xl px-2.5 py-1 text-[10px] font-black ${alert.severity === 'high' ? 'bg-red-50 text-red-700' : alert.severity === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>
+                    {alert.severity === 'high' ? 'عالي' : alert.severity === 'medium' ? 'متوسط' : 'متابعة'}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-black text-brand-dark">{alert.title}</p>
+                    <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{alert.message}</p>
+                    <p className="mt-2 text-[11px] font-black text-brand-navy">{alert.action}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(360px,0.8fr)] gap-6">
         <section className="bg-white rounded-[2.5rem] border border-slate-100 p-6 shadow-sm">
@@ -2289,7 +2335,9 @@ export default function MyCases() {
       .map((item) => {
         const pendingDocs = item.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length;
         const unread = item.unreadCount ?? 0;
-        const score = pendingDocs * 3 + unread * 2 + (item.status === 'pending' ? 1 : 0);
+        const topAlert = item.smartAlerts?.[0] || null;
+        const alertScore = topAlert?.severity === 'high' ? 6 : topAlert?.severity === 'medium' ? 4 : topAlert ? 2 : 0;
+        const score = alertScore + pendingDocs * 3 + unread * 2 + (item.status === 'pending' ? 1 : 0);
 
         return {
           id: item.id,
@@ -2298,6 +2346,7 @@ export default function MyCases() {
           pendingDocs,
           unread,
           score,
+          topAlert,
         };
       })
       .filter((item) => item.score > 0)
@@ -2421,16 +2470,17 @@ export default function MyCases() {
                   type="button"
                   onClick={() => {
                     setActiveCaseId(item.id);
-                    setActiveTab(item.pendingDocs > 0 ? 'summary' : 'chat');
+                    setActiveTab(item.topAlert?.tab || (item.pendingDocs > 0 ? 'summary' : 'chat'));
                     if (item.pendingDocs > 0) setDocFilter('pending');
                   }}
                   className="flex w-full items-center justify-between gap-3 rounded-2xl border border-white bg-white px-4 py-3 text-right shadow-sm transition hover:border-brand-navy/20"
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-black text-brand-dark">{item.title}</span>
-                    <span className="mt-1 block text-[10px] font-bold text-slate-400">{item.statusText}</span>
+                    <span className="mt-1 block text-[10px] font-bold text-slate-400">{item.topAlert ? item.topAlert.message : item.statusText}</span>
                   </span>
                   <span className="flex shrink-0 items-center gap-1.5 text-[10px] font-black">
+                    {item.topAlert && <span className={`rounded-full px-2 py-1 ${item.topAlert.severity === 'high' ? 'bg-red-50 text-red-700' : item.topAlert.severity === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-600'}`}>{item.topAlert.title}</span>}
                     {item.pendingDocs > 0 && <span className="rounded-full bg-amber-50 px-2 py-1 text-amber-700">{item.pendingDocs} وثائق</span>}
                     {item.unread > 0 && <span className="rounded-full bg-blue-50 px-2 py-1 text-blue-700">{item.unread} رسائل</span>}
                   </span>
