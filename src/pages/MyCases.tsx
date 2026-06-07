@@ -582,6 +582,209 @@ const activeCaseActionCountLabel = (activeCase: LegalCase, pendingDocuments: num
   return 'الملف مستقر ويحتاج متابعة دورية';
 };
 
+const getShortText = (value: string, maxLength = 96) => (
+  value.length > maxLength ? `${value.slice(0, maxLength)}...` : value
+);
+
+const getSmartTaskHubData = (activeCase: LegalCase) => {
+  const missingDocuments = activeCase.documents.filter((doc) => doc.actionRequired || (doc.expiresAt && !doc.isSigned));
+  const lastUnansweredMessage = [...activeCase.messages]
+    .reverse()
+    .find((message) => message.sender === 'user' && message.awaitingResponse);
+  const nextHearing = activeCase.timeline.find((event) => event.type === 'hearing');
+  const nextMeeting = activeCase.timeline.find((event) => event.type === 'meeting');
+  const nextEvent = nextHearing || nextMeeting || null;
+  const lastLawyerMessage = [...activeCase.messages].reverse().find((message) => message.sender === 'lawyer');
+  const roadmapSteps = getCaseRoadmapSteps(activeCase);
+  const currentStep = roadmapSteps.find((step) => step.state === 'current') ?? roadmapSteps.find((step) => step.state === 'upcoming') ?? roadmapSteps[roadmapSteps.length - 1];
+
+  let todayTask = 'متابعة هادئة: راجع الملخص وانتظر أي تحديث جديد.';
+  let todayIcon = 'fa-shield-check';
+  let todayTone = 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+  let todayTab: WorkspaceTab = 'summary';
+  let todayDocFilter: DocFilter | undefined;
+
+  if (activeCase.status === 'closed') {
+    todayTask = 'راجع نتيجة الملف والأرشفة النهائية.';
+    todayIcon = 'fa-circle-check';
+    todayTone = 'bg-slate-100 text-slate-600 ring-slate-200';
+    todayTab = 'resolution';
+  } else if (missingDocuments.length > 0) {
+    todayTask = `استكمال ${missingDocuments.length.toLocaleString('ar-IQ')} وثائق ناقصة أو مطلوبة.`;
+    todayIcon = 'fa-file-signature';
+    todayTone = 'bg-amber-50 text-amber-700 ring-amber-100';
+    todayDocFilter = 'pending';
+  } else if (lastUnansweredMessage) {
+    todayTask = 'متابعة آخر رسالة غير مجابة مع المحامي.';
+    todayIcon = 'fa-message';
+    todayTone = 'bg-blue-50 text-blue-700 ring-blue-100';
+    todayTab = 'chat';
+  } else if (nextEvent) {
+    todayTask = nextEvent.type === 'hearing' ? 'التحضير لموعد الجلسة القادم.' : 'التحضير للاجتماع القادم.';
+    todayIcon = nextEvent.type === 'hearing' ? 'fa-building-columns' : 'fa-handshake';
+    todayTone = 'bg-red-50 text-red-700 ring-red-100';
+  } else if ((activeCase.unreadCount ?? 0) > 0) {
+    todayTask = 'قراءة التوجيهات الجديدة في المحادثة.';
+    todayIcon = 'fa-comments';
+    todayTone = 'bg-blue-50 text-blue-700 ring-blue-100';
+    todayTab = 'chat';
+  }
+
+  const lawyerNextStep = missingDocuments.length > 0
+    ? `ينتظر ${activeCase.lawyer.name} اكتمال الوثائق ثم مراجعتها.`
+    : lastUnansweredMessage
+      ? `الرد على رسالتك الأخيرة وتحديد الإجراء التالي.`
+      : lastLawyerMessage
+        ? `متابعة توجيهه الأخير: ${getShortText(lastLawyerMessage.text, 74)}`
+        : currentStep?.label
+          ? `تثبيت مرحلة "${currentStep.label}" وإرسال تحديث واضح.`
+          : 'تحديد الإجراء القانوني التالي بعد مراجعة الملف.';
+
+  return {
+    todayTask,
+    todayIcon,
+    todayTone,
+    todayTab,
+    todayDocFilter,
+    missingDocuments,
+    lastUnansweredMessage,
+    nextEvent,
+    lawyerNextStep,
+    currentStep,
+  };
+};
+
+const SmartTaskHub = ({
+  activeCase,
+  setActiveTab,
+  setDocFilter,
+  setNewMessage,
+  isReadOnlyView = false,
+}: {
+  activeCase: LegalCase;
+  setActiveTab: (tab: WorkspaceTab) => void;
+  setDocFilter: (filter: DocFilter) => void;
+  setNewMessage: (message: string) => void;
+  isReadOnlyView?: boolean;
+}) => {
+  const hub = useMemo(() => getSmartTaskHubData(activeCase), [activeCase]);
+
+  const openTodayTask = () => {
+    if (hub.todayDocFilter) setDocFilter(hub.todayDocFilter);
+    setActiveTab(hub.todayTab);
+  };
+
+  const draftFollowUp = () => {
+    if (isReadOnlyView || !hub.lastUnansweredMessage) return;
+    setNewMessage(`أستاذ ${activeCase.lawyer.name}، أتابع رسالتي الأخيرة بخصوص "${activeCase.title}". هل توجد مستجدات أو إجراء مطلوب مني اليوم؟`);
+    setActiveTab('chat');
+  };
+
+  const cards = [
+    {
+      id: 'today',
+      label: 'المطلوب اليوم',
+      value: hub.todayTask,
+      icon: hub.todayIcon,
+      tone: hub.todayTone,
+      onClick: openTodayTask,
+    },
+    {
+      id: 'docs',
+      label: 'الوثائق الناقصة',
+      value: hub.missingDocuments.length > 0
+        ? hub.missingDocuments.slice(0, 2).map((doc) => doc.name).join('، ')
+        : 'لا توجد وثائق ناقصة حالياً',
+      meta: hub.missingDocuments.length > 2 ? `+${(hub.missingDocuments.length - 2).toLocaleString('ar-IQ')} أخرى` : `${hub.missingDocuments.length.toLocaleString('ar-IQ')} مطلوبة`,
+      icon: 'fa-folder-open',
+      tone: hub.missingDocuments.length > 0 ? 'bg-amber-50 text-amber-700 ring-amber-100' : 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+      onClick: () => {
+        setDocFilter(hub.missingDocuments.length > 0 ? 'pending' : 'all');
+        setActiveTab('summary');
+      },
+    },
+    {
+      id: 'message',
+      label: 'آخر رسالة غير مجابة',
+      value: hub.lastUnansweredMessage ? getShortText(hub.lastUnansweredMessage.text) : 'لا توجد رسالة معلقة بلا رد',
+      meta: hub.lastUnansweredMessage ? getMessageTimeLabel(hub.lastUnansweredMessage) || 'بانتظار المتابعة' : 'المحادثة مستقرة',
+      icon: 'fa-comments',
+      tone: hub.lastUnansweredMessage ? 'bg-blue-50 text-blue-700 ring-blue-100' : 'bg-slate-100 text-slate-600 ring-slate-200',
+      onClick: () => setActiveTab('chat'),
+    },
+    {
+      id: 'hearing',
+      label: 'موعد الجلسة القادم',
+      value: hub.nextEvent ? hub.nextEvent.title : 'لا يوجد موعد جلسة مسجل',
+      meta: hub.nextEvent ? hub.nextEvent.date : 'أضف الموعد ضمن بيانات الملف',
+      icon: hub.nextEvent?.type === 'meeting' ? 'fa-handshake' : 'fa-building-columns',
+      tone: hub.nextEvent ? 'bg-red-50 text-red-700 ring-red-100' : 'bg-slate-100 text-slate-600 ring-slate-200',
+      onClick: () => setActiveTab('summary'),
+    },
+  ];
+
+  return (
+    <section className="overflow-hidden rounded-[1.5rem] border border-slate-200 bg-white text-right shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-slate-100 bg-slate-50/70 p-5 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">Task Hub</p>
+          <h3 className="mt-1 text-lg font-black text-brand-dark">مركز مهام ذكي لهذه القضية</h3>
+          <p className="mt-1 text-xs font-bold leading-6 text-slate-500">ملخص عملي لما يجب فعله الآن وما ينتظره المحامي في الملف الحالي.</p>
+        </div>
+        <button
+          type="button"
+          onClick={openTodayTask}
+          className="inline-flex items-center justify-center gap-2 rounded-2xl bg-brand-navy px-4 py-3 text-xs font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark"
+        >
+          <i className="fa-solid fa-arrow-left"></i>
+          فتح أولوية اليوم
+        </button>
+      </div>
+
+      <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
+        {cards.map((card) => (
+          <button
+            key={card.id}
+            type="button"
+            onClick={card.onClick}
+            className="min-h-[142px] rounded-2xl border border-slate-100 bg-white p-4 text-right shadow-sm transition hover:-translate-y-0.5 hover:border-brand-navy/20 hover:shadow-md"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl ring-1 ${card.tone}`}>
+                <i className={`fa-solid ${card.icon}`}></i>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">{card.label}</p>
+                <p className="mt-2 line-clamp-3 text-sm font-black leading-6 text-brand-dark">{card.value}</p>
+                {card.meta && <p className="mt-2 text-[10px] font-black text-slate-400">{card.meta}</p>}
+              </div>
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div className="border-t border-slate-100 bg-[linear-gradient(135deg,rgba(15,39,78,0.035),rgba(255,255,255,1))] p-4">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0">
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">خطوة المحامي التالية</p>
+            <p className="mt-1 text-sm font-black leading-7 text-brand-dark">{hub.lawyerNextStep}</p>
+          </div>
+          {!isReadOnlyView && hub.lastUnansweredMessage && (
+            <button
+              type="button"
+              onClick={draftFollowUp}
+              className="shrink-0 rounded-2xl border border-brand-navy/10 bg-white px-4 py-3 text-xs font-black text-brand-navy transition hover:border-brand-navy hover:shadow-sm"
+            >
+              <i className="fa-solid fa-pen-to-square ml-2"></i>
+              تجهيز متابعة
+            </button>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const SmartCaseAssistant = ({
   activeCase,
   setActiveTab,
@@ -2607,6 +2810,16 @@ export default function MyCases() {
             </div>
           </div>
         </div>
+      )}
+
+      {activeCase && (
+        <SmartTaskHub
+          activeCase={activeCase}
+          setActiveTab={setActiveTab}
+          setDocFilter={setDocFilter}
+          setNewMessage={setNewMessage}
+          isReadOnlyView={isReadOnlyView}
+        />
       )}
 
       {activeCase && (

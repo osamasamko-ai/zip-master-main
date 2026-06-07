@@ -48,6 +48,74 @@ const paymentPlans: Array<{ installments: 1 | 2 | 3; title: string; note: string
   { installments: 3, title: 'ثلاث دفعات', note: 'تقسيم المتبقي على ثلاث مرات' },
 ];
 
+function getShortText(value: string, maxLength = 86) {
+  return value.length > maxLength ? `${value.slice(0, maxLength)}...` : value;
+}
+
+function getSmartTaskHub(caseItem: any) {
+  const documents = caseItem?.documents || [];
+  const messages = caseItem?.messages || [];
+  const timeline = caseItem?.timeline || [];
+  const missingDocuments = documents.filter((doc: any) => doc.actionRequired || (doc.expiresAt && !doc.isSigned));
+  const lastUnansweredMessage = [...messages].reverse().find((item: any) => item.sender === 'user' && item.awaitingResponse);
+  const nextEvent = timeline.find((item: any) => item.type === 'hearing') || timeline.find((item: any) => item.type === 'meeting') || null;
+  const lastLawyerMessage = [...messages].reverse().find((item: any) => item.sender === 'lawyer');
+  const lawyerName = caseItem?.lawyer?.name || caseItem?.lawyer || 'المحامي';
+
+  let todayTask = 'متابعة هادئة: راجع الملخص وانتظر أي تحديث جديد.';
+  let todayIcon: keyof typeof Ionicons.glyphMap = 'shield-checkmark-outline';
+  let todayTone: 'green' | 'gold' | 'blue' | 'red' | 'neutral' = 'green';
+  let todayTab: WorkspaceTab = 'summary';
+  let todayDocFilter: DocFilter | undefined;
+
+  if (caseItem?.status === 'closed') {
+    todayTask = 'راجع نتيجة الملف والإغلاق النهائي.';
+    todayIcon = 'checkmark-circle-outline';
+    todayTone = 'neutral';
+    todayTab = 'resolution';
+  } else if (missingDocuments.length > 0) {
+    todayTask = `استكمال ${missingDocuments.length.toLocaleString('ar-IQ')} وثائق ناقصة أو مطلوبة.`;
+    todayIcon = 'document-text-outline';
+    todayTone = 'gold';
+    todayTab = 'documents';
+    todayDocFilter = 'pending';
+  } else if (lastUnansweredMessage) {
+    todayTask = 'متابعة آخر رسالة غير مجابة مع المحامي.';
+    todayIcon = 'chatbubble-ellipses-outline';
+    todayTone = 'blue';
+    todayTab = 'chat';
+  } else if (nextEvent) {
+    todayTask = nextEvent.type === 'hearing' ? 'التحضير لموعد الجلسة القادم.' : 'التحضير للاجتماع القادم.';
+    todayIcon = nextEvent.type === 'hearing' ? 'business-outline' : 'people-outline';
+    todayTone = 'red';
+  } else if ((caseItem?.unreadCount || 0) > 0) {
+    todayTask = 'قراءة التوجيهات الجديدة في المحادثة.';
+    todayIcon = 'chatbubbles-outline';
+    todayTone = 'blue';
+    todayTab = 'chat';
+  }
+
+  const lawyerNextStep = missingDocuments.length > 0
+    ? `ينتظر ${lawyerName} اكتمال الوثائق ثم مراجعتها.`
+    : lastUnansweredMessage
+      ? 'الرد على رسالتك الأخيرة وتحديد الإجراء التالي.'
+      : lastLawyerMessage
+        ? `متابعة توجيهه الأخير: ${getShortText(String(lastLawyerMessage.text || ''), 70)}`
+        : 'تحديد الإجراء القانوني التالي بعد مراجعة الملف.';
+
+  return {
+    todayTask,
+    todayIcon,
+    todayTone,
+    todayTab,
+    todayDocFilter,
+    missingDocuments,
+    lastUnansweredMessage,
+    nextEvent,
+    lawyerNextStep,
+  };
+}
+
 export function CasesScreen() {
   const [cases, setCases] = useState<any[]>([]);
   const [lawyers, setLawyers] = useState<any[]>([]);
@@ -507,6 +575,18 @@ export function CasesScreen() {
               </View>
             </View>
 
+            <SmartTaskHubMobile
+              caseItem={selectedCase}
+              onOpenTab={(tab, filter) => {
+                if (filter) setDocFilter(filter);
+                setActiveTab(tab);
+              }}
+              onDraftFollowUp={(text) => {
+                setMessage(text);
+                setActiveTab('chat');
+              }}
+            />
+
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRow}>
               {tabs.map((tab) => (
                 <Pressable key={tab.id} onPress={() => setActiveTab(tab.id)} style={[styles.tab, activeTab === tab.id && styles.tabActive]}>
@@ -811,6 +891,127 @@ function CasePill({ item, active, onPress }: { item: any; active: boolean; onPre
       </View>
     </Pressable>
   );
+}
+
+function SmartTaskHubMobile({
+  caseItem,
+  onOpenTab,
+  onDraftFollowUp,
+}: {
+  caseItem: any;
+  onOpenTab: (tab: WorkspaceTab, filter?: DocFilter) => void;
+  onDraftFollowUp: (message: string) => void;
+}) {
+  const hub = getSmartTaskHub(caseItem);
+  const lawyerName = caseItem?.lawyer?.name || caseItem?.lawyer || 'المحامي';
+  const cards: Array<{
+    id: string;
+    label: string;
+    value: string;
+    meta?: string;
+    icon: keyof typeof Ionicons.glyphMap;
+    tone: 'green' | 'gold' | 'blue' | 'red' | 'neutral';
+    onPress: () => void;
+  }> = [
+    {
+      id: 'today',
+      label: 'المطلوب اليوم',
+      value: hub.todayTask,
+      icon: hub.todayIcon,
+      tone: hub.todayTone,
+      onPress: () => onOpenTab(hub.todayTab, hub.todayDocFilter),
+    },
+    {
+      id: 'docs',
+      label: 'الوثائق الناقصة',
+      value: hub.missingDocuments.length > 0
+        ? hub.missingDocuments.slice(0, 2).map((doc: any) => doc.name).join('، ')
+        : 'لا توجد وثائق ناقصة حالياً',
+      meta: hub.missingDocuments.length > 2 ? `+${(hub.missingDocuments.length - 2).toLocaleString('ar-IQ')} أخرى` : `${hub.missingDocuments.length.toLocaleString('ar-IQ')} مطلوبة`,
+      icon: 'folder-open-outline',
+      tone: hub.missingDocuments.length > 0 ? 'gold' : 'green',
+      onPress: () => onOpenTab('documents', hub.missingDocuments.length > 0 ? 'pending' : 'all'),
+    },
+    {
+      id: 'message',
+      label: 'آخر رسالة غير مجابة',
+      value: hub.lastUnansweredMessage ? getShortText(String(hub.lastUnansweredMessage.text || '')) : 'لا توجد رسالة معلقة بلا رد',
+      meta: hub.lastUnansweredMessage ? String(hub.lastUnansweredMessage.time || hub.lastUnansweredMessage.createdAt || 'بانتظار المتابعة') : 'المحادثة مستقرة',
+      icon: 'chatbubbles-outline',
+      tone: hub.lastUnansweredMessage ? 'blue' : 'neutral',
+      onPress: () => onOpenTab('chat'),
+    },
+    {
+      id: 'hearing',
+      label: 'موعد الجلسة القادم',
+      value: hub.nextEvent ? String(hub.nextEvent.title || 'موعد قادم') : 'لا يوجد موعد جلسة مسجل',
+      meta: hub.nextEvent ? String(hub.nextEvent.date || '') : 'أضف الموعد ضمن بيانات الملف',
+      icon: hub.nextEvent?.type === 'meeting' ? 'people-outline' : 'business-outline',
+      tone: hub.nextEvent ? 'red' : 'neutral',
+      onPress: () => onOpenTab('summary'),
+    },
+  ];
+
+  return (
+    <View style={styles.taskHub}>
+      <View style={styles.rowBetween}>
+        <Pressable onPress={() => onOpenTab(hub.todayTab, hub.todayDocFilter)} style={styles.taskHubAction}>
+          <Ionicons name="arrow-back-outline" size={15} color="#fff" />
+          <Text style={styles.taskHubActionText}>فتح الأولوية</Text>
+        </Pressable>
+        <View style={styles.flex}>
+          <Text style={styles.taskHubEyebrow}>Task Hub</Text>
+          <Text style={styles.sectionTitle}>مركز مهام ذكي لهذه القضية</Text>
+          <Text style={styles.mutedText}>ما يجب فعله الآن، وما ينتظره المحامي، في لمحة واحدة.</Text>
+        </View>
+      </View>
+
+      <View style={styles.taskHubGrid}>
+        {cards.map((card) => (
+          <Pressable key={card.id} onPress={card.onPress} style={styles.taskHubCard}>
+            <View style={[styles.taskHubIcon, taskToneStyle(card.tone)]}>
+              <Ionicons name={card.icon} size={18} color={taskToneColor(card.tone)} />
+            </View>
+            <Text style={styles.taskHubLabel}>{card.label}</Text>
+            <Text style={styles.taskHubValue} numberOfLines={3}>{card.value}</Text>
+            {card.meta ? <Text style={styles.taskHubMeta} numberOfLines={1}>{card.meta}</Text> : null}
+          </Pressable>
+        ))}
+      </View>
+
+      <View style={styles.lawyerNextBox}>
+        <View style={styles.flex}>
+          <Text style={styles.taskHubLabel}>خطوة المحامي التالية</Text>
+          <Text style={styles.lawyerNextText}>{hub.lawyerNextStep}</Text>
+        </View>
+        {hub.lastUnansweredMessage ? (
+          <Pressable
+            onPress={() => onDraftFollowUp(`أستاذ ${lawyerName}، أتابع رسالتي الأخيرة بخصوص "${caseItem?.title || 'القضية'}". هل توجد مستجدات أو إجراء مطلوب مني اليوم؟`)}
+            style={styles.followUpButton}
+          >
+            <Ionicons name="create-outline" size={15} color={colors.navy} />
+            <Text style={styles.followUpText}>متابعة</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function taskToneColor(tone: 'green' | 'gold' | 'blue' | 'red' | 'neutral') {
+  if (tone === 'green') return colors.green;
+  if (tone === 'gold') return colors.gold;
+  if (tone === 'blue') return colors.navy;
+  if (tone === 'red') return colors.red;
+  return colors.muted;
+}
+
+function taskToneStyle(tone: 'green' | 'gold' | 'blue' | 'red' | 'neutral') {
+  if (tone === 'green') return styles.taskToneGreen;
+  if (tone === 'gold') return styles.taskToneGold;
+  if (tone === 'blue') return styles.taskToneBlue;
+  if (tone === 'red') return styles.taskToneRed;
+  return styles.taskToneNeutral;
 }
 
 function DocumentCard({ doc, selected, loading, onSelect, onSign, onReply }: { doc: any; selected: boolean; loading: boolean; onSelect: () => void; onSign: () => void; onReply: () => void }) {
@@ -1539,6 +1740,128 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     color: '#fff',
+  },
+  followUpButton: {
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderColor: colors.line,
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    gap: 5,
+    minHeight: 34,
+    paddingHorizontal: 10,
+  },
+  followUpText: {
+    color: colors.navy,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  lawyerNextBox: {
+    alignItems: 'center',
+    backgroundColor: colors.tint,
+    borderRadius: 16,
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 10,
+    padding: 11,
+  },
+  lawyerNextText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 20,
+    marginTop: 4,
+    textAlign: 'right',
+  },
+  taskHub: {
+    backgroundColor: '#fff',
+    borderRadius: 22,
+    marginBottom: 12,
+    padding: 14,
+  },
+  taskHubAction: {
+    alignItems: 'center',
+    backgroundColor: colors.navy,
+    borderRadius: 999,
+    flexDirection: 'row-reverse',
+    gap: 5,
+    minHeight: 36,
+    paddingHorizontal: 11,
+  },
+  taskHubActionText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  taskHubCard: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    flexBasis: '48%',
+    flexGrow: 1,
+    minHeight: 148,
+    padding: 11,
+  },
+  taskHubEyebrow: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+    marginBottom: 3,
+    textAlign: 'right',
+  },
+  taskHubGrid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  taskHubIcon: {
+    alignItems: 'center',
+    borderRadius: 14,
+    height: 36,
+    justifyContent: 'center',
+    marginLeft: 'auto',
+    width: 36,
+  },
+  taskHubLabel: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: 7,
+    textAlign: 'right',
+  },
+  taskHubMeta: {
+    color: colors.subtle,
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: 6,
+    textAlign: 'right',
+  },
+  taskHubValue: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    lineHeight: 20,
+    marginTop: 5,
+    textAlign: 'right',
+  },
+  taskToneBlue: {
+    backgroundColor: colors.blueTint,
+  },
+  taskToneGold: {
+    backgroundColor: colors.goldTint,
+  },
+  taskToneGreen: {
+    backgroundColor: colors.greenTint,
+  },
+  taskToneNeutral: {
+    backgroundColor: '#fff',
+  },
+  taskToneRed: {
+    backgroundColor: colors.redTint,
   },
   timelineDot: {
     alignItems: 'center',
