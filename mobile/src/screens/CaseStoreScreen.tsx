@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { apiClient } from '../api/client';
 import { Screen } from '../components/ui';
 import { colors } from '../theme/colors';
@@ -25,6 +25,7 @@ type CaseStoreListing = {
   evaluationDuration?: string | null;
   paymentMethod?: string | null;
   requestedDocuments?: string | null;
+  selectedLawyerId?: string | null;
   suggested?: boolean | number;
   nearby?: boolean | number;
   createdAt?: string;
@@ -37,7 +38,7 @@ const filters: Array<{ key: StoreFilter; label: string }> = [
   { key: 'suggested', label: 'مقترحة' },
   { key: 'nearby', label: 'قريبة' },
   { key: 'unanswered', label: 'بانتظارك' },
-  { key: 'reviewed', label: 'مراجعة' },
+  { key: 'reviewed', label: 'مقبولة مني' },
 ];
 
 function formatMoney(value: number) {
@@ -79,13 +80,22 @@ function getOpportunityReasons(item: CaseStoreListing) {
   return reasons.length ? reasons : ['راجع التفاصيل'];
 }
 
+function isAcceptedByCurrentLawyer(item: CaseStoreListing) {
+  return ['accepted', 'negotiating'].includes(String(item.offerStatus || ''));
+}
+
+function isAvailableForCurrentLawyer(item: CaseStoreListing) {
+  return item.status === 'open' && !item.selectedLawyerId && !isAcceptedByCurrentLawyer(item);
+}
+
 export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }) {
   const [listings, setListings] = useState<CaseStoreListing[]>([]);
   const [selected, setSelected] = useState<CaseStoreListing | null>(null);
-  const [filter, setFilter] = useState<StoreFilter>('all');
+  const [filter, setFilter] = useState<StoreFilter>('unanswered');
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [detailOpen, setDetailOpen] = useState(false);
   const [reviewed, setReviewed] = useState(false);
   const [note, setNote] = useState('');
   const [proposedPrice, setProposedPrice] = useState('');
@@ -100,7 +110,7 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
     setError('');
     try {
       const response = await apiClient.getLawyerCaseMarketplaceListings();
-      const next = response.data || [];
+      const next = (response.data || []).filter((item) => isAvailableForCurrentLawyer(item) || isAcceptedByCurrentLawyer(item));
       setListings(next);
       setSelected((current) => {
         if (!next.length) return null;
@@ -131,7 +141,8 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
   const stats = useMemo(() => {
     return {
       open: listings.filter((item) => item.status === 'open').length,
-      waiting: listings.filter((item) => !item.offerStatus && item.status === 'open').length,
+      waiting: listings.filter(isAvailableForCurrentLawyer).length,
+      accepted: listings.filter(isAcceptedByCurrentLawyer).length,
       suggested: listings.filter((item) => Boolean(item.suggested)).length,
       best: listings.reduce((max, item) => Math.max(max, getOpportunityScore(item)), 0),
     };
@@ -150,8 +161,8 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
         filter === 'all' ||
         (filter === 'suggested' && Boolean(item.suggested)) ||
         (filter === 'nearby' && Boolean(item.nearby)) ||
-        (filter === 'unanswered' && !item.offerStatus && item.status === 'open') ||
-        (filter === 'reviewed' && Boolean(item.offerStatus));
+        (filter === 'unanswered' && isAvailableForCurrentLawyer(item)) ||
+        (filter === 'reviewed' && isAcceptedByCurrentLawyer(item));
       return matchesQuery && matchesFilter;
     }).sort((first, second) => getOpportunityScore(second) - getOpportunityScore(first));
   }, [filter, listings, query]);
@@ -201,6 +212,7 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
           <View style={styles.stats}>
             <Stat label="متاحة" value={stats.open} />
             <Stat label="بانتظارك" value={stats.waiting} />
+            <Stat label="مقبولة منك" value={stats.accepted} />
             <Stat label="أفضل فرصة" value={stats.best} suffix="%" />
           </View>
         </View>
@@ -238,9 +250,24 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
           </View>
         ) : (
           <View style={styles.caseList}>
+            <View style={styles.listHeader}>
+              <Text style={styles.listCount}>{filtered.length.toLocaleString('ar-IQ')} قضية</Text>
+              <View style={styles.listTitleWrap}>
+                <Text style={styles.listTitle}>القضايا المتاحة للقبول</Text>
+                <Text style={styles.listNote}>اضغط على أي قضية لعرض المعلومات والسعر والوثائق.</Text>
+              </View>
+            </View>
             {filtered.length ? (
               filtered.map((item) => (
-                <CaseCard key={item.id} item={item} active={selected?.id === item.id} onPress={() => setSelected(item)} />
+                <CaseCard
+                  key={item.id}
+                  item={item}
+                  active={selected?.id === item.id}
+                  onPress={() => {
+                    setSelected(item);
+                    setDetailOpen(true);
+                  }}
+                />
               ))
             ) : (
               <View style={styles.emptyCard}>
@@ -251,8 +278,22 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
           </View>
         )}
 
-        {selected ? (
+        <Modal transparent animationType="slide" visible={Boolean(selected && detailOpen)} onRequestClose={() => setDetailOpen(false)}>
+          <View style={styles.modalBackdrop}>
+            <View style={styles.modalPanel}>
+              <ScrollView showsVerticalScrollIndicator={false}>
+                {selected ? (
           <View style={styles.reviewPanel}>
+            <View style={styles.modalTop}>
+              <Pressable onPress={() => setDetailOpen(false)} style={styles.closeButton}>
+                <Ionicons name="close" size={18} color={colors.muted} />
+              </Pressable>
+              <View style={styles.modalTitleWrap}>
+                <Text style={styles.modalEyebrow}>Case Information</Text>
+                <Text style={styles.modalTitle}>معلومات القضية</Text>
+              </View>
+            </View>
+
             <View style={styles.panelHeader}>
               <View style={styles.badges}>
                 {Boolean(selected.suggested) ? <Badge label="مقترحة" tone="gold" /> : null}
@@ -392,7 +433,11 @@ export function CaseStoreScreen({ onOpen }: { onOpen: (route: 'cases') => void }
               </View>
             </View>
           </View>
-        ) : null}
+                ) : null}
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </Screen>
   );
@@ -412,21 +457,40 @@ function CaseCard({ item, active, onPress }: { item: CaseStoreListing; active: b
   return (
     <Pressable onPress={onPress} style={[styles.caseCard, active && styles.caseCardActive]}>
       <View style={styles.cardTop}>
-        <Badge label={`${score}%`} tone={score >= 60 ? 'gold' : 'neutral'} />
+        <View style={[styles.priceBadge, active && styles.priceBadgeActive]}>
+          <Text style={[styles.priceValue, active && styles.priceValueActive]}>{formatMoney(item.budget)}</Text>
+          <Text style={[styles.priceLabel, active && styles.priceLabelActive]}>السعر</Text>
+        </View>
         <View style={styles.cardText}>
           <Text style={[styles.cardTitle, active && styles.cardTitleActive]} numberOfLines={1}>{item.title}</Text>
-          <Text style={[styles.cardMeta, active && styles.cardMetaActive]}>{getOpportunityLabel(score)} · {formatMoney(item.budget)}</Text>
+          <Text style={[styles.cardMeta, active && styles.cardMetaActive]} numberOfLines={1}>
+            {item.category || 'دعوى'} · {item.location || item.clientLocation || 'بدون موقع'} · {ageLabel(item.createdAt)}
+          </Text>
         </View>
       </View>
       <Text style={[styles.cardMatter, active && styles.cardMatterActive]} numberOfLines={2}>{item.matter}</Text>
+      <View style={styles.caseInfoRow}>
+        <InfoPill label="الفرصة" value={`${score}%`} active={active} />
+        <InfoPill label="الجاهزية" value={`${item.readiness || 0}%`} active={active} />
+        <InfoPill label="الوثائق" value={`${item.documents?.length || 0}`} active={active} />
+      </View>
       <View style={[styles.scoreTrack, active && styles.scoreTrackActive]}>
         <View style={[styles.scoreFill, { width: `${score}%` }]} />
       </View>
       <View style={styles.cardBadges}>
         {getOpportunityReasons(item).slice(0, 3).map((reason) => <Badge key={reason} label={reason} tone="neutral" />)}
-        <Badge label={`${item.documents?.length || 0} وثائق`} tone="neutral" />
+        <Badge label="عرض التفاصيل" tone={active ? 'gold' : 'blue'} />
       </View>
     </Pressable>
+  );
+}
+
+function InfoPill({ label, value, active }: { label: string; value: string; active: boolean }) {
+  return (
+    <View style={[styles.infoPill, active && styles.infoPillActive]}>
+      <Text style={[styles.infoPillValue, active && styles.infoPillTextActive]}>{value}</Text>
+      <Text style={[styles.infoPillLabel, active && styles.infoPillTextActive]}>{label}</Text>
+    </View>
   );
 }
 
@@ -601,6 +665,44 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 12,
   },
+  listHeader: {
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+  },
+  listCount: {
+    backgroundColor: colors.goldTint,
+    borderRadius: 8,
+    color: colors.navy,
+    fontSize: 12,
+    fontWeight: '900',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  listNote: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginTop: 3,
+    textAlign: 'right',
+  },
+  listTitle: {
+    color: colors.ink,
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  listTitleWrap: {
+    alignItems: 'flex-end',
+    flex: 1,
+  },
   caseCard: {
     backgroundColor: colors.paper,
     borderRadius: 8,
@@ -613,6 +715,34 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     gap: 10,
+  },
+  priceBadge: {
+    alignItems: 'flex-start',
+    backgroundColor: colors.greenTint,
+    borderRadius: 8,
+    minWidth: 104,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  priceBadgeActive: {
+    backgroundColor: 'rgba(255,255,255,0.12)',
+  },
+  priceLabel: {
+    color: colors.green,
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  priceLabelActive: {
+    color: 'rgba(255,255,255,0.66)',
+  },
+  priceValue: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  priceValueActive: {
+    color: '#fff',
   },
   cardText: {
     alignItems: 'flex-end',
@@ -646,6 +776,35 @@ const styles = StyleSheet.create({
   },
   cardMatterActive: {
     color: 'rgba(255,255,255,0.7)',
+  },
+  caseInfoRow: {
+    flexDirection: 'row-reverse',
+    gap: 7,
+    marginTop: 10,
+  },
+  infoPill: {
+    alignItems: 'flex-end',
+    backgroundColor: colors.tint,
+    borderRadius: 8,
+    flex: 1,
+    padding: 8,
+  },
+  infoPillActive: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  infoPillLabel: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  infoPillValue: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  infoPillTextActive: {
+    color: '#fff',
   },
   scoreTrack: {
     backgroundColor: colors.tint,
@@ -715,6 +874,51 @@ const styles = StyleSheet.create({
   },
   reviewPanel: {
     gap: 12,
+  },
+  modalBackdrop: {
+    backgroundColor: colors.backdrop,
+    flex: 1,
+    justifyContent: 'flex-end',
+    padding: 10,
+  },
+  modalPanel: {
+    backgroundColor: colors.canvas,
+    borderRadius: 12,
+    maxHeight: '92%',
+    padding: 10,
+  },
+  modalTop: {
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderRadius: 8,
+    flexDirection: 'row',
+    gap: 10,
+    padding: 12,
+  },
+  closeButton: {
+    alignItems: 'center',
+    backgroundColor: colors.tint,
+    borderRadius: 999,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
+  },
+  modalTitleWrap: {
+    alignItems: 'flex-end',
+    flex: 1,
+  },
+  modalEyebrow: {
+    color: colors.gold,
+    fontSize: 10,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  modalTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '900',
+    marginTop: 2,
+    textAlign: 'right',
   },
   panelHeader: {
     alignItems: 'flex-end',

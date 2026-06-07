@@ -1241,13 +1241,34 @@ async function startServer() {
         FROM "CaseMarketplaceListing" l
         JOIN "User" u ON u.id = l."clientId"
         LEFT JOIN "CaseMarketplaceOffer" o ON o."listingId" = l.id AND o."lawyerId" = ?
-        WHERE l.status = 'open' OR l."selectedLawyerId" = ?
+        WHERE (
+          (
+            l.status = 'open'
+            AND (l."selectedLawyerId" IS NULL OR l."selectedLawyerId" = '' OR l."selectedLawyerId" = ?)
+            AND NOT EXISTS (
+              SELECT 1 FROM "CaseMarketplaceOffer" otherOffer
+              WHERE otherOffer."listingId" = l.id
+                AND otherOffer."lawyerId" != ?
+                AND otherOffer.status IN ('accepted', 'negotiating')
+            )
+          )
+          OR l."selectedLawyerId" = ?
+          OR EXISTS (
+            SELECT 1 FROM "CaseMarketplaceOffer" ownOffer
+            WHERE ownOffer."listingId" = l.id
+              AND ownOffer."lawyerId" = ?
+              AND ownOffer.status IN ('accepted', 'negotiating')
+          )
+        )
         ORDER BY opportunityScore DESC, suggested DESC, nearby DESC, l.readiness DESC, l.budget DESC, l."createdAt" DESC
         `,
         `%${specialty}%`,
         `%${location}%`,
         `%${specialty}%`,
         `%${location}%`,
+        currentUser.userId,
+        currentUser.userId,
+        currentUser.userId,
         currentUser.userId,
         currentUser.userId,
       );
