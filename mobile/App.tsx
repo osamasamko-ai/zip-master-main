@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, TextInput, TextStyle, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
@@ -76,20 +76,35 @@ function applyDefaultFont(Component: typeof Text | typeof TextInput) {
 applyDefaultFont(Text);
 applyDefaultFont(TextInput);
 
-type TabKey = 'home' | 'plan' | 'lawyers' | 'cases' | 'ai' | 'messages' | 'more';
+type PrimaryRouteKey = 'home' | 'plan' | 'lawyers' | 'cases' | 'pro' | 'caseStore' | 'admin';
+type TabKey = PrimaryRouteKey | 'more';
 type RouteKey = TabKey | MoreRoute | 'profile';
+type TabItem = { key: TabKey; label: string; icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap };
 
-const tabs: Array<{ key: TabKey; label: string; icon: keyof typeof Ionicons.glyphMap; activeIcon: keyof typeof Ionicons.glyphMap }> = [
-  { key: 'home', label: 'الرئيسية', icon: 'home-outline', activeIcon: 'home' },
-  { key: 'plan', label: 'خطتي', icon: 'git-branch-outline', activeIcon: 'git-branch' },
-  { key: 'lawyers', label: 'المحامين', icon: 'people-outline', activeIcon: 'people' },
-  { key: 'cases', label: 'القضايا', icon: 'briefcase-outline', activeIcon: 'briefcase' },
-  { key: 'ai', label: 'الذكاء', icon: 'sparkles-outline', activeIcon: 'sparkles' },
-  { key: 'messages', label: 'الرسائل', icon: 'chatbubbles-outline', activeIcon: 'chatbubbles' },
-  { key: 'more', label: 'المزيد', icon: 'grid-outline', activeIcon: 'grid' },
-];
+const primaryTabConfig: Record<PrimaryRouteKey, TabItem> = {
+  home: { key: 'home', label: 'لوحتي', icon: 'home-outline', activeIcon: 'home' },
+  plan: { key: 'plan', label: 'خطتي', icon: 'git-branch-outline', activeIcon: 'git-branch' },
+  lawyers: { key: 'lawyers', label: 'ابحث', icon: 'people-outline', activeIcon: 'people' },
+  cases: { key: 'cases', label: 'ملفاتي', icon: 'briefcase-outline', activeIcon: 'briefcase' },
+  pro: { key: 'pro', label: 'مكتبي', icon: 'business-outline', activeIcon: 'business' },
+  caseStore: { key: 'caseStore', label: 'فرص', icon: 'trophy-outline', activeIcon: 'trophy' },
+  admin: { key: 'admin', label: 'تحكم', icon: 'shield-checkmark-outline', activeIcon: 'shield-checkmark' },
+};
+
+const moreTab: TabItem = {
+  key: 'more',
+  label: 'الخدمات',
+  icon: 'grid-outline',
+  activeIcon: 'grid',
+};
 
 const chromeHideThreshold = 18;
+
+function getPrimaryRoutesForRole(role: AuthUser['role']): PrimaryRouteKey[] {
+  if (role === 'admin') return ['home', 'cases', 'lawyers', 'admin'];
+  if (role === 'pro') return ['home', 'cases', 'lawyers', 'pro'];
+  return ['home', 'plan', 'cases', 'lawyers'];
+}
 
 function Shell() {
   const { user } = useAuth();
@@ -97,7 +112,10 @@ function Shell() {
   const [chromeHidden, setChromeHidden] = useState(false);
   const touchStartY = useRef(0);
   const chromeProgress = useRef(new Animated.Value(0)).current;
-  const hasTopBar = !tabs.some((tab) => tab.key === activeRoute);
+  const primaryRoutes = useMemo(() => (user ? getPrimaryRoutesForRole(user.role) : []), [user?.role]);
+  const tabs = useMemo(() => [...primaryRoutes.map((route) => primaryTabConfig[route]), moreTab], [primaryRoutes]);
+  const tabKeys = useMemo(() => new Set(tabs.map((tab) => tab.key)), [tabs]);
+  const hasTopBar = !tabKeys.has(activeRoute as TabKey);
 
   const setChromeVisibility = (hidden: boolean) => {
     setChromeHidden((current) => {
@@ -172,7 +190,7 @@ function Shell() {
         }}
         style={[styles.content, hasTopBar && !chromeHidden && styles.contentWithTopBar, !chromeHidden && styles.contentWithTabBar]}
       >
-        {renderScreen(activeRoute, user, setActiveRoute)}
+        {renderScreen(activeRoute, user, setActiveRoute, primaryRoutes)}
       </View>
       <Animated.View
         pointerEvents={chromeHidden ? 'none' : 'auto'}
@@ -185,7 +203,7 @@ function Shell() {
         ]}
       >
         {tabs.map((tab) => {
-          const isActive = activeRoute === tab.key;
+          const isActive = activeRoute === tab.key || (tab.key === 'more' && !tabKeys.has(activeRoute as TabKey));
           return (
             <Pressable
               key={tab.key}
@@ -207,7 +225,7 @@ function Shell() {
   );
 }
 
-function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKey) => void) {
+function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKey) => void, primaryRoutes: PrimaryRouteKey[]) {
   switch (route) {
     case 'lawyers':
       return <LawyersScreen onOpen={setRoute} />;
@@ -220,7 +238,7 @@ function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKe
     case 'messages':
       return <MessagesScreen />;
     case 'more':
-      return <MoreScreen user={user} onOpen={setRoute} />;
+      return <MoreScreen user={user} primaryRoutes={primaryRoutes} onOpen={setRoute} />;
     case 'feed':
       return <FeedScreen onOpen={setRoute} />;
     case 'legal':

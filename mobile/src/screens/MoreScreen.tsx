@@ -7,6 +7,8 @@ import { colors } from '../theme/colors';
 
 export type MoreRoute =
   | 'plan'
+  | 'ai'
+  | 'messages'
   | 'feed'
   | 'legal'
   | 'contract'
@@ -32,19 +34,21 @@ type Item = {
 };
 
 const items: Item[] = [
-  { key: 'plan', title: 'خطتي القانونية', note: 'حوّل المشكلة إلى خطوات ومستندات', icon: 'git-branch-outline', group: 'work' },
-  { key: 'feed', title: 'المجتمع القانوني', note: 'منشورات وأسئلة وتحديثات', icon: 'newspaper-outline', group: 'work' },
-  { key: 'legal', title: 'المستندات', note: 'مكتبة قانونية وعقود محفوظة', icon: 'document-text-outline', group: 'work' },
-  { key: 'contract', title: 'منشئ العقود', note: 'إنشاء وحفظ مسودات العقود', icon: 'create-outline', group: 'work' },
-  { key: 'billing', title: 'الفواتير', note: 'الرصيد والمدفوعات', icon: 'wallet-outline', group: 'account' },
-  { key: 'following', title: 'المتابَعون', note: 'محامون تتابعهم', icon: 'star-outline', group: 'account' },
-  { key: 'support', title: 'الدعم', note: 'طلبات ومساعدة فنية', icon: 'headset-outline', group: 'account' },
-  { key: 'settings', title: 'الإعدادات', note: 'الحساب والتفضيلات', icon: 'settings-outline', group: 'account' },
-  { key: 'intelligence', title: 'الذكاء التشغيلي', note: 'تنبيهات واقتراحات مخصصة', icon: 'analytics-outline', group: 'work' },
-  { key: 'profile', title: 'حسابي', note: 'الملف الشخصي', icon: 'person-outline', group: 'account' },
-  { key: 'pro', title: 'مساحة المحامي', note: 'عملاء وقضايا مهنية', icon: 'briefcase-outline', roles: ['pro', 'admin'], group: 'work' },
-  { key: 'caseStore', title: 'فرص المحامين', note: 'قضايا مرتبة حسب أفضل فرصة لك', icon: 'trophy-outline', roles: ['pro', 'admin'], group: 'work' },
-  { key: 'admin', title: 'الإدارة', note: 'مؤشرات ومراجعات المنصة', icon: 'shield-checkmark-outline', roles: ['admin'], group: 'work' },
+  { key: 'plan', title: 'ابنِ خطة قضيتك', note: 'حوّل المشكلة إلى خطوات ومستندات', icon: 'git-branch-outline', group: 'work' },
+  { key: 'messages', title: 'تابع المحادثات', note: 'رسائلك مع المحامين والدعم', icon: 'chatbubbles-outline', group: 'work' },
+  { key: 'ai', title: 'اسأل المساعد الذكي', note: 'أسئلة قانونية وصياغة أولية', icon: 'sparkles-outline', group: 'work' },
+  { key: 'feed', title: 'شارك في المجتمع', note: 'منشورات وأسئلة وتحديثات', icon: 'newspaper-outline', group: 'work' },
+  { key: 'legal', title: 'افتح المكتبة القانونية', note: 'مستندات وقوالب قانونية جاهزة', icon: 'document-text-outline', group: 'work' },
+  { key: 'contract', title: 'أنشئ عقداً جديداً', note: 'إنشاء وحفظ مسودات العقود', icon: 'create-outline', group: 'work' },
+  { key: 'billing', title: 'راجع المدفوعات', note: 'الرصيد والفواتير والعمليات', icon: 'wallet-outline', group: 'account' },
+  { key: 'following', title: 'محامون أتابعهم', note: 'وصول سريع للمفضلين لديك', icon: 'star-outline', group: 'account' },
+  { key: 'support', title: 'اطلب المساعدة', note: 'طلبات ودعم فني سريع', icon: 'headset-outline', group: 'account' },
+  { key: 'settings', title: 'اضبط حسابك', note: 'البيانات والتفضيلات والتنبيهات', icon: 'settings-outline', group: 'account' },
+  { key: 'intelligence', title: 'اكتشف التنبيهات الذكية', note: 'اقتراحات مخصصة لما يحتاج انتباهك', icon: 'analytics-outline', group: 'work' },
+  { key: 'profile', title: 'اعرض ملفي', note: 'الملف الشخصي وبيانات الحساب', icon: 'person-outline', group: 'account' },
+  { key: 'pro', title: 'ادخل مكتب المحامي', note: 'عملاء وقضايا ومهام مهنية', icon: 'briefcase-outline', roles: ['pro', 'admin'], group: 'work' },
+  { key: 'caseStore', title: 'تصفح فرص القضايا', note: 'قضايا مرتبة حسب أفضل فرصة لك', icon: 'trophy-outline', roles: ['pro', 'admin'], group: 'work' },
+  { key: 'admin', title: 'راقب لوحة التحكم', note: 'مؤشرات ومراجعات المنصة', icon: 'shield-checkmark-outline', roles: ['admin'], group: 'work' },
 ];
 
 const filters: Array<{ key: GroupKey; label: string }> = [
@@ -53,11 +57,12 @@ const filters: Array<{ key: GroupKey; label: string }> = [
   { key: 'account', label: 'الحساب' },
 ];
 
-export function MoreScreen({ user, onOpen }: { user: AuthUser; onOpen: (route: MoreRoute) => void }) {
+export function MoreScreen({ user, primaryRoutes, onOpen }: { user: AuthUser; primaryRoutes: string[]; onOpen: (route: MoreRoute) => void }) {
   const [filter, setFilter] = useState<GroupKey>('all');
+  const primaryRouteSet = useMemo(() => new Set(primaryRoutes), [primaryRoutes]);
   const visibleItems = useMemo(
-    () => items.filter((item) => (!item.roles || item.roles.includes(user.role)) && (filter === 'all' || item.group === filter)),
-    [filter, user.role],
+    () => items.filter((item) => !primaryRouteSet.has(item.key) && (!item.roles || item.roles.includes(user.role)) && (filter === 'all' || item.group === filter)),
+    [filter, primaryRouteSet, user.role],
   );
   const primaryItems = visibleItems.slice(0, 3);
   const restItems = visibleItems.slice(3);
@@ -70,7 +75,7 @@ export function MoreScreen({ user, onOpen }: { user: AuthUser; onOpen: (route: M
             <Text style={styles.avatarText}>{String(user.name || 'م').charAt(0)}</Text>
           </View>
           <View style={styles.headerText}>
-            <Text style={styles.title}>المزيد</Text>
+            <Text style={styles.title}>الخدمات</Text>
             <Text style={styles.subtitle}>{user.name} · {user.role === 'admin' ? 'مدير' : user.role === 'pro' ? 'محامي' : 'عميل'}</Text>
           </View>
         </View>
@@ -95,7 +100,7 @@ export function MoreScreen({ user, onOpen }: { user: AuthUser; onOpen: (route: M
           </View>
         ) : null}
 
-        <Text style={styles.sectionTitle}>كل الأدوات</Text>
+        <Text style={styles.sectionTitle}>كل الخدمات</Text>
         {restItems.map((item) => (
           <Pressable key={item.key} onPress={() => onOpen(item.key)} style={styles.row}>
             <Ionicons name="chevron-back" size={18} color={colors.subtle} />

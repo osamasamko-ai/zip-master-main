@@ -261,19 +261,19 @@ export default function MainLayout() {
   const navItems = useMemo(
     () =>
       [
-        { name: 'الرئيسية', icon: 'fa-table-columns', path: '/user' },
-        { name: 'القضايا', icon: 'fa-folder-open', path: '/cases' },
-        { name: 'المحامون', icon: 'fa-scale-balanced', path: '/lawyers' },
-        { name: 'العقود', icon: 'fa-file-contract', path: '/contracts' },
+        { name: 'لوحتي', icon: 'fa-table-columns', path: '/user' },
+        { name: 'ملفاتي', icon: 'fa-folder-open', path: '/cases' },
+        { name: 'ابحث', icon: 'fa-scale-balanced', path: '/lawyers' },
+        { name: 'أنشئ عقداً', icon: 'fa-file-contract', path: '/contracts' },
         { name: 'خطتي', icon: 'fa-route', path: '/action-plan' },
-        { name: 'الرسائل', icon: 'fa-comments', path: '/messages' },
-        { name: 'تواصل', icon: 'fa-users-rectangle', path: '/feed' },
+        { name: 'المحادثات', icon: 'fa-comments', path: '/messages' },
+        { name: 'المجتمع', icon: 'fa-users-rectangle', path: '/feed' },
         { name: 'المكتبة', icon: 'fa-book-open', path: '/legal' },
         { name: 'المساعد', icon: 'fa-robot', path: '/aichat' },
         { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },
-        { name: 'المحامي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
-        { name: 'الفرص', icon: 'fa-ranking-star', path: '/case-store', visible: user?.role === 'pro' || user?.role === 'admin' },
-        { name: 'الإدارة', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
+        { name: 'مكتبي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
+        { name: 'فرص', icon: 'fa-ranking-star', path: '/case-store', visible: user?.role === 'pro' || user?.role === 'admin' },
+        { name: 'تحكم', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
       ].filter((item) => item.visible !== false),
     [user?.role]
   );
@@ -423,10 +423,10 @@ export default function MainLayout() {
                     : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'
                     }`}
                   aria-expanded={moreNavOpen}
-                  aria-label="فتح الصفحات الأخرى"
+                  aria-label="فتح الخدمات الأخرى"
                 >
                   <i className={`fa-solid fa-table-cells-large relative z-10 text-xs ${hasActiveOverflowItem || moreNavOpen ? 'text-brand-navy' : 'text-slate-300 group-hover:text-brand-navy'}`} />
-                  <span className="relative z-10 whitespace-nowrap">المزيد</span>
+                  <span className="relative z-10 whitespace-nowrap">الخدمات</span>
                   <i className={`fa-solid fa-chevron-down relative z-10 text-[10px] transition-transform ${moreNavOpen ? 'rotate-180' : ''}`} />
                   {hasActiveOverflowItem && (
                     <motion.div
@@ -447,8 +447,8 @@ export default function MainLayout() {
                       className="absolute left-0 top-full z-50 mt-3 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white p-2 text-right shadow-2xl"
                     >
                       <div className="px-3 py-3">
-                        <p className="text-xs font-black text-brand-navy">صفحات إضافية</p>
-                        <p className="mt-1 text-[11px] font-bold text-slate-400">كل الصفحات متاحة بدون ازدحام الهيدر</p>
+                        <p className="text-xs font-black text-brand-navy">خدمات إضافية</p>
+                        <p className="mt-1 text-[11px] font-bold text-slate-400">كل الخدمات متاحة بدون ازدحام الهيدر</p>
                       </div>
                       <div className="space-y-1">
                         {overflowNavItems.map((item) => {
