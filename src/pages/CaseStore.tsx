@@ -23,6 +23,7 @@ type CaseStoreListing = {
   paymentMethod?: string | null;
   requestedDocuments?: string | null;
   negotiationSessionId?: string | null;
+  selectedLawyerId?: string | null;
   suggested?: boolean | number;
   nearby?: boolean | number;
   createdAt?: string;
@@ -35,7 +36,7 @@ const filters: Array<{ id: StoreFilter; label: string; icon: string }> = [
   { id: 'suggested', label: 'المقترحة', icon: 'fa-wand-magic-sparkles' },
   { id: 'nearby', label: 'القريبة', icon: 'fa-location-dot' },
   { id: 'unanswered', label: 'بانتظار قراري', icon: 'fa-hourglass-half' },
-  { id: 'reviewed', label: 'تمت مراجعتها', icon: 'fa-circle-check' },
+  { id: 'reviewed', label: 'مقبولة مني', icon: 'fa-circle-check' },
 ];
 
 function formatMoney(value: number) {
@@ -79,13 +80,21 @@ function getOpportunityReasons(item: CaseStoreListing) {
   return reasons.length ? reasons : ['راجع التفاصيل قبل العرض'];
 }
 
+function isAcceptedByCurrentLawyer(item: CaseStoreListing) {
+  return ['accepted', 'negotiating'].includes(String(item.offerStatus || ''));
+}
+
+function isAvailableForCurrentLawyer(item: CaseStoreListing) {
+  return item.status === 'open' && !item.selectedLawyerId && !isAcceptedByCurrentLawyer(item);
+}
+
 export default function CaseStore() {
   const navigate = useNavigate();
   const [listings, setListings] = useState<CaseStoreListing[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [query, setQuery] = useState('');
-  const [filter, setFilter] = useState<StoreFilter>('all');
+  const [filter, setFilter] = useState<StoreFilter>('unanswered');
   const [selected, setSelected] = useState<CaseStoreListing | null>(null);
   const [reviewChecked, setReviewChecked] = useState(false);
   const [decisionNote, setDecisionNote] = useState('');
@@ -105,7 +114,7 @@ export default function CaseStore() {
     setError('');
     try {
       const response = await apiClient.getLawyerCaseMarketplaceListings();
-      const nextListings = response.data || [];
+      const nextListings = (response.data || []).filter((item) => isAvailableForCurrentLawyer(item) || isAcceptedByCurrentLawyer(item));
       setListings(nextListings);
       setSelected((current) => {
         if (!nextListings.length) return null;
@@ -143,9 +152,9 @@ export default function CaseStore() {
 
   const stats = useMemo(() => {
     const open = listings.filter((item) => item.status === 'open').length;
-    const unanswered = listings.filter((item) => !item.offerStatus && item.status === 'open').length;
+    const unanswered = listings.filter(isAvailableForCurrentLawyer).length;
     const suggested = listings.filter((item) => Boolean(item.suggested)).length;
-    const accepted = listings.filter((item) => item.offerStatus === 'accepted').length;
+    const accepted = listings.filter(isAcceptedByCurrentLawyer).length;
     const bestScore = listings.reduce((max, item) => Math.max(max, getOpportunityScore(item)), 0);
     return { open, unanswered, suggested, accepted, bestScore };
   }, [listings]);
@@ -163,8 +172,8 @@ export default function CaseStore() {
         filter === 'all' ||
         (filter === 'suggested' && Boolean(item.suggested)) ||
         (filter === 'nearby' && Boolean(item.nearby)) ||
-        (filter === 'unanswered' && !item.offerStatus && item.status === 'open') ||
-        (filter === 'reviewed' && Boolean(item.offerStatus));
+        (filter === 'unanswered' && isAvailableForCurrentLawyer(item)) ||
+        (filter === 'reviewed' && isAcceptedByCurrentLawyer(item));
       return matchesQuery && matchesFilter;
     }).sort((first, second) => getOpportunityScore(second) - getOpportunityScore(first));
   }, [filter, listings, query]);
@@ -266,14 +275,14 @@ export default function CaseStore() {
                 <p className="text-xs font-black text-brand-gold">Lawyer Opportunities</p>
                 <h1 className="mt-3 text-3xl font-black leading-tight sm:text-4xl">فرص المحامين</h1>
                 <p className="mt-3 max-w-3xl text-sm font-bold leading-7 text-white/70">
-                  القضايا مرتبة حسب أفضل فرصة لك: القرب، ملاءمة التخصص، قوة الميزانية، وجاهزية ملف العميل.
+                  تعرض فقط القضايا المتاحة للقبول أو القضايا التي قبلتها أنت، مع إخفاء أي دعوى اختارها محامٍ آخر.
                 </p>
               </div>
               <div className="grid w-full gap-3 sm:grid-cols-4">
                 {[
-                  ['متاحة', stats.open, 'fa-folder-open'],
+                  ['متاحة للقبول', stats.open, 'fa-folder-open'],
                   ['بانتظارك', stats.unanswered, 'fa-hourglass-half'],
-                  ['مقترحة', stats.suggested, 'fa-wand-magic-sparkles'],
+                  ['مقبولة منك', stats.accepted, 'fa-circle-check'],
                   ['أفضل فرصة', `${stats.bestScore}%`, 'fa-ranking-star'],
                 ].map(([label, value, icon]) => (
                   <div key={String(label)} className="rounded-2xl bg-white/10 p-4">
@@ -344,7 +353,7 @@ export default function CaseStore() {
               ) : filteredListings.length === 0 ? (
                 <div className="rounded-2xl bg-slate-50 p-8 text-center">
                   <i className="fa-solid fa-folder-open mb-3 block text-3xl text-slate-300" />
-                  <p className="text-sm font-black text-slate-500">لا توجد قضايا مطابقة حالياً</p>
+                  <p className="text-sm font-black text-slate-500">لا توجد قضايا متاحة أو مقبولة منك حالياً</p>
                 </div>
               ) : (
                 filteredListings.map((item) => {
