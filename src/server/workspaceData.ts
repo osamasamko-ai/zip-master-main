@@ -1473,6 +1473,7 @@ export async function closeCaseWorkspace(userId: string, role: string, caseId: s
       client: { select: { id: true, name: true } },
       lawyer: { select: { id: true, name: true } },
       documents: true,
+      customFields: true,
     },
   });
 
@@ -1480,9 +1481,13 @@ export async function closeCaseWorkspace(userId: string, role: string, caseId: s
     throw new Error('القضية غير موجودة.');
   }
 
-  const canClose = role === 'admin' || (role === 'pro' && existingCase.lawyerId === userId);
+  const isConsultation = existingCase.matter === 'استشارة قانونية خاصة'
+    || existingCase.customFields.some((field) => field.label === 'نوع القضية' && field.value === 'استشارة');
+  const canClose = role === 'admin'
+    || (role === 'pro' && existingCase.lawyerId === userId)
+    || (role === 'user' && isConsultation && existingCase.clientId === userId);
   if (!canClose) {
-    throw new Error('إغلاق القضية متاح فقط للمحامي المسؤول أو الإدارة.');
+    throw new Error(isConsultation ? 'إنهاء الاستشارة متاح لصاحب الاستشارة أو المحامي المسؤول أو الإدارة.' : 'إغلاق القضية متاح فقط للمحامي المسؤول أو الإدارة.');
   }
 
   const remainingBalance = Math.max(0, Number(existingCase.totalAgreedFee || 0) - Number(existingCase.paidAmount || 0));
@@ -1490,12 +1495,12 @@ export async function closeCaseWorkspace(userId: string, role: string, caseId: s
     throw new Error('لا يمكن إغلاق الملف قبل توضيح أو سداد المبلغ المتبقي.');
   }
 
-  const pendingDocuments = existingCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
+  const pendingDocuments = isConsultation ? [] : existingCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
   if (pendingDocuments.length > 0) {
     throw new Error('لا يمكن إغلاق الملف قبل معالجة الوثائق المطلوبة.');
   }
 
-  const closeSummary = summary?.trim() || 'تم إغلاق الملف بعد اكتمال المتطلبات النهائية.';
+  const closeSummary = summary?.trim() || (isConsultation ? 'تم إنهاء محادثة الاستشارة بعد اكتمال الخلاصة.' : 'تم إغلاق الملف بعد اكتمال المتطلبات النهائية.');
 
   await prisma.$transaction(async (tx) => {
     await tx.case.update({
@@ -1510,7 +1515,7 @@ export async function closeCaseWorkspace(userId: string, role: string, caseId: s
       data: {
         caseId,
         dateLabel: 'اليوم',
-        title: 'إغلاق الملف',
+        title: isConsultation ? 'إنهاء الاستشارة' : 'إغلاق الملف',
         detail: closeSummary,
         type: 'system',
       },
@@ -1519,21 +1524,33 @@ export async function closeCaseWorkspace(userId: string, role: string, caseId: s
     await tx.caseAccessLog.create({
       data: {
         caseId,
-        userName: existingCase.lawyer.name || 'المحامي',
-        action: 'إغلاق الملف',
+        userName: role === 'user' ? existingCase.client.name || 'العميل' : existingCase.lawyer.name || 'المحامي',
+        action: isConsultation ? 'إنهاء الاستشارة' : 'إغلاق الملف',
         timeLabel: 'الآن',
       },
     });
 
-    await tx.notification.create({
-      data: {
-        userId: existingCase.clientId,
-        title: 'تم إغلاق الملف',
-        message: `تم إغلاق ${existingCase.title}. يمكنك تقييم التجربة من صفحة القضايا.`,
-        type: 'success',
-        link: '/cases',
-      },
-    });
+    if (role === 'user') {
+      await tx.notification.create({
+        data: {
+          userId: existingCase.lawyerId,
+          title: 'تم إنهاء استشارة',
+          message: `أنهى العميل ${existingCase.title} ويمكنه الآن تقييم التجربة.`,
+          type: 'success',
+          link: '/pro',
+        },
+      });
+    } else {
+      await tx.notification.create({
+        data: {
+          userId: existingCase.clientId,
+          title: isConsultation ? 'تم إنهاء الاستشارة' : 'تم إغلاق الملف',
+          message: `${isConsultation ? 'تم إنهاء' : 'تم إغلاق'} ${existingCase.title}. يمكنك تقييم التجربة من صفحة القضايا.`,
+          type: 'success',
+          link: '/cases',
+        },
+      });
+    }
   });
 
   return getCaseWorkspace(caseId);
@@ -1553,6 +1570,8 @@ export async function submitCaseReview(userId: string, caseId: string, rating: n
       clientId: true,
       lawyerId: true,
       status: true,
+      matter: true,
+      customFields: true,
     },
   });
 
@@ -1561,7 +1580,9 @@ export async function submitCaseReview(userId: string, caseId: string, rating: n
   }
 
   if (existingCase.status !== 'closed') {
-    throw new Error('يمكن تقييم المحامي بعد إغلاق الملف فقط.');
+    const isConsultation = existingCase.matter === 'استشارة قانونية خاصة'
+      || existingCase.customFields.some((field) => field.label === 'نوع القضية' && field.value === 'استشارة');
+    throw new Error(isConsultation ? 'يمكن تقييم المحامي بعد إنهاء محادثة الاستشارة.' : 'يمكن تقييم المحامي بعد إغلاق الملف فقط.');
   }
 
   const reviewText = `[case:${caseId}] ${(text?.trim() || `تقييم تجربة ${existingCase.title}`).slice(0, 800)}`;

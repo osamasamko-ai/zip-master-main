@@ -253,6 +253,10 @@ const getMessageTimeLabel = (message: CaseMessage) => {
 const isAgencyDocument = (doc: LegalDocument) =>
   doc.tags?.includes('agency') || doc.tags?.includes('power_of_attorney') || doc.name.includes('وكالة') || doc.name.includes('توكيل');
 
+const isConsultationCase = (legalCase: LegalCase) =>
+  legalCase.customFields.some((field) => field.label === 'نوع القضية' && field.value === 'استشارة')
+  || legalCase.matter === 'استشارة قانونية خاصة';
+
 const getLifecycleIndex = (legalCase: LegalCase) => {
   if (legalCase.status === 'closed') return 5;
   if (legalCase.progress >= 90) return 5;
@@ -915,8 +919,7 @@ const SummaryTab = ({
   const completedSteps = roadmapSteps.filter((step) => step.state === 'completed').length;
   const sortedTimeline = [...activeCase.timeline];
   const hasAgencyDocument = activeCase.documents.some(isAgencyDocument);
-  const isConsultation = activeCase.customFields.some((field) => field.label === 'نوع القضية' && field.value === 'استشارة')
-    || activeCase.matter === 'استشارة قانونية خاصة';
+  const isConsultation = isConsultationCase(activeCase);
   const nextSteps = isConsultation
     ? [
       'تم إنشاء قناة الاستشارة مع المحامي.',
@@ -1391,6 +1394,7 @@ const ResolutionTab = ({
   setActiveTab,
   sendMessage,
   userRole,
+  userId,
   isClosingCase,
   closeStatus,
   onOpenCloseModal,
@@ -1401,6 +1405,7 @@ const ResolutionTab = ({
   setActiveTab: (tab: WorkspaceTab) => void;
   sendMessage: (text?: string, optimisticId?: string) => void;
   userRole?: string;
+  userId?: string;
   isClosingCase: boolean;
   closeStatus: string;
   onOpenCloseModal: () => void;
@@ -1437,9 +1442,9 @@ const ResolutionTab = ({
     },
   ];
   const readyToClose = checklist.every((item) => item.done);
-  const canCloseDirectly = userRole === 'pro' || userRole === 'admin';
-  const isConsultation = activeCase.customFields.some((field) => field.label === 'نوع القضية' && field.value === 'استشارة')
-    || activeCase.matter === 'استشارة قانونية خاصة';
+  const canCloseDirectly = userRole === 'admin' || (userRole === 'pro' && !!userId && activeCase.lawyer.id === userId);
+  const isConsultation = isConsultationCase(activeCase);
+  const canClientEndConsultation = userRole === 'user' && isConsultation;
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50/30 p-5 custom-scrollbar">
@@ -1514,14 +1519,14 @@ const ResolutionTab = ({
                     فتح ملف جديد مع نفس المحامي
                   </button>
                 </>
-              ) : canCloseDirectly ? (
+              ) : canCloseDirectly || canClientEndConsultation ? (
                 <button
                   type="button"
                   onClick={onOpenCloseModal}
-                  disabled={!readyToClose || isClosingCase}
+                  disabled={(!readyToClose && !canClientEndConsultation) || isClosingCase}
                   className="rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/15 transition hover:bg-brand-dark disabled:cursor-not-allowed disabled:opacity-50"
                 >
-                  {isClosingCase ? 'جارٍ الإغلاق...' : `إغلاق ${isConsultation ? 'الاستشارة' : 'القضية'} الآن`}
+                  {isClosingCase ? 'جارٍ الإغلاق...' : canClientEndConsultation ? 'إنهاء الاستشارة وتقييم المحامي' : `إغلاق ${isConsultation ? 'الاستشارة' : 'القضية'} الآن`}
                 </button>
               ) : (
                 <button
@@ -1588,6 +1593,7 @@ export default function MyCases() {
 
   const [replyModalDoc, setReplyModalDoc] = useState<LegalDocument | null>(null);
   const [replyText, setReplyText] = useState('');
+  const [isSendingDocReply, setIsSendingDocReply] = useState(false);
   const [isCloseCaseModalOpen, setIsCloseCaseModalOpen] = useState(false);
   const [closeCaseSummary, setCloseCaseSummary] = useState('');
   const [isClosingCase, setIsClosingCase] = useState(false);
@@ -1733,6 +1739,7 @@ export default function MyCases() {
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [sidebarStatusFilter, setSidebarStatusFilter] = useState<SidebarFilter>('needs_action');
   const [isRecording, setIsRecording] = useState(false);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [isCreatingAgencyDocument, setIsCreatingAgencyDocument] = useState(false);
   const [isTogglingArchive, setIsTogglingArchive] = useState(false);
@@ -1937,8 +1944,13 @@ export default function MyCases() {
 
   const openCloseCaseModal = () => {
     if (!activeCase) return;
+    const isConsultation = isConsultationCase(activeCase);
     setCloseCaseStatus('');
-    setCloseCaseSummary(`تم إغلاق ${activeCase.title} بعد اكتمال المتطلبات النهائية.`);
+    setCloseCaseSummary(
+      isConsultation
+        ? `تم إنهاء الاستشارة "${activeCase.title}" بعد اكتمال المحادثة واستلام الخلاصة.`
+        : `تم إغلاق ${activeCase.title} بعد اكتمال المتطلبات النهائية.`
+    );
     setIsCloseCaseModalOpen(true);
   };
 
@@ -1947,6 +1959,7 @@ export default function MyCases() {
 
     setIsClosingCase(true);
     setCloseCaseStatus('جارٍ إغلاق الملف...');
+    const shouldOpenReviewAfterClose = user?.role === 'user' && isConsultationCase(activeCase);
     try {
       const response = await apiClient.closeWorkspaceCase(activeCase.id, closeCaseSummary);
       if (response.data) {
@@ -1957,6 +1970,9 @@ export default function MyCases() {
       setCloseCaseStatus(response.message || 'تم إغلاق الملف بنجاح.');
       setIsCloseCaseModalOpen(false);
       setActiveTab('resolution');
+      if (shouldOpenReviewAfterClose) {
+        openReviewModal();
+      }
     } catch (error: any) {
       setCloseCaseStatus(error.response?.data?.error || error.message || 'تعذر إغلاق الملف.');
     } finally {
@@ -2265,10 +2281,17 @@ export default function MyCases() {
 
       xhr.onload = () => {
         if (xhr.status >= 200 && xhr.status < 300) {
-          const result = JSON.parse(xhr.responseText);
-          if (result.data) {
-            setCases(prev => prev.map(c => c.id === activeCaseId ? result.data : c));
+          try {
+            const result = JSON.parse(xhr.responseText);
+            if (result.data) {
+              setCases(prev => prev.map(c => c.id === activeCaseId ? result.data : c));
+              return;
+            }
+          } catch (parseError) {
+            console.error('Failed to parse upload response', parseError);
           }
+          setCases(prev => prev.map(c => c.id === activeCaseId ? { ...c, documents: c.documents.filter(d => d.id !== tempId) } : c));
+          alert(`تم رفع "${file.name}" لكن تعذر تحديث واجهة الوثائق. حدّث الصفحة ثم حاول مجدداً إذا لم يظهر الملف.`);
           return;
         }
 
@@ -2379,8 +2402,9 @@ export default function MyCases() {
 
   const handleSendDocReply = useCallback(async () => {
     if (isReadOnlyView) return;
-    if (!replyText.trim() || !replyModalDoc || !activeCase) return;
+    if (isSendingDocReply || !replyText.trim() || !replyModalDoc || !activeCase) return;
 
+    setIsSendingDocReply(true);
     try {
       // Send the reply as a message to the lawyer
       const response = await apiClient.addCaseMessage(
@@ -2406,15 +2430,18 @@ export default function MyCases() {
     } catch (error) {
       console.error('Failed to send reply', error);
       alert('فشل إرسال الرد. يرجى المحاولة مرة أخرى.');
+    } finally {
+      setIsSendingDocReply(false);
     }
-  }, [isReadOnlyView, replyText, replyModalDoc, activeCase, replaceCaseInState, refreshCases]);
+  }, [isReadOnlyView, isSendingDocReply, replyText, replyModalDoc, activeCase, replaceCaseInState, refreshCases]);
 
   const sendMessage = useCallback(async (text: string = newMessage, optimisticId?: string) => {
     if (isReadOnlyView) return;
-    if (!text.trim() || !activeCase) return;
+    if (isSendingMessage || !text.trim() || !activeCase) return;
 
     const outgoingText = text.trim();
     const nextOptimisticId = optimisticId || `temp-message-${Date.now()}`;
+    setIsSendingMessage(true);
 
     if (!optimisticId) {
       appendOptimisticMessage(activeCase.id, {
@@ -2443,6 +2470,7 @@ export default function MyCases() {
       if (!optimisticId) {
         setNewMessage((current) => (current.trim().length ? current : outgoingText));
       }
+      setIsSendingMessage(false);
       return;
     }
 
@@ -2452,7 +2480,8 @@ export default function MyCases() {
       setIsLawyerTyping(false);
       // We could mock a reply here if we really wanted to, but typing is enough UX.
     }, 3000);
-  }, [activeCase, appendOptimisticMessage, isReadOnlyView, newMessage, refreshCases, replaceCaseInState, updateMessageDeliveryState]);
+    setIsSendingMessage(false);
+  }, [activeCase, appendOptimisticMessage, isReadOnlyView, isSendingMessage, newMessage, refreshCases, replaceCaseInState, updateMessageDeliveryState]);
 
   const visibleCases = useMemo(
     () => cases.filter((item) => (showArchived ? item.isArchived : !item.isArchived)),
@@ -2799,7 +2828,7 @@ export default function MyCases() {
               {!isReadOnlyView && (
                 <ActionButton variant="secondary" size="sm" onClick={() => setActiveTab('resolution')}>
                   <i className="fa-solid fa-circle-check"></i>
-                  الإغلاق
+                  {user?.role === 'user' ? 'طلب الإغلاق' : 'الإغلاق'}
                 </ActionButton>
               )}
               {!isReadOnlyView && (
@@ -3039,9 +3068,10 @@ export default function MyCases() {
                                     <button
                                       type="button"
                                       onClick={() => sendMessage(msg.text, String(msg.id))}
+                                      disabled={isSendingMessage}
                                       className="rounded-full bg-red-500/15 px-2.5 py-1 text-[10px] font-black text-red-100 transition hover:bg-red-500/25"
                                     >
-                                      فشل الإرسال - إعادة المحاولة
+                                      {isSendingMessage ? 'جارٍ إعادة الإرسال...' : 'فشل الإرسال - إعادة المحاولة'}
                                     </button>
                                   )}
                                 </div>
@@ -3145,9 +3175,11 @@ export default function MyCases() {
                             ) : (
                               <button
                                 onClick={() => sendMessage(newMessage)}
-                                className="w-12 h-12 bg-brand-navy text-white rounded-2xl hover:bg-brand-dark transition-all shrink-0 flex items-center justify-center shadow-lg shadow-brand-navy/30 scale-in-center"
+                                disabled={isSendingMessage}
+                                className="w-12 h-12 bg-brand-navy text-white rounded-2xl hover:bg-brand-dark transition-all shrink-0 flex items-center justify-center shadow-lg shadow-brand-navy/30 scale-in-center disabled:cursor-not-allowed disabled:opacity-60"
+                                title={isSendingMessage ? 'جارٍ إرسال الرسالة' : 'إرسال الرسالة'}
                               >
-                                <i className="fa-solid fa-paper-plane"></i>
+                                <i className={`fa-solid ${isSendingMessage ? 'fa-spinner fa-spin' : 'fa-paper-plane'}`}></i>
                               </button>
                             )}
                           </div>
@@ -3200,6 +3232,7 @@ export default function MyCases() {
                       setActiveTab={setActiveTab}
                       sendMessage={sendMessage}
                       userRole={user?.role}
+                      userId={user?.id}
                       isClosingCase={isClosingCase}
                       closeStatus={closeCaseStatus}
                       onOpenCloseModal={openCloseCaseModal}
@@ -3965,10 +3998,16 @@ export default function MyCases() {
                   <i className="fa-solid fa-times"></i>
                 </button>
                 <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">تأكيد الإغلاق</p>
-                  <h3 className="mt-1 text-xl font-black text-brand-dark">إغلاق الملف نهائياً</h3>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">
+                    {isConsultationCase(activeCase) ? 'إنهاء الاستشارة' : 'تأكيد الإغلاق'}
+                  </p>
+                  <h3 className="mt-1 text-xl font-black text-brand-dark">
+                    {isConsultationCase(activeCase) ? 'إغلاق محادثة الاستشارة' : 'إغلاق الملف نهائياً'}
+                  </h3>
                   <p className="mt-2 text-sm font-bold leading-7 text-slate-500">
-                    سيتم تحويل الحالة إلى مكتملة وإرسال إشعار للعميل. راجع المؤشرات قبل الاعتماد.
+                    {isConsultationCase(activeCase)
+                      ? 'سيتم اعتبار الاستشارة مكتملة، وبعدها يمكنك تقييم تجربة المحامي مباشرة.'
+                      : 'سيتم تحويل الحالة إلى مكتملة وإرسال إشعار للعميل. راجع المؤشرات قبل الاعتماد.'}
                   </p>
                 </div>
               </div>
@@ -4015,7 +4054,7 @@ export default function MyCases() {
                   disabled={isClosingCase}
                   className="flex-[1.5] rounded-2xl bg-brand-navy px-4 py-3 text-sm font-black text-white shadow-lg shadow-brand-navy/20 transition hover:bg-brand-dark disabled:opacity-50"
                 >
-                  {isClosingCase ? 'جارٍ الإغلاق...' : 'اعتماد الإغلاق'}
+                  {isClosingCase ? 'جارٍ الإغلاق...' : isConsultationCase(activeCase) ? 'إنهاء وفتح التقييم' : 'اعتماد الإغلاق'}
                 </button>
               </div>
             </motion.div>
@@ -4330,7 +4369,9 @@ export default function MyCases() {
 
               <div className="flex gap-3">
                 <button onClick={() => setReplyModalDoc(null)} className="flex-1 py-3 px-4 border border-slate-200 text-slate-500 rounded-xl font-black text-xs hover:bg-slate-50 transition">إلغاء</button>
-                <button onClick={handleSendDocReply} disabled={!replyText.trim()} className="flex-[2] py-3 px-4 bg-brand-navy text-white rounded-xl font-black text-xs shadow-lg shadow-brand-navy/20 hover:bg-brand-dark transition disabled:opacity-50">إرسال الرد</button>
+                <button onClick={handleSendDocReply} disabled={!replyText.trim() || isSendingDocReply} className="flex-[2] py-3 px-4 bg-brand-navy text-white rounded-xl font-black text-xs shadow-lg shadow-brand-navy/20 hover:bg-brand-dark transition disabled:opacity-50">
+                  {isSendingDocReply ? 'جارٍ الإرسال...' : 'إرسال الرد'}
+                </button>
               </div>
             </motion.div>
           </div>
