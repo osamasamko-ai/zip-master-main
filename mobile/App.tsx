@@ -254,7 +254,7 @@ function renderScreen(route: RouteKey, user: AuthUser, setRoute: (route: RouteKe
     case 'settings':
       return <SettingsScreen />;
     case 'intelligence':
-      return <IntelligenceScreen />;
+      return <IntelligenceScreen onOpen={setRoute} />;
     case 'pro':
       return <ProWorkspaceScreen />;
     case 'caseStore':
