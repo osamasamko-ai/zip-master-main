@@ -45,8 +45,20 @@ type WorkspaceCase = {
   id: string;
   title: string;
   statusText: string;
+  statusInsight?: {
+    label: string;
+    tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral' | 'active';
+    icon: string;
+    detail: string;
+  };
   progress: number;
   createdAt: Date;
+  lifecycle?: {
+    startedAt: string;
+    startedAtLabel: string;
+    ageMinutes: number;
+    ageLabel: string;
+  };
   unreadCount?: number;
   lawyer: {
     id?: string;
@@ -113,6 +125,28 @@ function formatTime(date: Date): string {
 
 function formatDate(date: Date): string {
   return new Date(date).toLocaleDateString('ar-IQ', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function getCaseAgeLabel(legalCase: WorkspaceCase): string {
+  const rawDate = legalCase.lifecycle?.startedAt || legalCase.createdAt;
+  const createdAt = new Date(rawDate);
+  if (Number.isNaN(createdAt.getTime())) return legalCase.lifecycle?.ageLabel || '';
+  const totalMinutes = Math.max(1, Math.floor((Date.now() - createdAt.getTime()) / 60_000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days.toLocaleString('ar-IQ')} يوم${hours ? ` و${hours.toLocaleString('ar-IQ')} ساعة` : ''}`;
+  if (hours > 0) return `${hours.toLocaleString('ar-IQ')} ساعة${minutes ? ` و${minutes.toLocaleString('ar-IQ')} دقيقة` : ''}`;
+  return `${minutes.toLocaleString('ar-IQ')} دقيقة`;
+}
+
+function getCaseInsightTone(tone?: WorkspaceCase['statusInsight']['tone']): string {
+  if (tone === 'danger') return 'bg-red-50 text-red-700';
+  if (tone === 'warning') return 'bg-amber-50 text-amber-700';
+  if (tone === 'success') return 'bg-emerald-50 text-emerald-700';
+  if (tone === 'info') return 'bg-blue-50 text-blue-700';
+  if (tone === 'active') return 'bg-brand-navy/5 text-brand-navy';
+  return 'bg-slate-100 text-slate-600';
 }
 
 function isSameDay(date1: Date, date2: Date): boolean {
@@ -1130,10 +1164,13 @@ export default function Messages() {
                                 </div>
                                 <div className="text-right">
                                   <p className="font-bold text-slate-700 truncate max-w-[100px]">{c.title}</p>
-                                  <p className="text-slate-400 mt-0.5">{formatDate(c.createdAt)}</p>
+                                  <p className="text-slate-400 mt-0.5">منذ {getCaseAgeLabel(c)}</p>
                                 </div>
                               </div>
-                              <span className="rounded-lg bg-brand-navy/5 px-2 py-1 font-black text-brand-navy">{c.statusText}</span>
+                              <span className={`flex items-center gap-1 rounded-lg px-2 py-1 font-black ${getCaseInsightTone(c.statusInsight?.tone)}`}>
+                                <i className={`fa-solid ${c.statusInsight?.icon || 'fa-circle-dot'} text-[8px]`}></i>
+                                {c.statusInsight?.label || c.statusText}
+                              </span>
                             </div>
                           ))}
                         </div>
@@ -1225,8 +1262,12 @@ export default function Messages() {
                               {selectedCase.title}
                             </span>
                           )}
+                          <span className={`flex items-center gap-1 rounded-full border border-slate-100 px-2 py-0.5 text-[9px] font-black ${getCaseInsightTone(selectedCase.statusInsight?.tone)}`}>
+                            <i className={`fa-solid ${selectedCase.statusInsight?.icon || 'fa-circle-dot'} text-[8px]`}></i>
+                            {selectedCase.statusInsight?.label || selectedCase.statusText}
+                          </span>
                           <span className="rounded-full bg-white border border-slate-100 px-2 py-0.5 text-[9px] font-black text-slate-400">
-                            {selectedCase.statusText}
+                            منذ {getCaseAgeLabel(selectedCase)}
                           </span>
                         </div>
                       </div>

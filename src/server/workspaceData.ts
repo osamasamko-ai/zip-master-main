@@ -21,6 +21,26 @@ function formatRelativeTime(date: Date) {
   return formatDateLabel(date);
 }
 
+function getCaseAgeInfo(createdAt: Date) {
+  const ageMs = Math.max(0, Date.now() - createdAt.getTime());
+  const totalMinutes = Math.floor(ageMs / 60_000);
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  const label = days > 0
+    ? `${days.toLocaleString('ar-IQ')} يوم${hours ? ` و${hours.toLocaleString('ar-IQ')} ساعة` : ''}`
+    : hours > 0
+      ? `${hours.toLocaleString('ar-IQ')} ساعة${minutes ? ` و${minutes.toLocaleString('ar-IQ')} دقيقة` : ''}`
+      : `${Math.max(1, minutes).toLocaleString('ar-IQ')} دقيقة`;
+
+  return {
+    startedAt: createdAt.toISOString(),
+    startedAtLabel: formatDateLabel(createdAt),
+    ageMinutes: totalMinutes,
+    ageLabel: label,
+  };
+}
+
 function formatCurrencyAmount(amount: number) {
   return `${amount.toLocaleString('en-US')} د.ع`;
 }
@@ -200,6 +220,42 @@ function mapCaseStatusText(status: string) {
   return 'قيد الانتظار';
 }
 
+function buildCaseStatusInsight(item: any, risk: ReturnType<typeof buildCaseRiskProfile>, sortedMessages: any[]) {
+  const pendingDocuments = item.documents.filter((doc: any) => doc.actionRequired || (doc.expiresAt && !doc.isSigned)).length;
+  const remainingBalance = Math.max(0, Number(item.totalAgreedFee || 0) - Number(item.paidAmount || 0));
+  const latestAwaitingMessage = [...sortedMessages].reverse().find((message: any) => message.awaitingResponse);
+  const readyToClose = item.status !== 'closed' && item.progress >= 80 && pendingDocuments === 0 && remainingBalance === 0;
+
+  if (item.status === 'closed') {
+    return { label: 'مغلقة ومؤرشفة للمتابعة', tone: 'success', icon: 'fa-circle-check', detail: 'اكتملت القضية ويمكن طلب تقييم التجربة.' };
+  }
+  if (risk.level === 'high') {
+    return { label: 'عالية الخطورة', tone: 'danger', icon: 'fa-shield-halved', detail: risk.nextAction };
+  }
+  if ((item.unreadCount || 0) > 0) {
+    return { label: 'بانتظار قراءة رسالة', tone: 'info', icon: 'fa-comments', detail: `${item.unreadCount.toLocaleString('ar-IQ')} رسائل غير مقروءة.` };
+  }
+  if (pendingDocuments > 0) {
+    return { label: 'تحتاج وثائق', tone: 'warning', icon: 'fa-file-circle-exclamation', detail: `${pendingDocuments.toLocaleString('ar-IQ')} وثائق تحتاج إجراء.` };
+  }
+  if (remainingBalance > 0) {
+    return { label: 'بانتظار تسوية مالية', tone: 'warning', icon: 'fa-wallet', detail: `${remainingBalance.toLocaleString('ar-IQ')} د.ع متبقية.` };
+  }
+  if (readyToClose) {
+    return { label: 'جاهزة للإغلاق', tone: 'success', icon: 'fa-lock', detail: 'كل المؤشرات الأساسية جاهزة للمراجعة النهائية.' };
+  }
+  if (latestAwaitingMessage) {
+    return { label: 'بانتظار رد', tone: 'neutral', icon: 'fa-clock', detail: 'توجد رسالة بانتظار متابعة.' };
+  }
+  if (item.status === 'review') {
+    return { label: 'قيد مراجعة المحامي', tone: 'warning', icon: 'fa-magnifying-glass-chart', detail: 'الملف في مرحلة التحقق والمراجعة.' };
+  }
+  if (item.status === 'active') {
+    return { label: 'نشطة ضمن التنفيذ', tone: 'active', icon: 'fa-route', detail: 'القضية تتحرك ضمن المسار التشغيلي.' };
+  }
+  return { label: 'بانتظار البداية', tone: 'info', icon: 'fa-hourglass-start', detail: 'الملف مفتوح وينتظر أول إجراء واضح.' };
+}
+
 function mapDocType(type: string): 'pdf' | 'image' | 'other' {
   if (type.toLowerCase().includes('pdf')) return 'pdf';
   if (['jpg', 'jpeg', 'png', 'image', 'صورة'].some((entry) => type.toLowerCase().includes(entry))) return 'image';
@@ -369,6 +425,8 @@ export function mapWorkspaceCase(item: any) {
 
   const smartAlerts = buildSmartCaseAlerts(item, sortedMessages);
   const risk = buildCaseRiskProfile(item, sortedMessages);
+  const statusInsight = buildCaseStatusInsight(item, risk, sortedMessages);
+  const lifecycle = getCaseAgeInfo(item.createdAt);
 
   return {
     client: item.client.name,
@@ -386,8 +444,10 @@ export function mapWorkspaceCase(item: any) {
     },
     status: mapCaseStatus(item.status),
     statusText: mapCaseStatusText(item.status),
+    statusInsight,
     progress: item.progress,
     createdAt: item.createdAt, // Changed to return Date object
+    lifecycle,
     unreadCount: item.unreadCount,
     smartAlerts,
     risk,

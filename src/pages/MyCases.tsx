@@ -95,8 +95,21 @@ interface LegalCase {
   lawyer: CaseLawyer;
   status: CaseStatus;
   statusText: string;
+  statusInsight?: {
+    label: string;
+    tone: 'success' | 'danger' | 'warning' | 'info' | 'neutral' | 'active';
+    icon: string;
+    detail: string;
+  };
   progress: number;
+  createdAt?: string;
   date: string;
+  lifecycle?: {
+    startedAt: string;
+    startedAtLabel: string;
+    ageMinutes: number;
+    ageLabel: string;
+  };
   customFields: CustomField[];
   folders: FileFolder[];
   documents: LegalDocument[];
@@ -227,6 +240,34 @@ const getCaseStatusTone = (status: CaseStatus) => {
   if (status === 'review') return 'bg-amber-50 text-amber-700 ring-amber-100';
   if (status === 'pending') return 'bg-blue-50 text-blue-700 ring-blue-100';
   return 'bg-brand-navy/5 text-brand-navy ring-brand-navy/10';
+};
+
+const getCaseInsightTone = (tone?: LegalCase['statusInsight']['tone']) => {
+  if (tone === 'danger') return 'bg-red-50 text-red-700 ring-red-100';
+  if (tone === 'warning') return 'bg-amber-50 text-amber-700 ring-amber-100';
+  if (tone === 'success') return 'bg-emerald-50 text-emerald-700 ring-emerald-100';
+  if (tone === 'info') return 'bg-blue-50 text-blue-700 ring-blue-100';
+  if (tone === 'active') return 'bg-brand-navy/5 text-brand-navy ring-brand-navy/10';
+  return 'bg-slate-100 text-slate-600 ring-slate-200';
+};
+
+const getCaseStartDate = (legalCase: LegalCase) => {
+  const rawDate = legalCase.lifecycle?.startedAt || legalCase.createdAt;
+  if (!rawDate) return null;
+  const date = new Date(rawDate);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatCaseAgeLabel = (legalCase: LegalCase, now = Date.now()) => {
+  const startedAt = getCaseStartDate(legalCase);
+  if (!startedAt) return legalCase.lifecycle?.ageLabel || '';
+  const totalMinutes = Math.max(1, Math.floor((now - startedAt.getTime()) / 60_000));
+  const days = Math.floor(totalMinutes / 1440);
+  const hours = Math.floor((totalMinutes % 1440) / 60);
+  const minutes = totalMinutes % 60;
+  if (days > 0) return `${days.toLocaleString('ar-IQ')} يوم${hours ? ` و${hours.toLocaleString('ar-IQ')} ساعة` : ''}`;
+  if (hours > 0) return `${hours.toLocaleString('ar-IQ')} ساعة${minutes ? ` و${minutes.toLocaleString('ar-IQ')} دقيقة` : ''}`;
+  return `${minutes.toLocaleString('ar-IQ')} دقيقة`;
 };
 
 const getCaseSignal = (legalCase: LegalCase) => {
@@ -362,14 +403,16 @@ const CaseSidebar = React.memo(({
   setActiveCaseId,
   showArchived,
   searchQuery,
-  statusFilter
+  statusFilter,
+  now
 }: {
   cases: LegalCase[],
   activeCaseId: string,
   setActiveCaseId: (id: string) => void,
   showArchived: boolean,
   searchQuery: string,
-  statusFilter: SidebarFilter
+  statusFilter: SidebarFilter,
+  now: number
 }) => {
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -421,6 +464,8 @@ const CaseSidebar = React.memo(({
           />
         ) : filtered.map((c) => {
           const signal = getCaseSignal(c);
+          const statusInsight = c.statusInsight || { label: c.statusText, tone: 'neutral' as const, icon: 'fa-circle-dot', detail: c.statusText };
+          const ageLabel = formatCaseAgeLabel(c, now);
           return (
             <motion.div
               layout
@@ -462,7 +507,11 @@ const CaseSidebar = React.memo(({
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col items-end gap-1.5">
-                  <span className={`rounded-full px-2.5 py-1 text-[9px] font-black ring-1 ${getCaseStatusTone(c.status)}`}>
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[9px] font-black ring-1 ${getCaseInsightTone(statusInsight.tone)}`}>
+                    <i className={`fa-solid ${statusInsight.icon}`}></i>
+                    {statusInsight.label}
+                  </span>
+                  <span className={`rounded-full px-2 py-1 text-[8px] font-black ring-1 ${getCaseStatusTone(c.status)}`}>
                     {c.statusText}
                   </span>
                   {c.isArchived && (
@@ -478,7 +527,10 @@ const CaseSidebar = React.memo(({
                   <i className={`fa-solid ${signal.icon}`}></i>
                   {signal.label}
                 </span>
-                <p className="text-[10px] font-black text-slate-400">{c.date}</p>
+                <p className="inline-flex items-center gap-1.5 text-[10px] font-black text-slate-400">
+                  <i className="fa-regular fa-clock"></i>
+                  منذ {ageLabel || c.lifecycle?.ageLabel || c.date}
+                </p>
               </div>
               <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-slate-100">
                 <div
@@ -1648,6 +1700,7 @@ export default function MyCases() {
   const readOnlySection = queryParams.get('section');
 
   const activeCase = useMemo(() => cases.find((c) => c.id === activeCaseId) || null, [cases, activeCaseId]);
+  const [caseTimerNow, setCaseTimerNow] = useState(() => Date.now());
 
   const [replyModalDoc, setReplyModalDoc] = useState<LegalDocument | null>(null);
   const [replyText, setReplyText] = useState('');
@@ -1975,6 +2028,11 @@ export default function MyCases() {
   useEffect(() => {
     setSelectedDocs(new Set());
   }, [activeCaseId]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setCaseTimerNow(Date.now()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -2640,6 +2698,8 @@ export default function MyCases() {
       { label: 'السداد', value: `${paidPercent}%`, icon: 'fa-wallet', tone: 'bg-brand-navy/5 text-brand-navy ring-brand-navy/10' },
     ];
   }, [activeCase]);
+  const activeCaseStatusInsight = activeCase?.statusInsight || (activeCase ? { label: activeCase.statusText, tone: 'neutral' as const, icon: 'fa-circle-dot', detail: activeCase.statusText } : null);
+  const activeCaseAgeLabel = activeCase ? formatCaseAgeLabel(activeCase, caseTimerNow) : '';
 
   const documentFilterCounts = useMemo(() => {
     const docs = activeCase?.documents || [];
@@ -2849,6 +2909,12 @@ export default function MyCases() {
               <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">القضية الحالية</p>
               <h3 className="mt-1 truncate text-lg font-black text-brand-dark">{activeCase.title}</h3>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-bold text-slate-500">
+                {activeCaseStatusInsight && (
+                  <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[10px] font-black ring-1 ${getCaseInsightTone(activeCaseStatusInsight.tone)}`}>
+                    <i className={`fa-solid ${activeCaseStatusInsight.icon}`}></i>
+                    {activeCaseStatusInsight.label}
+                  </span>
+                )}
                 <span className={`rounded-full px-3 py-1 text-[10px] font-black ring-1 ${getCaseStatusTone(activeCase.status)}`}>{activeCase.statusText}</span>
                 {isReadOnlyView && (
                   <span className="rounded-full bg-emerald-50 px-3 py-1 text-[10px] font-black text-emerald-700 ring-1 ring-emerald-100">
@@ -2856,6 +2922,17 @@ export default function MyCases() {
                   </span>
                 )}
                 <span>{activeCase.progress}% مكتمل</span>
+                <span className="h-1 w-1 rounded-full bg-slate-300"></span>
+                <span className="inline-flex items-center gap-1">
+                  <i className="fa-regular fa-clock"></i>
+                  بدأ منذ {activeCaseAgeLabel || activeCase.lifecycle?.ageLabel || activeCase.date}
+                </span>
+                {activeCase.lifecycle?.startedAtLabel && (
+                  <>
+                    <span className="h-1 w-1 rounded-full bg-slate-300"></span>
+                    <span>بداية الملف: {activeCase.lifecycle.startedAtLabel}</span>
+                  </>
+                )}
                 {latestTimelineEvent && (
                   <>
                     <span className="h-1 w-1 rounded-full bg-slate-300"></span>
@@ -3014,6 +3091,7 @@ export default function MyCases() {
               showArchived={showArchived}
               searchQuery={sidebarSearch}
               statusFilter={sidebarStatusFilter}
+              now={caseTimerNow}
             />
           </motion.div>
         )}
