@@ -1,7 +1,9 @@
 import { FontAwesome5, Ionicons } from '@expo/vector-icons';
-import React, { useMemo, useState } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -12,11 +14,18 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import { Role } from '../api/client';
+import { AuthUser, Role } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../theme/colors';
 
 type Mode = 'login' | 'register';
+type RecentAuthAccount = {
+  email: string;
+  name: string;
+  role?: string;
+  img?: string;
+  lastLoginAt: string;
+};
 
 const DEMO_ACCOUNTS = [
   { label: 'عميل', email: 'user@example.com', password: 'password123', icon: 'person-outline' as const },
@@ -24,12 +33,64 @@ const DEMO_ACCOUNTS = [
   { label: 'مدير', email: 'admin@example.com', password: 'password123', icon: 'shield-outline' as const },
 ];
 
+const RECENT_AUTH_ACCOUNTS_KEY = 'recentAuthAccounts';
+const REMEMBERED_EMAIL_KEY = 'rememberedEmail';
+
 function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
+function isProfessionalRole(role?: string | null) {
+  return role === 'pro' || role === 'lawyer';
+}
+
+function getRoleLabel(role?: string | null) {
+  if (role === 'admin') return 'مدير المنصة';
+  if (isProfessionalRole(role)) return 'محامي';
+  return 'عميل';
+}
+
+function getAccountInitials(account: RecentAuthAccount) {
+  const source = account.name || account.email;
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+}
+
+function toRecentAccount(user: AuthUser, fallbackEmail: string, fallbackName?: string): RecentAuthAccount {
+  return {
+    email: user.email || fallbackEmail,
+    name: user.name || fallbackName || user.email || fallbackEmail,
+    role: user.role,
+    img: user.img || user.avatar,
+    lastLoginAt: new Date().toISOString(),
+  };
+}
+
+async function readRecentAccounts() {
+  try {
+    const raw = await AsyncStorage.getItem(RECENT_AUTH_ACCOUNTS_KEY);
+    const parsed = JSON.parse(raw || '[]');
+    return Array.isArray(parsed) ? parsed.slice(0, 4) as RecentAuthAccount[] : [];
+  } catch {
+    return [];
+  }
+}
+
+async function writeRecentAccount(account: RecentAuthAccount) {
+  const current = await readRecentAccounts();
+  const next = [account, ...current.filter((item) => item.email !== account.email)].slice(0, 4);
+  await AsyncStorage.setItem(RECENT_AUTH_ACCOUNTS_KEY, JSON.stringify(next));
+  return next;
+}
+
 export function AuthScreen() {
   const { login, register, isLoading, error } = useAuth();
+  const passwordInputRef = useRef<TextInput | null>(null);
   const [mode, setMode] = useState<Mode>('login');
   const [role, setRole] = useState<Role>('user');
   const [name, setName] = useState('');
@@ -44,6 +105,19 @@ export function AuthScreen() {
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [documentId, setDocumentId] = useState('');
   const [verifyMessage, setVerifyMessage] = useState('');
+  const [recentAccounts, setRecentAccounts] = useState<RecentAuthAccount[]>([]);
+
+  useEffect(() => {
+    let mounted = true;
+    Promise.all([AsyncStorage.getItem(REMEMBERED_EMAIL_KEY), readRecentAccounts()]).then(([savedEmail, accounts]) => {
+      if (!mounted) return;
+      if (savedEmail) setEmail(savedEmail);
+      setRecentAccounts(accounts);
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const emailValue = normalizeEmail(email);
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
@@ -60,6 +134,41 @@ export function AuthScreen() {
   const canSubmit = isRegister
     ? name.trim().length > 1 && emailValid && passwordScore >= 2 && password === confirmPassword
     : emailValid && password.length > 0;
+  const authInsight = useMemo(() => {
+    if (isRegister) {
+      if (role === 'pro') {
+        return {
+          icon: 'briefcase-outline' as const,
+          title: 'مسار محامي ذكي',
+          text: 'بعد التسجيل ستدخل إلى مكتبي لإدارة القضايا، ويمكنك إكمال بيانات الترخيص لاحقاً.',
+          tone: 'blue' as const,
+        };
+      }
+      return {
+        icon: 'folder-open-outline' as const,
+        title: 'مسار عميل واضح',
+        text: 'سنجهز لك لوحة العميل للبحث عن محام، فتح قضية، أو متابعة الرسائل.',
+        tone: 'cyan' as const,
+      };
+    }
+
+    const matchedAccount = recentAccounts.find((account) => account.email === emailValue);
+    if (matchedAccount) {
+      return {
+        icon: 'time-outline' as const,
+        title: `مرحباً بعودتك يا ${matchedAccount.name.split(' ')[0] || matchedAccount.name}`,
+        text: `هذا حساب ${getRoleLabel(matchedAccount.role)} محفوظ على هذا الجهاز. أدخل كلمة المرور فقط.`,
+        tone: 'green' as const,
+      };
+    }
+
+    return {
+      icon: 'sparkles-outline' as const,
+      title: 'دخول ذكي',
+      text: 'اختر حساباً محفوظاً أو اكتب بريدك، وسنوجهك تلقائياً حسب دورك بعد الدخول.',
+      tone: 'gold' as const,
+    };
+  }, [emailValue, isRegister, recentAccounts, role]);
 
   const switchMode = (nextMode: Mode) => {
     setMode(nextMode);
@@ -73,6 +182,25 @@ export function AuthScreen() {
     setPassword(demo.password);
   };
 
+  const selectRecentAccount = async (account: RecentAuthAccount) => {
+    switchMode('login');
+    setEmail(account.email);
+    setPassword('');
+    await AsyncStorage.setItem(REMEMBERED_EMAIL_KEY, account.email);
+    requestAnimationFrame(() => passwordInputRef.current?.focus());
+  };
+
+  const forgetRecentAccount = async (emailToRemove: string) => {
+    const next = recentAccounts.filter((account) => account.email !== emailToRemove);
+    setRecentAccounts(next);
+    await AsyncStorage.setItem(RECENT_AUTH_ACCOUNTS_KEY, JSON.stringify(next));
+    if (emailValue === emailToRemove) {
+      setEmail('');
+      setPassword('');
+      await AsyncStorage.removeItem(REMEMBERED_EMAIL_KEY);
+    }
+  };
+
   const submit = async () => {
     setLocalError('');
     if (!canSubmit) {
@@ -81,11 +209,22 @@ export function AuthScreen() {
     }
 
     if (isRegister) {
-      await register(emailValue, password, name.trim(), role);
+      try {
+        const registeredUser = await register(emailValue, password, name.trim(), role);
+        setRecentAccounts(await writeRecentAccount(toRecentAccount(registeredUser, emailValue, name.trim())));
+      } catch (err) {
+        setLocalError(err instanceof Error ? err.message : 'تعذر إنشاء الحساب.');
+      }
       return;
     }
 
-    await login(emailValue, password);
+    try {
+      const loggedInUser = await login(emailValue, password);
+      setRecentAccounts(await writeRecentAccount(toRecentAccount(loggedInUser, emailValue)));
+      await AsyncStorage.setItem(REMEMBERED_EMAIL_KEY, loggedInUser.email || emailValue);
+    } catch (err) {
+      setLocalError(err instanceof Error ? err.message : 'تعذر تسجيل الدخول.');
+    }
   };
 
   const sendForgot = () => {
@@ -124,7 +263,53 @@ export function AuthScreen() {
             <Text style={styles.cardTitle}>{isRegister ? 'إنشاء حساب' : 'تسجيل الدخول'}</Text>
             <Text style={styles.cardNote}>{isRegister ? 'نحتاج فقط البيانات المهمة لفتح حسابك.' : 'استخدم بريدك وكلمة المرور للمتابعة.'}</Text>
 
+            <View
+              style={[
+                styles.insightCard,
+                authInsight.tone === 'green' ? styles.greenInsight : authInsight.tone === 'blue' ? styles.blueInsight : authInsight.tone === 'cyan' ? styles.cyanInsight : styles.goldInsight,
+              ]}
+            >
+              <View style={styles.insightIcon}>
+                <Ionicons name={authInsight.icon} size={18} color={colors.blue} />
+              </View>
+              <View style={styles.flex}>
+                <Text style={styles.insightTitle}>{authInsight.title}</Text>
+                <Text style={styles.insightText}>{authInsight.text}</Text>
+              </View>
+            </View>
+
             {(localError || error) ? <Message type="error" text={localError || error} /> : null}
+
+            {!isRegister && recentAccounts.length > 0 ? (
+              <View style={styles.recentBlock}>
+                <View style={styles.recentHeader}>
+                  <Text style={styles.recentHint}>مثل فيسبوك</Text>
+                  <Text style={styles.recentTitle}>العودة لحساب محفوظ</Text>
+                </View>
+                {recentAccounts.map((account) => (
+                  <View key={account.email} style={styles.recentCard}>
+                    <Pressable onPress={() => forgetRecentAccount(account.email)} style={styles.removeAccount} hitSlop={8}>
+                      <Ionicons name="close" size={15} color={colors.subtle} />
+                    </Pressable>
+                    <Pressable onPress={() => selectRecentAccount(account)} style={styles.recentMain}>
+                      {account.img ? (
+                        <Image source={{ uri: account.img }} style={styles.recentAvatar} />
+                      ) : (
+                        <View style={styles.recentAvatarFallback}>
+                          <Text style={styles.recentInitials}>{getAccountInitials(account)}</Text>
+                        </View>
+                      )}
+                      <View style={styles.flex}>
+                        <Text style={styles.recentName} numberOfLines={1}>{account.name}</Text>
+                        <Text style={styles.recentEmail} numberOfLines={1}>{account.email}</Text>
+                        <Text style={styles.recentRole}>{getRoleLabel(account.role)}</Text>
+                      </View>
+                    </Pressable>
+                  </View>
+                ))}
+                <Text style={styles.recentPrivacy}>نحفظ الحساب فقط على هذا الجهاز لتسريع الرجوع، وكلمة المرور لا يتم حفظها.</Text>
+              </View>
+            ) : null}
 
             {isRegister ? (
               <Field label="الاسم الكامل" value={name} onChangeText={setName} placeholder="اسمك الكامل" icon="person-outline" />
@@ -138,6 +323,7 @@ export function AuthScreen() {
               onChangeText={setPassword}
               placeholder="كلمة المرور"
               icon="lock-closed-outline"
+              inputRef={!isRegister ? passwordInputRef : undefined}
               secureTextEntry={!showPassword}
               actionIcon={showPassword ? 'eye-off-outline' : 'eye-outline'}
               onAction={() => setShowPassword((current) => !current)}
@@ -232,6 +418,7 @@ function Field({
   secureTextEntry,
   actionIcon,
   onAction,
+  inputRef,
   ltr,
 }: {
   label: string;
@@ -243,6 +430,7 @@ function Field({
   secureTextEntry?: boolean;
   actionIcon?: keyof typeof Ionicons.glyphMap;
   onAction?: () => void;
+  inputRef?: React.Ref<TextInput>;
   ltr?: boolean;
 }) {
   return (
@@ -252,10 +440,12 @@ function Field({
         <Ionicons name={icon} size={18} color={colors.subtle} />
         <TextInput
           autoCapitalize="none"
+          autoComplete={secureTextEntry ? 'password' : keyboardType === 'email-address' ? 'email' : undefined}
           keyboardType={keyboardType}
           onChangeText={onChangeText}
           placeholder={placeholder}
           placeholderTextColor={colors.subtle}
+          ref={inputRef}
           secureTextEntry={secureTextEntry}
           style={[styles.input, ltr && styles.inputLtr]}
           textAlign={ltr ? 'left' : 'right'}
@@ -381,6 +571,22 @@ const styles = StyleSheet.create({
   flex: {
     flex: 1,
   },
+  blueInsight: {
+    backgroundColor: colors.blueTint,
+    borderColor: 'rgba(58, 80, 107, 0.16)',
+  },
+  cyanInsight: {
+    backgroundColor: '#ecfeff',
+    borderColor: 'rgba(8, 145, 178, 0.18)',
+  },
+  goldInsight: {
+    backgroundColor: colors.goldTint,
+    borderColor: 'rgba(197, 160, 89, 0.24)',
+  },
+  greenInsight: {
+    backgroundColor: colors.greenTint,
+    borderColor: 'rgba(16, 185, 129, 0.2)',
+  },
   handle: {
     alignSelf: 'center',
     backgroundColor: colors.line,
@@ -415,6 +621,37 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row-reverse',
     paddingHorizontal: 11,
+  },
+  insightCard: {
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    gap: 10,
+    marginBottom: 12,
+    padding: 11,
+  },
+  insightIcon: {
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderRadius: 999,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  insightText: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginTop: 3,
+    textAlign: 'right',
+  },
+  insightTitle: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'right',
   },
   keyboard: {
     flex: 1,
@@ -502,6 +739,110 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '900',
+  },
+  recentAvatar: {
+    backgroundColor: colors.blueTint,
+    borderRadius: 12,
+    height: 48,
+    width: 48,
+  },
+  recentAvatarFallback: {
+    alignItems: 'center',
+    backgroundColor: colors.navySoft,
+    borderRadius: 12,
+    height: 48,
+    justifyContent: 'center',
+    width: 48,
+  },
+  recentBlock: {
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 10,
+  },
+  recentCard: {
+    backgroundColor: colors.paper,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  recentEmail: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 2,
+    textAlign: 'right',
+    writingDirection: 'ltr',
+  },
+  recentHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  recentHint: {
+    color: colors.subtle,
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  recentInitials: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  recentMain: {
+    alignItems: 'center',
+    flexDirection: 'row-reverse',
+    gap: 10,
+    minHeight: 68,
+    padding: 9,
+    paddingLeft: 42,
+  },
+  recentName: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  recentPrivacy: {
+    color: colors.muted,
+    fontSize: 10,
+    fontWeight: '800',
+    lineHeight: 17,
+    textAlign: 'right',
+  },
+  recentRole: {
+    alignSelf: 'flex-end',
+    backgroundColor: colors.blueTint,
+    borderRadius: 999,
+    color: colors.blue,
+    fontSize: 10,
+    fontWeight: '900',
+    marginTop: 5,
+    overflow: 'hidden',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  recentTitle: {
+    color: colors.blue,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  removeAccount: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 999,
+    height: 30,
+    justifyContent: 'center',
+    left: 8,
+    position: 'absolute',
+    top: 8,
+    width: 30,
+    zIndex: 2,
   },
   roleButton: {
     alignItems: 'center',

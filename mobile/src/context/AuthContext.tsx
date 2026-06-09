@@ -6,8 +6,8 @@ type AuthContextValue = {
   token: string | null;
   isLoading: boolean;
   error: string;
-  login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, name: string, role?: Role) => Promise<void>;
+  login: (email: string, password: string) => Promise<AuthUser>;
+  register: (email: string, password: string, name: string, role?: Role) => Promise<AuthUser>;
   logout: () => void;
 };
 
@@ -31,6 +31,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await apiClient.login(email, password);
       applySession(response.data.token, response.data.user);
+      return response.data.user;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Login failed';
       setError(message);
@@ -46,6 +47,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const response = await apiClient.register(email, password, name, role);
       applySession(response.data.token, response.data.user);
+      return response.data.user;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Registration failed';
       setError(message);
@@ -74,4 +76,3 @@ export function useAuth() {
   if (!context) throw new Error('useAuth must be used inside AuthProvider');
   return context;
 }
-
