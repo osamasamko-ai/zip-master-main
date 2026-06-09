@@ -1296,7 +1296,7 @@ async function startServer() {
     try {
       await ensureCaseMarketplaceTables();
       const currentUser = (req as any).user;
-      if (currentUser.role !== 'pro' && currentUser.role !== 'admin') {
+      if (currentUser.role !== 'pro' && currentUser.role !== 'lawyer' && currentUser.role !== 'admin') {
         return res.status(403).json({ error: 'هذه القائمة متاحة للمحامين فقط.' });
       }
 
@@ -1453,7 +1453,7 @@ async function startServer() {
     try {
       await ensureCaseMarketplaceTables();
       const currentUser = (req as any).user;
-      if (currentUser.role !== 'pro' && currentUser.role !== 'admin') {
+      if (currentUser.role !== 'pro' && currentUser.role !== 'lawyer' && currentUser.role !== 'admin') {
         return res.status(403).json({ error: 'قبول أو رفض الدعوى متاح للمحامين فقط.' });
       }
 
@@ -1943,7 +1943,7 @@ async function startServer() {
       const { caseId } = req.params;
       const currentUser = (req as any).user;
       const fileUrl = `/uploads/${req.file.filename}`;
-      const senderRole = currentUser.role === 'pro' || currentUser.role === 'admin' ? 'lawyer' : 'user';
+      const senderRole = currentUser.role === 'pro' || currentUser.role === 'lawyer' || currentUser.role === 'admin' ? 'lawyer' : 'user';
       const uploadedType = req.file.mimetype.includes('pdf')
         ? 'pdf'
         : req.file.mimetype.includes('image')
@@ -2068,7 +2068,7 @@ async function startServer() {
   app.post('/api/app/workspace/cases/:caseId/messages/:messageId/reaction', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
-      const viewerRole = currentUser.role === 'pro' || currentUser.role === 'admin' ? 'lawyer' : 'user';
+      const viewerRole = currentUser.role === 'pro' || currentUser.role === 'lawyer' || currentUser.role === 'admin' ? 'lawyer' : 'user';
       const reaction = typeof req.body.reaction === 'string' ? req.body.reaction : null;
       const caseData = await updateCaseMessageReaction(
         req.params.caseId,
@@ -3431,7 +3431,7 @@ ${additionalConditions}
         take: 20
       });
       const workspaceCases =
-        currentUser.role === 'pro' || currentUser.role === 'admin'
+        currentUser.role === 'pro' || currentUser.role === 'lawyer' || currentUser.role === 'admin'
           ? await getLawyerWorkspace(currentUser.userId)
           : await getClientWorkspace(currentUser.userId);
       const smartNotifications = workspaceCases

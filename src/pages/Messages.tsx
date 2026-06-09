@@ -237,7 +237,7 @@ export default function Messages() {
     }
   }, []);
 
-  const viewerRole: 'user' | 'lawyer' = useMemo(() => (user?.role === 'pro' || user?.role === 'admin' ? 'lawyer' : 'user'), [user]);
+  const viewerRole: 'user' | 'lawyer' = useMemo(() => (user?.role === 'pro' || user?.role === 'lawyer' || user?.role === 'admin' ? 'lawyer' : 'user'), [user]);
 
   const mergeCasesWithPendingMessages = useCallback((serverCases: WorkspaceCase[], localCases: WorkspaceCase[]) => {
     return serverCases.map((serverCase) => {

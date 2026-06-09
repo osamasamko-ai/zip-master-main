@@ -67,7 +67,7 @@ function RequireRole({
   }
 
   const normalizedRole = user.role === 'lawyer' ? 'pro' : user.role;
-  const normalizedAllowedRoles = allowedRoles.map((role) => (role === 'lawyer' ? 'pro' : role));
+  const normalizedAllowedRoles: AppRole[] = allowedRoles.map((role) => (role === 'lawyer' ? 'pro' : role));
 
   if (!normalizedAllowedRoles.includes(normalizedRole as AppRole)) {
     return <Navigate to={getDefaultRoute(user.role)} replace />;

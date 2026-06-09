@@ -81,7 +81,7 @@ export default function FeedPage() {
   const [toast, setToast] = useState('');
   const loadMoreRef = useRef<HTMLDivElement | null>(null);
 
-  const canCreatePost = user?.role === 'admin' || (user?.role === 'pro' && (user.verified || user.licenseStatus === 'verified'));
+  const canCreatePost = user?.role === 'admin' || ((user?.role === 'pro' || user?.role === 'lawyer') && (user.verified || user.licenseStatus === 'verified'));
 
   const topics = useMemo(
     () => Array.from(new Set(posts.map((post) => post.category))).filter(Boolean).slice(0, 8),

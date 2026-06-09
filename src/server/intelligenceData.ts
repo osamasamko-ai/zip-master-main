@@ -36,6 +36,8 @@ const makeAiBrief = (payload: {
     .filter(Boolean)
     .join('\n');
 
+const isProfessionalUser = (role?: string | null) => role === 'pro' || role === 'lawyer';
+
 const buildCaseRisk = (caseItem: any) => {
   const pendingDocs = caseItem.documents.filter((doc: any) => doc.actionRequired || (doc.expiresAt && !doc.isSigned));
   const pendingInvoices = caseItem.invoices.filter((invoice: any) => invoice.status !== 'paid');
@@ -224,8 +226,9 @@ export const getUserIntelligence = async (userId: string) => {
     .slice(0, 8)
     .map(([id, value]) => ({ id, label: value.label, count: value.count }));
 
-  const ownedCases = user?.role === 'pro' || user?.role === 'admin' ? lawyerCases : clientCases;
-  const allCases = user?.role === 'pro' || user?.role === 'admin' ? [...lawyerCases, ...clientCases] : clientCases;
+  const isProfessional = isProfessionalUser(user?.role);
+  const ownedCases = isProfessional || user?.role === 'admin' ? lawyerCases : clientCases;
+  const allCases = isProfessional || user?.role === 'admin' ? [...lawyerCases, ...clientCases] : clientCases;
   const pendingDocuments = allCases.flatMap((item) =>
     item.documents
       .filter((doc) => doc.actionRequired || (doc.expiresAt && !doc.isSigned))
@@ -235,7 +238,7 @@ export const getUserIntelligence = async (userId: string) => {
   const unreadCases = allCases.filter((item) => item.unreadCount > 0);
   const waitingReplies = allCases.filter((item) =>
     item.chatSessions.some((session) =>
-      session.messages.some((message) => message.awaitingResponse && message.senderRole !== (user?.role === 'pro' ? 'lawyer' : 'user')),
+      session.messages.some((message) => message.awaitingResponse && message.senderRole !== (isProfessional ? 'lawyer' : 'user')),
     ),
   );
   const closingReadyCases = allCases.filter((item) => {
@@ -252,9 +255,9 @@ export const getUserIntelligence = async (userId: string) => {
     !user?.img ? 'الصورة الشخصية' : null,
     !user?.phone ? 'رقم الهاتف' : null,
     !user?.location ? 'الموقع' : null,
-    user?.role === 'pro' && !user.lawyerProfile?.specialty ? 'التخصص' : null,
-    user?.role === 'pro' && !user.lawyerProfile?.consultationFee ? 'سعر الاستشارة' : null,
-    user?.role === 'pro' && !user.lawyerProfile?.bio ? 'نبذة المحامي' : null,
+    isProfessional && !user.lawyerProfile?.specialty ? 'التخصص' : null,
+    isProfessional && !user.lawyerProfile?.consultationFee ? 'سعر الاستشارة' : null,
+    isProfessional && !user.lawyerProfile?.bio ? 'نبذة المحامي' : null,
   ].filter(Boolean) as string[];
   const caseRisk = allCases
     .map(buildCaseRisk)
@@ -347,15 +350,15 @@ export const getUserIntelligence = async (userId: string) => {
       ? {
           id: 'waiting-reply',
           priority: 'medium',
-          title: user?.role === 'pro' ? 'عميل ينتظر ردك' : 'رسالة بانتظار متابعة',
+          title: isProfessional ? 'عميل ينتظر ردك' : 'رسالة بانتظار متابعة',
           description: `راجع ملف "${waitingReplies[0].title}" حتى لا تتأخر الخطوة التالية.`,
           action: 'راجع التوجيهات',
-          target: user?.role === 'pro' ? '/pro' : '/cases',
-          quickAction: { label: 'رد على هذه الرسالة', target: user?.role === 'pro' ? '/pro' : '/messages', icon: 'fa-reply' },
+          target: isProfessional ? '/pro' : '/cases',
+          quickAction: { label: 'رد على هذه الرسالة', target: isProfessional ? '/pro' : '/messages', icon: 'fa-reply' },
           icon: 'fa-reply',
           aiAction: 'جهز الرد',
           aiBrief: makeAiBrief({
-            title: user?.role === 'pro' ? 'عميل ينتظر ردك' : 'رسالة بانتظار متابعة',
+            title: isProfessional ? 'عميل ينتظر ردك' : 'رسالة بانتظار متابعة',
             context: `ملف "${waitingReplies[0].title}" يحتاج رداً حتى لا تتأخر الخطوة التالية.`,
             nextStep: 'اقترح رداً واضحاً ومهنياً حسب دوري في الملف.',
             expected: 'ملخص الوضع، رد قصير قابل للإرسال، ونقاط يجب التأكد منها قبل الإرسال.',

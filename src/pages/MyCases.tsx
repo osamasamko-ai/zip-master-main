@@ -1552,7 +1552,7 @@ const ResolutionTab = ({
     },
   ];
   const readyToClose = checklist.every((item) => item.done);
-  const canCloseDirectly = userRole === 'admin' || (userRole === 'pro' && !!userId && activeCase.lawyer.id === userId);
+  const canCloseDirectly = userRole === 'admin' || ((userRole === 'pro' || userRole === 'lawyer') && !!userId && activeCase.lawyer.id === userId);
   const isConsultation = isConsultationCase(activeCase);
   const canClientEndConsultation = userRole === 'user' && isConsultation;
 

@@ -1589,7 +1589,7 @@ export async function closeCaseWorkspace(userId: string, role: string, caseId: s
   const isConsultation = existingCase.matter === 'استشارة قانونية خاصة'
     || existingCase.customFields.some((field) => field.label === 'نوع القضية' && field.value === 'استشارة');
   const canClose = role === 'admin'
-    || (role === 'pro' && existingCase.lawyerId === userId)
+    || ((role === 'pro' || role === 'lawyer') && existingCase.lawyerId === userId)
     || (role === 'user' && isConsultation && existingCase.clientId === userId);
   if (!canClose) {
     throw new Error(isConsultation ? 'إنهاء الاستشارة متاح لصاحب الاستشارة أو المحامي المسؤول أو الإدارة.' : 'إغلاق القضية متاح فقط للمحامي المسؤول أو الإدارة.');

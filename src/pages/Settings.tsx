@@ -326,7 +326,7 @@ export default function Settings() {
     load();
   }, []);
 
-  const isProfessionalAccount = user?.role === 'pro' || user?.role === 'admin';
+  const isProfessionalAccount = user?.role === 'pro' || user?.role === 'lawyer' || user?.role === 'admin';
 
   const sections = useMemo(
     () => [
