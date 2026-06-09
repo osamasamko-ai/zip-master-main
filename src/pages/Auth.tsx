@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence, Variants, motion } from 'framer-motion';
 import { Role, useAuth } from '../context/AuthContext';
@@ -28,9 +28,53 @@ const PASSWORD_HINTS = [
 ] as const;
 
 type PasswordRequirementKey = (typeof PASSWORD_HINTS)[number]['key'];
+type RecentAuthAccount = {
+  email: string;
+  name: string;
+  role?: string;
+  img?: string;
+  lastLoginAt: string;
+};
 
 const isProfessionalRole = (role?: string | null) => role === 'pro' || role === 'lawyer';
 const routeForRole = (role?: string | null) => role === 'admin' ? '/admin' : isProfessionalRole(role) ? '/pro' : '/user';
+const RECENT_AUTH_ACCOUNTS_KEY = 'recentAuthAccounts';
+
+function getRoleLabel(role?: string | null) {
+  if (role === 'admin') return 'مدير المنصة';
+  if (isProfessionalRole(role)) return 'محامي';
+  return 'عميل';
+}
+
+function getAccountInitials(account: RecentAuthAccount) {
+  const source = account.name || account.email;
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0])
+    .join('')
+    .toUpperCase();
+}
+
+function readRecentAccounts(): RecentAuthAccount[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(RECENT_AUTH_ACCOUNTS_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed.slice(0, 4) : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentAccount(account: RecentAuthAccount) {
+  if (typeof window === 'undefined') return;
+  const next = [
+    account,
+    ...readRecentAccounts().filter((item) => item.email !== account.email),
+  ].slice(0, 4);
+  window.localStorage.setItem(RECENT_AUTH_ACCOUNTS_KEY, JSON.stringify(next));
+}
 
 const authPanelVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
@@ -63,6 +107,8 @@ export default function Auth() {
   const [documentIdInput, setDocumentIdInput] = useState('');
   const [forgotPasswordMessage, setForgotPasswordMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [authUtilityTab, setAuthUtilityTab] = useState<'account' | 'verify'>('account');
+  const [recentAccounts, setRecentAccounts] = useState<RecentAuthAccount[]>([]);
+  const passwordInputRef = useRef<HTMLInputElement | null>(null);
   const { login, register } = useAuth();
   const navigate = useNavigate();
 
@@ -72,6 +118,7 @@ export default function Auth() {
       setEmail(savedEmail);
       setRememberMe(true);
     }
+    setRecentAccounts(readRecentAccounts());
   }, []);
 
   const isRegisterMode = authMode === 'register';
@@ -156,6 +203,41 @@ export default function Auth() {
   const destinationPreview = isRegisterMode
     ? selectedRole === 'pro' ? 'سيتم توجيهك إلى لوحة المحامي بعد إنشاء الحساب.' : 'سيتم توجيهك إلى لوحة العميل بعد إنشاء الحساب.'
     : 'سيتم توجيهك تلقائياً إلى لوحة التحكم المناسبة لحسابك.';
+  const smartAuthInsight = useMemo(() => {
+    if (isRegisterMode) {
+      if (selectedRole === 'pro') {
+        return {
+          icon: 'fa-user-tie',
+          title: 'مسار محامي ذكي',
+          text: 'بعد التسجيل ستدخل إلى مكتبي لإدارة القضايا، ثم يمكنك إكمال بيانات الترخيص لرفع الثقة والظهور.',
+          tone: 'bg-brand-navy/5 text-brand-navy border-brand-navy/10',
+        };
+      }
+      return {
+        icon: 'fa-folder-open',
+        title: 'مسار عميل واضح',
+        text: 'سنبدأ بلوحة العميل، ومنها يمكنك البحث عن محام، فتح قضية، أو متابعة رسائلك.',
+        tone: 'bg-blue-50 text-blue-700 border-blue-100',
+      };
+    }
+
+    const matchedAccount = recentAccounts.find((account) => account.email === emailPreview);
+    if (matchedAccount) {
+      return {
+        icon: 'fa-clock-rotate-left',
+        title: `مرحباً بعودتك يا ${matchedAccount.name.split(' ')[0] || matchedAccount.name}`,
+        text: `هذا حساب ${getRoleLabel(matchedAccount.role)} محفوظ على هذا الجهاز. أدخل كلمة المرور فقط للمتابعة.`,
+        tone: 'bg-emerald-50 text-emerald-700 border-emerald-100',
+      };
+    }
+
+    return {
+      icon: 'fa-wand-magic-sparkles',
+      title: 'دخول ذكي',
+      text: 'اكتب بريدك، وسنحدد وجهتك تلقائياً بعد الدخول: عميل، محامي، أو إدارة.',
+      tone: 'bg-brand-gold/10 text-brand-dark border-brand-gold/20',
+    };
+  }, [emailPreview, isRegisterMode, recentAccounts, selectedRole]);
 
   const getFieldError = (fieldName: string) => {
     if (!error) return false;
@@ -194,6 +276,14 @@ export default function Auth() {
 
     try {
       const loggedInUser = await login(normalizeEmail(email), password);
+      writeRecentAccount({
+        email: loggedInUser.email || normalizeEmail(email),
+        name: loggedInUser.name || normalizeEmail(email),
+        role: loggedInUser.role,
+        img: loggedInUser.img || loggedInUser.avatar,
+        lastLoginAt: new Date().toISOString(),
+      });
+      setRecentAccounts(readRecentAccounts());
       navigate(routeForRole(loggedInUser.role));
     } catch (err: any) {
       setError(err.message || 'Login failed');
@@ -208,6 +298,27 @@ export default function Auth() {
     setEmail(demo.email);
     setPassword(demo.password);
     setError(null);
+  };
+
+  const handleRecentAccountSelect = (account: RecentAuthAccount) => {
+    switchMode('login');
+    setAuthUtilityTab('account');
+    setEmail(account.email);
+    setPassword('');
+    setRememberMe(true);
+    window.localStorage.setItem('rememberedEmail', account.email);
+    window.setTimeout(() => passwordInputRef.current?.focus(), 50);
+  };
+
+  const forgetRecentAccount = (emailToRemove: string) => {
+    const next = recentAccounts.filter((account) => account.email !== emailToRemove);
+    setRecentAccounts(next);
+    window.localStorage.setItem(RECENT_AUTH_ACCOUNTS_KEY, JSON.stringify(next));
+    if (normalizeEmail(email) === emailToRemove) {
+      setEmail('');
+      setPassword('');
+      window.localStorage.removeItem('rememberedEmail');
+    }
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -225,6 +336,14 @@ export default function Auth() {
 
     try {
       const registeredUser = await register(normalizeEmail(email), password, name.trim(), selectedRole);
+      writeRecentAccount({
+        email: registeredUser.email || normalizeEmail(email),
+        name: registeredUser.name || name.trim(),
+        role: registeredUser.role,
+        img: registeredUser.img || registeredUser.avatar,
+        lastLoginAt: new Date().toISOString(),
+      });
+      setRecentAccounts(readRecentAccounts());
       resetRegisterFields();
       navigate(routeForRole(registeredUser.role));
     } catch (err: any) {
@@ -453,6 +572,26 @@ export default function Auth() {
               </div>
 
               {authUtilityTab === 'account' && (
+                <motion.div
+                  key={smartAuthInsight.title}
+                  variants={authPanelVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className={`mb-5 rounded-[1.35rem] border px-4 py-3 text-right ${smartAuthInsight.tone}`}
+                >
+                  <div className="flex flex-row-reverse items-start gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/80 shadow-sm">
+                      <i className={`fa-solid ${smartAuthInsight.icon}`} />
+                    </span>
+                    <div>
+                      <p className="text-sm font-black">{smartAuthInsight.title}</p>
+                      <p className="mt-1 text-xs font-bold leading-6 opacity-80">{smartAuthInsight.text}</p>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {authUtilityTab === 'account' && (
                 <AnimatePresence mode="wait">
                 {error && (
                   <motion.div
@@ -579,6 +718,7 @@ export default function Auth() {
                             value={name}
                             onChange={(e) => setName(e.target.value)}
                             onBlur={() => markFieldTouched('name')}
+                            autoComplete="name"
                             required
                             className={`w-full rounded-[1.2rem] border px-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('name')
                               ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
@@ -602,6 +742,7 @@ export default function Auth() {
                             value={email}
                             onChange={(e) => handleEmailChange(e.target.value)}
                             onBlur={() => markFieldTouched('email')}
+                            autoComplete="email"
                             required
                             dir="ltr"
                             className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('email')
@@ -631,6 +772,7 @@ export default function Auth() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                             onBlur={() => markFieldTouched('password')}
+                            autoComplete="new-password"
                             required
                             className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('password')
                               ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
@@ -693,6 +835,7 @@ export default function Auth() {
                             value={confirmPassword}
                             onChange={(e) => setConfirmPassword(e.target.value)}
                             onBlur={() => markFieldTouched('confirmPassword')}
+                            autoComplete="new-password"
                             required
                             className={`w-full rounded-[1.2rem] border pl-24 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('confirmPassword') || passwordsMismatch
                               ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
@@ -822,6 +965,59 @@ export default function Auth() {
                       </p>
                     </div>
 
+                    {recentAccounts.length > 0 && (
+                      <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+                        <div className="mb-3 flex items-center justify-between gap-3">
+                          <span className="text-[10px] font-black text-slate-400">مثل فيسبوك</span>
+                          <span className="text-[10px] font-black text-brand-navy">العودة لحساب محفوظ</span>
+                        </div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {recentAccounts.map((account) => (
+                            <div
+                              key={account.email}
+                              className="group relative rounded-[1.15rem] border border-slate-200 bg-slate-50/80 p-2 transition hover:border-brand-navy/25 hover:bg-white hover:shadow-sm"
+                            >
+                              <button
+                                type="button"
+                                onClick={() => forgetRecentAccount(account.email)}
+                                className="absolute left-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-300 shadow-sm transition hover:bg-rose-50 hover:text-rose-500"
+                                aria-label={`إزالة ${account.name} من الحسابات المحفوظة`}
+                              >
+                                <i className="fa-solid fa-xmark text-xs" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleRecentAccountSelect(account)}
+                                className="flex w-full flex-row-reverse items-center gap-3 rounded-xl px-2 py-2 text-right"
+                              >
+                                {account.img ? (
+                                  <img
+                                    src={account.img}
+                                    alt=""
+                                    className="h-12 w-12 shrink-0 rounded-2xl object-cover ring-2 ring-white"
+                                  />
+                                ) : (
+                                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-brand-navy text-sm font-black text-white ring-2 ring-white">
+                                    {getAccountInitials(account)}
+                                  </span>
+                                )}
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-sm font-black text-slate-800">{account.name}</span>
+                                  <span className="mt-0.5 block truncate text-[11px] font-bold text-slate-500" dir="ltr">{account.email}</span>
+                                  <span className="mt-1 inline-flex rounded-full bg-brand-navy/5 px-2 py-1 text-[10px] font-black text-brand-navy">
+                                    {getRoleLabel(account.role)}
+                                  </span>
+                                </span>
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <p className="mt-3 text-right text-[11px] font-bold leading-6 text-slate-500">
+                          نحفظ الحساب فقط على هذا الجهاز لتسريع الرجوع، وكلمة المرور لا يتم حفظها.
+                        </p>
+                      </div>
+                    )}
+
                     <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-[10px] font-black text-slate-400">للتجربة السريعة</span>
@@ -853,6 +1049,7 @@ export default function Auth() {
                           value={email}
                           onChange={(e) => handleEmailChange(e.target.value)}
                           onBlur={() => markFieldTouched('email')}
+                          autoComplete="email"
                           required
                           dir="ltr"
                           className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('email')
@@ -877,11 +1074,13 @@ export default function Auth() {
                       </label>
                       <div className="relative">
                         <input
+                          ref={passwordInputRef}
                           type={showPassword ? 'text' : 'password'}
                           placeholder="••••••••"
                           value={password}
                           onChange={(e) => setPassword(e.target.value)}
                           onBlur={() => markFieldTouched('password')}
+                          autoComplete="current-password"
                           required
                           className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('password')
                             ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
