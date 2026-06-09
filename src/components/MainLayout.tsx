@@ -66,6 +66,8 @@ type NavItem = {
   visible?: boolean;
 };
 
+const isProfessionalRole = (role?: string | null) => role === 'pro' || role === 'lawyer';
+
 const ROUTE_MEMORY_KEY = 'qistas_route_memory_v2';
 
 const normalizeCommandText = (value: string) =>
@@ -327,7 +329,7 @@ export default function MainLayout() {
   }, [location.pathname, pathMap]);
 
   const ownProfilePath = user?.id ? `/profile/${user.id}` : '/settings';
-  const ownProfileLabel = user?.role === 'pro' ? 'ملفي العام' : 'الملف الشخصي';
+  const ownProfileLabel = isProfessionalRole(user?.role) ? 'ملفي العام' : 'الملف الشخصي';
 
   const prefetchRoute = (path?: string) => {
     if (!path) return;
@@ -398,8 +400,8 @@ export default function MainLayout() {
         { name: 'المكتبة', icon: 'fa-book-open', path: '/legal' },
         { name: 'المساعد', icon: 'fa-robot', path: '/aichat' },
         { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },
-        { name: 'مكتبي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
-        { name: 'فرص', icon: 'fa-ranking-star', path: '/case-store', visible: user?.role === 'pro' || user?.role === 'admin' },
+        { name: 'مكتبي', icon: 'fa-briefcase', path: '/pro', visible: isProfessionalRole(user?.role) || user?.role === 'admin' },
+        { name: 'فرص', icon: 'fa-ranking-star', path: '/case-store', visible: isProfessionalRole(user?.role) || user?.role === 'admin' },
         { name: 'تحكم', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
       ].filter((item) => item.visible !== false),
     [user?.role]
@@ -424,7 +426,7 @@ export default function MainLayout() {
     if (user?.role === 'admin') {
       items.push({ id: 'a1', type: 'إدارة', title: 'الإدارة', subtitle: 'إدارة النظام والمستخدمين', icon: 'fa-server', path: '/admin' });
     }
-    if (user?.role === 'pro') {
+    if (isProfessionalRole(user?.role)) {
       items.push({ id: 'p1', type: 'احترافي', title: 'المكتب', subtitle: 'إدارة القضايا والعملاء', icon: 'fa-briefcase', path: '/pro' });
       items.push({ id: 'p2', type: 'احترافي', title: 'فرص المحامين', subtitle: 'القضايا المرتبة حسب أفضل فرصة لك', icon: 'fa-ranking-star', path: '/case-store' });
     }
@@ -662,7 +664,7 @@ export default function MainLayout() {
 
   const primaryNavItems = useMemo(() => {
     const priorityPaths = ['/user', '/action-plan', '/cases', '/lawyers'];
-    if (user?.role === 'pro' || user?.role === 'admin') {
+    if (isProfessionalRole(user?.role) || user?.role === 'admin') {
       priorityPaths.push('/pro', '/case-store');
     }
     if (user?.role === 'admin') {

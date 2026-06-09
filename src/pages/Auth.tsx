@@ -29,6 +29,9 @@ const PASSWORD_HINTS = [
 
 type PasswordRequirementKey = (typeof PASSWORD_HINTS)[number]['key'];
 
+const isProfessionalRole = (role?: string | null) => role === 'pro' || role === 'lawyer';
+const routeForRole = (role?: string | null) => role === 'admin' ? '/admin' : isProfessionalRole(role) ? '/pro' : '/user';
+
 const authPanelVariants: Variants = {
   hidden: { opacity: 0, y: 16 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.35, ease: [0.16, 1, 0.3, 1] } },
@@ -191,7 +194,7 @@ export default function Auth() {
 
     try {
       const loggedInUser = await login(normalizeEmail(email), password);
-      navigate(loggedInUser.role === 'admin' ? '/admin' : loggedInUser.role === 'pro' ? '/pro' : '/user');
+      navigate(routeForRole(loggedInUser.role));
     } catch (err: any) {
       setError(err.message || 'Login failed');
     } finally {
@@ -223,7 +226,7 @@ export default function Auth() {
     try {
       const registeredUser = await register(normalizeEmail(email), password, name.trim(), selectedRole);
       resetRegisterFields();
-      navigate(registeredUser.role === 'admin' ? '/admin' : registeredUser.role === 'pro' ? '/pro' : '/user');
+      navigate(routeForRole(registeredUser.role));
     } catch (err: any) {
       setError(err.message || 'Registration failed');
     } finally {

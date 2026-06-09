@@ -31,9 +31,15 @@ const CaseStore = lazy(() => import('./pages/CaseStore'));
 const NotFound = lazy(() => import('./pages/NotFound'));
 const Verify = lazy(() => import('./pages/Verify'));
 
-function getDefaultRoute(role: 'user' | 'pro' | 'admin' | null) {
+type AppRole = 'user' | 'pro' | 'lawyer' | 'admin';
+
+function isProfessionalRole(role?: string | null) {
+  return role === 'pro' || role === 'lawyer';
+}
+
+function getDefaultRoute(role: AppRole | null) {
   if (role === 'admin') return '/admin';
-  if (role === 'pro') return '/pro';
+  if (isProfessionalRole(role)) return '/pro';
   return '/user';
 }
 
@@ -52,7 +58,7 @@ function RequireRole({
   allowedRoles,
 }: {
   children: React.ReactElement;
-  allowedRoles: Array<'user' | 'pro' | 'admin'>;
+  allowedRoles: AppRole[];
 }) {
   const { user } = useAuth();
 
@@ -60,7 +66,10 @@ function RequireRole({
     return <Navigate to="/auth" replace />;
   }
 
-  if (!allowedRoles.includes(user.role as 'user' | 'pro' | 'admin')) {
+  const normalizedRole = user.role === 'lawyer' ? 'pro' : user.role;
+  const normalizedAllowedRoles = allowedRoles.map((role) => (role === 'lawyer' ? 'pro' : role));
+
+  if (!normalizedAllowedRoles.includes(normalizedRole as AppRole)) {
     return <Navigate to={getDefaultRoute(user.role)} replace />;
   }
 

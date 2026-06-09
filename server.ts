@@ -559,7 +559,7 @@ async function startServer() {
   app.post('/api/auth/register', async (req, res) => {
     try {
       const { email, password, name, role = 'user' } = req.body;
-      const requestedRole = role as 'user' | 'pro' | 'admin';
+      const requestedRole = role === 'lawyer' ? 'pro' : role as 'user' | 'pro' | 'admin';
       const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
       const normalizedName = typeof name === 'string' ? name.trim() : '';
 
@@ -1232,7 +1232,7 @@ async function startServer() {
   app.get('/api/app/workspace/cases', authenticateToken, async (req, res) => {
     try {
       const currentUser = (req as any).user;
-      const data = currentUser.role === 'pro' || currentUser.role === 'admin'
+      const data = currentUser.role === 'pro' || currentUser.role === 'lawyer' || currentUser.role === 'admin'
         ? await getLawyerWorkspace(currentUser.userId)
         : await getClientWorkspace(currentUser.userId);
       res.json({ data });
@@ -2037,7 +2037,7 @@ async function startServer() {
     try {
       const currentUser = (req as any).user;
       // Derive the role from the token rather than the body for security
-      const senderRole = currentUser.role === 'pro' ? 'lawyer' : 'user';
+      const senderRole = currentUser.role === 'pro' || currentUser.role === 'lawyer' ? 'lawyer' : 'user';
       const { text } = req.body;
       const caseData = await addCaseMessage(req.params.id, currentUser.userId, text, senderRole);
 
