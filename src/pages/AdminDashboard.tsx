@@ -266,6 +266,15 @@ type AdminMetrics = {
   suspiciousEvents: number;
   openEscalations: number;
   complianceFlags: number;
+  aiHealth?: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    severity: 'high' | 'medium' | 'low';
+    action: string;
+    tab: AdminTab;
+    icon: string;
+  }>;
 };
 
 type AdminIntelligence = {
@@ -1727,6 +1736,27 @@ export default function AdminDashboard() {
                     ? `${escalatedTicketCount} تذاكر مصعدة تحتاج متابعة.`
                     : 'لا توجد أولوية حرجة ظاهرة حالياً.'}
               </p>
+              {(metrics?.aiHealth?.length ?? 0) > 0 && (
+                <div className="mt-4 space-y-2">
+                  {metrics?.aiHealth?.slice(0, 3).map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => setActiveTab(item.tab)}
+                      className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-right transition hover:bg-white/15"
+                    >
+                      <span className={`rounded-full px-2 py-1 text-[9px] font-black ${item.severity === 'high' ? 'bg-red-400/20 text-red-100' : item.severity === 'medium' ? 'bg-amber-400/20 text-amber-100' : 'bg-blue-400/20 text-blue-100'}`}>
+                        {item.action}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-black text-white">{item.title}</p>
+                        <p className="mt-0.5 truncate text-[10px] font-bold text-white/60">{item.detail}</p>
+                      </div>
+                      <i className={`fa-solid ${item.icon} text-brand-gold`}></i>
+                    </button>
+                  ))}
+                </div>
+              )}
               <div className="mt-4 grid grid-cols-2 gap-2">
                 <button
                   type="button"

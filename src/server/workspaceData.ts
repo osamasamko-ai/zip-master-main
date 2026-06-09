@@ -143,6 +143,49 @@ function buildSmartCaseAlerts(item: any, sortedMessages: any[]) {
   return alerts.sort((left, right) => severityRank[right.severity] - severityRank[left.severity]).slice(0, 5);
 }
 
+function buildCaseRiskProfile(item: any, sortedMessages: any[]) {
+  const pendingDocuments = item.documents.filter((doc: any) => doc.actionRequired || (doc.expiresAt && !doc.isSigned));
+  const pendingInvoices = item.invoices.filter((invoice: any) => invoice.status !== 'paid');
+  const remainingBalance = Math.max(0, Number(item.totalAgreedFee || 0) - Number(item.paidAmount || 0));
+  const latestAwaitingMessage = [...sortedMessages].reverse().find((message: any) => message.awaitingResponse);
+  const waitingHours = latestAwaitingMessage ? Math.round(hoursSince(latestAwaitingMessage.createdAt)) : 0;
+
+  const score = item.status === 'closed'
+    ? 0
+    : Math.min(
+        100,
+        (pendingDocuments.length ? Math.min(35, pendingDocuments.length * 12) : 0) +
+          (item.unreadCount ? Math.min(20, item.unreadCount * 5) : 0) +
+          (pendingInvoices.length || remainingBalance > 0 ? 15 : 0) +
+          (item.documents.length === 0 ? 14 : 0) +
+          (waitingHours >= 24 ? 16 : waitingHours >= 8 ? 8 : 0) +
+          (item.progress < 25 ? 8 : 0),
+      );
+
+  const level = score >= 70 ? 'high' : score >= 35 ? 'medium' : 'low';
+  const reasons = [
+    pendingDocuments.length ? `${pendingDocuments.length.toLocaleString('ar-IQ')} وثائق تحتاج إجراء` : null,
+    item.unreadCount ? `${item.unreadCount.toLocaleString('ar-IQ')} رسائل غير مقروءة` : null,
+    pendingInvoices.length || remainingBalance > 0 ? 'دفعة أو رصيد يحتاج مراجعة' : null,
+    item.documents.length === 0 && item.status !== 'closed' ? 'لا توجد وثائق مرفوعة' : null,
+    waitingHours >= 8 ? `رسالة بانتظار متابعة منذ ${waitingHours.toLocaleString('ar-IQ')} ساعة` : null,
+  ].filter(Boolean);
+
+  return {
+    score,
+    level,
+    label: level === 'high' ? 'مخاطر عالية' : level === 'medium' ? 'مخاطر متوسطة' : 'مخاطر منخفضة',
+    reasons,
+    nextAction: pendingDocuments[0]
+      ? `ابدأ بمتابعة ${pendingDocuments[0].name}`
+      : item.unreadCount
+        ? 'اقرأ آخر الرسائل وحدد الرد المطلوب'
+        : pendingInvoices.length || remainingBalance > 0
+          ? 'راجع المدفوعات قبل الإجراء التالي'
+          : 'تابع الملف دورياً ولا توجد إشارة حرجة',
+  };
+}
+
 function mapCaseStatus(status: string): 'pending' | 'review' | 'active' | 'closed' {
   if (status === 'closed') return 'closed';
   if (status === 'review') return 'review';
@@ -325,6 +368,7 @@ export function mapWorkspaceCase(item: any) {
     .sort((left: any, right: any) => left._createdAt.getTime() - right._createdAt.getTime());
 
   const smartAlerts = buildSmartCaseAlerts(item, sortedMessages);
+  const risk = buildCaseRiskProfile(item, sortedMessages);
 
   return {
     client: item.client.name,
@@ -346,6 +390,7 @@ export function mapWorkspaceCase(item: any) {
     createdAt: item.createdAt, // Changed to return Date object
     unreadCount: item.unreadCount,
     smartAlerts,
+    risk,
     customFields: item.customFields.map((field: any) => ({
       id: field.id,
       label: field.label,
@@ -1501,6 +1546,12 @@ export async function closeCaseWorkspace(userId: string, role: string, caseId: s
   }
 
   const closeSummary = summary?.trim() || (isConsultation ? 'تم إنهاء محادثة الاستشارة بعد اكتمال الخلاصة.' : 'تم إغلاق الملف بعد اكتمال المتطلبات النهائية.');
+  if ((existingCase.unreadCount || 0) > 0) {
+    throw new Error('لا يمكن إغلاق الملف قبل قراءة الرسائل غير المقروءة.');
+  }
+  if (closeSummary.split(/\s+/).filter(Boolean).length < (isConsultation ? 5 : 8)) {
+    throw new Error('خلاصة الإغلاق قصيرة جداً. أضف ما تم إنجازه والنتيجة النهائية قبل الاعتماد.');
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.case.update({

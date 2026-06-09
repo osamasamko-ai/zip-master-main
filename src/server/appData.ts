@@ -162,7 +162,7 @@ type LawyerCaseStats = {
   closed: number;
 };
 
-function calculateLawyerMatch(user: any, context: LawyerMatchContext, acceptanceStats?: LawyerAcceptanceStats) {
+function calculateLawyerMatch(user: any, context: LawyerMatchContext, acceptanceStats?: LawyerAcceptanceStats, caseStats?: LawyerCaseStats) {
   const profile = user.lawyerProfile;
   const reasons: string[] = [];
   let score = 0;
@@ -220,7 +220,46 @@ function calculateLawyerMatch(user: any, context: LawyerMatchContext, acceptance
     score += 5;
   }
 
-  score += Math.min(10, Math.round(((profile?.rating || 0) / 5) * 6) + (user.verified ? 4 : 0));
+  const rating = Number(profile?.rating || 0);
+  const reviewCount = Number(user._count?.reviewsReceived || 0);
+  if (rating >= 4.5) {
+    score += 10;
+    reasons.push('تقييمات ممتازة');
+  } else if (rating >= 4) {
+    score += 7;
+    reasons.push('تقييمات قوية');
+  } else if (rating > 0) {
+    score += 4;
+  }
+  if (reviewCount >= 20) {
+    score += 6;
+    reasons.push('مراجعات كثيرة');
+  } else if (reviewCount >= 5) {
+    score += 3;
+  }
+
+  const totalHandledCases = caseStats?.total || 0;
+  const closedCases = caseStats?.closed || 0;
+  const closureRate = totalHandledCases > 0 ? Math.round((closedCases / totalHandledCases) * 100) : 0;
+  if (closureRate >= 75) {
+    score += 10;
+    reasons.push('إغلاق قوي للملفات');
+  } else if (closureRate >= 45) {
+    score += 6;
+    reasons.push('خبرة إغلاق جيدة');
+  } else if (totalHandledCases > 0) {
+    score += 3;
+  }
+
+  const experienceYears = Number(profile?.experienceYears || 0);
+  if (experienceYears >= 10) {
+    score += 6;
+    reasons.push('خبرة طويلة');
+  } else if (experienceYears >= 5) {
+    score += 4;
+  }
+
+  if (user.verified) score += 8;
   if (user.verified) reasons.push('محام موثق');
 
   return {
@@ -240,7 +279,7 @@ function normalizeExperienceYears(value: unknown) {
 
 function buildLawyerCard(user: any, followerCount: number, reviewCount: number, isFollowing = false, matchContext: LawyerMatchContext = {}, acceptanceStats?: LawyerAcceptanceStats, caseStats?: LawyerCaseStats) {
   const profile = user.lawyerProfile;
-  const match = calculateLawyerMatch(user, matchContext, acceptanceStats);
+  const match = calculateLawyerMatch(user, matchContext, acceptanceStats, caseStats);
   const role = user.role || 'user';
   const isProfessional = role === 'pro';
   const isAdmin = role === 'admin';

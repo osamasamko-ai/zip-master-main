@@ -59,6 +59,13 @@ type WorkspaceCase = {
   clientImg?: string;
   messages: MessageItem[];
   documents: LegalDocument[];
+  risk?: {
+    score: number;
+    level: 'low' | 'medium' | 'high';
+    label: string;
+    reasons: string[];
+    nextAction: string;
+  };
 };
 
 type DocumentType = 'pdf' | 'image' | 'other';
@@ -300,6 +307,59 @@ export default function Messages() {
       : 'اكتب رسالتك أو استفسارك هنا...';
   const selectedCaseDocumentsNeedingAction = selectedCase?.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length ?? 0;
   const selectedCaseSignedDocuments = selectedCase?.documents.filter((doc) => doc.isSigned).length ?? 0;
+  const autoMessageDrafts = useMemo(() => {
+    if (!selectedCase || isConversationClosed) return [];
+
+    const pendingDocs = selectedCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
+    const latestInbound = [...threadMessages].reverse().find((message) => message.sender !== viewerRole);
+    const drafts: Array<{ id: string; title: string; text: string; icon: string }> = [];
+
+    if (latestInbound) {
+      drafts.push({
+        id: 'reply-latest',
+        title: 'رد جاهز على آخر رسالة',
+        icon: 'fa-reply',
+        text: viewerRole === 'lawyer'
+          ? `مرحباً ${selectedCase.client}،\nاطلعت على رسالتك بخصوص ${selectedCase.title}. سأراجع النقطة المذكورة وأحدد لك الإجراء التالي بوضوح.\nإذا كانت لديك مستندات داعمة، يرجى إرسالها هنا حتى أضيفها للملف.`
+          : `أستاذي، شكراً للتحديث بخصوص ${selectedCase.title}.\nهل يمكن تأكيد الإجراء التالي والمدة المتوقعة؟ وإذا كان مطلوباً مني مستند أو دفع أو حضور، أرجو تحديده بوضوح.`
+      });
+    }
+
+    if (pendingDocs[0]) {
+      drafts.push({
+        id: 'pending-document',
+        title: 'طلب مستند ذكي',
+        icon: 'fa-file-circle-plus',
+        text: viewerRole === 'lawyer'
+          ? `مرحباً ${selectedCase.client}،\nلإكمال ملف ${selectedCase.title} نحتاج متابعة المستند التالي: ${pendingDocs[0].name}.\nيرجى رفعه أو تأكيد توفره، وسأخبرك بعدها بالخطوة التالية مباشرة.`
+          : `أستاذي، أرى أن المستند "${pendingDocs[0].name}" يحتاج متابعة في قضية ${selectedCase.title}.\nهل أرفعه الآن أم توجد صيغة أو جهة إصدار محددة يجب الالتزام بها؟`
+      });
+    }
+
+    if ((selectedCase.risk?.score ?? 0) >= 35) {
+      drafts.push({
+        id: 'risk-followup',
+        title: 'متابعة مخاطر القضية',
+        icon: 'fa-shield-halved',
+        text: viewerRole === 'lawyer'
+          ? `مرحباً ${selectedCase.client}،\nمؤشر المتابعة في ملف ${selectedCase.title} يظهر "${selectedCase.risk?.label}". الأولوية الآن: ${selectedCase.risk?.nextAction}.\nسأتابع هذه النقطة معك لتقليل أي تأخير في الملف.`
+          : `أستاذي، يظهر لدي أن ملف ${selectedCase.title} يحتاج متابعة بسبب: ${(selectedCase.risk?.reasons || []).slice(0, 2).join('، ') || 'إشارات متابعة في الملف'}.\nما الإجراء الأفضل الآن لتقليل المخاطر؟`
+      });
+    }
+
+    if (!drafts.length) {
+      drafts.push({
+        id: 'calm-followup',
+        title: 'متابعة هادئة',
+        icon: 'fa-circle-check',
+        text: viewerRole === 'lawyer'
+          ? `مرحباً ${selectedCase.client}،\nملف ${selectedCase.title} مستقر حالياً. سأوافيك بأي تحديث مهم، ويمكنك إرسال أي سؤال أو مستند جديد هنا.`
+          : `أستاذي، هل توجد أي مستجدات أو خطوة قادمة في قضية ${selectedCase.title}؟`
+      });
+    }
+
+    return drafts.slice(0, 3);
+  }, [isConversationClosed, selectedCase, threadMessages, viewerRole]);
   const viewerName = user?.name || (viewerRole === 'lawyer' ? 'محامي' : 'مستخدم');
   const viewerAvatar = buildAvatarUrl(viewerName, user?.img || user?.avatar);
 
@@ -1612,6 +1672,26 @@ export default function Messages() {
                                     </button>
                                   ))}
                                 </div>
+                                {autoMessageDrafts.length > 0 && (
+                                  <div className="grid gap-2 border-t border-slate-100 p-2.5 sm:grid-cols-3">
+                                    {autoMessageDrafts.map((item) => (
+                                      <button
+                                        key={item.id}
+                                        type="button"
+                                        onClick={() => setSmartDraftPreview({ title: item.title, text: item.text })}
+                                        className="flex min-h-[58px] items-center justify-end gap-2 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-right transition hover:border-brand-gold/40 hover:bg-white"
+                                      >
+                                        <div className="min-w-0 flex-1">
+                                          <p className="truncate text-[10px] font-black text-brand-dark">{item.title}</p>
+                                          <p className="mt-1 line-clamp-1 text-[10px] font-bold text-slate-400">{item.text}</p>
+                                        </div>
+                                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white text-brand-navy shadow-sm">
+                                          <i className={`fa-solid ${item.icon} text-xs`}></i>
+                                        </span>
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
                               </motion.div>
                             )}
                           </AnimatePresence>

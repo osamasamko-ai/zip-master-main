@@ -36,6 +36,51 @@ const makeAiBrief = (payload: {
     .filter(Boolean)
     .join('\n');
 
+const buildCaseRisk = (caseItem: any) => {
+  const pendingDocs = caseItem.documents.filter((doc: any) => doc.actionRequired || (doc.expiresAt && !doc.isSigned));
+  const pendingInvoices = caseItem.invoices.filter((invoice: any) => invoice.status !== 'paid');
+  const latestAwaiting = caseItem.chatSessions
+    .flatMap((session: any) => session.messages)
+    .find((message: any) => message.awaitingResponse);
+  const waitingHours = latestAwaiting ? Math.round(Math.max(0, (Date.now() - new Date(latestAwaiting.createdAt).getTime()) / 3_600_000)) : 0;
+  const remainingBalance = Math.max(0, Number(caseItem.totalAgreedFee || 0) - Number(caseItem.paidAmount || 0));
+  const score = caseItem.status === 'closed'
+    ? 0
+    : Math.min(
+        100,
+        (pendingDocs.length ? Math.min(35, pendingDocs.length * 12) : 0) +
+          (caseItem.unreadCount ? Math.min(20, caseItem.unreadCount * 5) : 0) +
+          (pendingInvoices.length || remainingBalance > 0 ? 15 : 0) +
+          (caseItem.documents.length === 0 ? 14 : 0) +
+          (waitingHours >= 24 ? 16 : waitingHours >= 8 ? 8 : 0) +
+          (caseItem.progress < 25 ? 8 : 0),
+      );
+
+  const level = score >= 70 ? 'high' : score >= 35 ? 'medium' : 'low';
+
+  return {
+    caseId: caseItem.id,
+    title: caseItem.title,
+    score,
+    level,
+    label: level === 'high' ? 'مخاطر عالية' : level === 'medium' ? 'مخاطر متوسطة' : 'مخاطر منخفضة',
+    reasons: [
+      pendingDocs.length ? `${pendingDocs.length.toLocaleString('ar-IQ')} وثائق مطلوبة` : null,
+      caseItem.unreadCount ? `${caseItem.unreadCount.toLocaleString('ar-IQ')} رسائل غير مقروءة` : null,
+      pendingInvoices.length || remainingBalance > 0 ? 'دفعة تحتاج مراجعة' : null,
+      caseItem.documents.length === 0 && caseItem.status !== 'closed' ? 'الملف بلا مستندات' : null,
+      waitingHours >= 8 ? `تأخر متابعة ${waitingHours.toLocaleString('ar-IQ')} ساعة` : null,
+    ].filter(Boolean),
+    nextAction: pendingDocs[0]
+      ? `متابعة ${pendingDocs[0].name}`
+      : caseItem.unreadCount
+        ? 'قراءة الرسائل والرد'
+        : pendingInvoices.length || remainingBalance > 0
+          ? 'مراجعة الدفع'
+          : 'متابعة دورية',
+  };
+};
+
 export const recordUserEvent = async (
   userId: string,
   payload: {
@@ -211,6 +256,52 @@ export const getUserIntelligence = async (userId: string) => {
     user?.role === 'pro' && !user.lawyerProfile?.consultationFee ? 'سعر الاستشارة' : null,
     user?.role === 'pro' && !user.lawyerProfile?.bio ? 'نبذة المحامي' : null,
   ].filter(Boolean) as string[];
+  const caseRisk = allCases
+    .map(buildCaseRisk)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 8);
+  const dailyBriefItems = [
+    caseRisk[0]?.score > 0
+      ? {
+          id: 'risk-case',
+          title: `راجع ملف "${caseRisk[0].title}"`,
+          detail: `${caseRisk[0].label || (caseRisk[0].level === 'high' ? 'مخاطر عالية' : caseRisk[0].level === 'medium' ? 'مخاطر متوسطة' : 'مخاطر منخفضة')} - ${caseRisk[0].nextAction}.`,
+          priority: caseRisk[0].level,
+          icon: 'fa-shield-halved',
+          target: '/cases',
+        }
+      : null,
+    unreadCases[0]
+      ? {
+          id: 'reply-message',
+          title: 'ابدأ بالرسائل الجديدة',
+          detail: `لديك ${unreadCases.reduce((total, item) => total + item.unreadCount, 0).toLocaleString('ar-IQ')} رسائل غير مقروءة.`,
+          priority: 'high',
+          icon: 'fa-comments',
+          target: '/messages',
+        }
+      : null,
+    pendingDocuments[0]
+      ? {
+          id: 'document-action',
+          title: 'أكمل وثيقة مطلوبة',
+          detail: `${pendingDocuments[0].doc.name} في ملف "${pendingDocuments[0].caseItem.title}".`,
+          priority: 'high',
+          icon: 'fa-file-signature',
+          target: '/cases',
+        }
+      : null,
+    pendingInvoices[0]
+      ? {
+          id: 'payment-review',
+          title: 'راجع دفعة معلقة',
+          detail: `${pendingInvoices[0].label} ما زالت بحاجة متابعة.`,
+          priority: 'medium',
+          icon: 'fa-wallet',
+          target: '/billing',
+        }
+      : null,
+  ].filter(Boolean).slice(0, 3);
 
   const operationalRecommendations = [
     pendingDocuments[0]
@@ -240,6 +331,7 @@ export const getUserIntelligence = async (userId: string) => {
           description: `ملف "${unreadCases[0].title}" يحتوي على ${unreadCases[0].unreadCount.toLocaleString('ar-IQ')} رسائل تحتاج قراءة.`,
           action: 'افتح المحادثة',
           target: '/cases',
+          quickAction: { label: 'رد على هذه الرسالة', target: '/messages', icon: 'fa-reply' },
           icon: 'fa-comments',
           aiAction: 'لخص الرسائل',
           aiBrief: makeAiBrief({
@@ -259,6 +351,7 @@ export const getUserIntelligence = async (userId: string) => {
           description: `راجع ملف "${waitingReplies[0].title}" حتى لا تتأخر الخطوة التالية.`,
           action: 'راجع التوجيهات',
           target: user?.role === 'pro' ? '/pro' : '/cases',
+          quickAction: { label: 'رد على هذه الرسالة', target: user?.role === 'pro' ? '/pro' : '/messages', icon: 'fa-reply' },
           icon: 'fa-reply',
           aiAction: 'جهز الرد',
           aiBrief: makeAiBrief({
@@ -278,6 +371,7 @@ export const getUserIntelligence = async (userId: string) => {
           description: `"${closingReadyCases[0].title}" مكتمل تقريباً ولا تظهر عليه وثائق أو مبالغ معلقة.`,
           action: 'افتح مركز الإغلاق',
           target: '/cases',
+          quickAction: { label: 'اطلب تقييم العميل', target: '/cases', icon: 'fa-star' },
           icon: 'fa-circle-check',
           aiAction: 'راجع الإغلاق',
           aiBrief: makeAiBrief({
@@ -297,6 +391,7 @@ export const getUserIntelligence = async (userId: string) => {
           description: `إضافة مستند واحد على الأقل إلى "${casesWithoutDocs[0].title}" تزيد وضوح التقييم القانوني.`,
           action: 'ارفع مستند',
           target: '/cases',
+          quickAction: { label: 'أكمل هذه الوثيقة', target: '/cases', icon: 'fa-file-circle-plus' },
           icon: 'fa-cloud-arrow-up',
           aiAction: 'حدد المستندات',
           aiBrief: makeAiBrief({
@@ -316,6 +411,7 @@ export const getUserIntelligence = async (userId: string) => {
           description: `${pendingInvoices[0].label} ما زالت بحالة ${pendingInvoices[0].status}.`,
           action: 'راجع المدفوعات',
           target: '/billing',
+          quickAction: { label: 'ادفع هذه الفاتورة', target: '/billing', icon: 'fa-wallet' },
           icon: 'fa-wallet',
           aiAction: 'حلل الدفعة',
           aiBrief: makeAiBrief({
@@ -434,6 +530,15 @@ export const getUserIntelligence = async (userId: string) => {
     recentResources: recentResources.slice(0, 6),
     recommendations,
     healthChecks,
+    caseRisk,
+    dailyBrief: {
+      title: dailyBriefItems.length ? 'موجزك الذكي اليوم' : 'يومك القانوني مستقر',
+      summary: dailyBriefItems.length
+        ? `لديك ${dailyBriefItems.length.toLocaleString('ar-IQ')} أولويات عملية مقترحة لهذا اليوم.`
+        : 'لا توجد إشارات عاجلة حالياً. استمر بمتابعة الملفات والرسائل دورياً.',
+      items: dailyBriefItems,
+      generatedAt: new Date().toISOString(),
+    },
     assistant: {
       headline: recommendations[0]?.title || 'كل شيء مستقر حالياً',
       summary: recommendations[0]?.description || 'لا توجد أولوية عاجلة. تابع ملفاتك أو اسأل المساعد عن أي موضوع قانوني.',

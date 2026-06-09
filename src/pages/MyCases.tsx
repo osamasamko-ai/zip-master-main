@@ -106,6 +106,13 @@ interface LegalCase {
   financials: CaseFinancials;
   isArchived?: boolean;
   unreadCount?: number;
+  risk?: {
+    score: number;
+    level: 'low' | 'medium' | 'high';
+    label: string;
+    reasons: string[];
+    nextAction: string;
+  };
   smartAlerts?: Array<{
     id: string;
     type: 'response' | 'document' | 'payment' | 'hearing';
@@ -223,6 +230,12 @@ const getCaseStatusTone = (status: CaseStatus) => {
 };
 
 const getCaseSignal = (legalCase: LegalCase) => {
+  if (legalCase.risk?.level === 'high') {
+    return { label: `خطر ${legalCase.risk.score}%`, icon: 'fa-shield-halved', tone: 'bg-red-50 text-red-700 ring-red-100' };
+  }
+  if (legalCase.risk?.level === 'medium') {
+    return { label: `مخاطر ${legalCase.risk.score}%`, icon: 'fa-triangle-exclamation', tone: 'bg-amber-50 text-amber-700 ring-amber-100' };
+  }
   const pendingDocs = legalCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length;
   const unread = legalCase.unreadCount ?? 0;
   const latestClientMessage = [...legalCase.messages].reverse().find((message) => message.sender === 'user');
@@ -1008,6 +1021,51 @@ const SummaryTab = ({
         </div>
       </div>
 
+      {activeCase.risk && (
+        <section className={`rounded-[2rem] border p-5 text-right shadow-sm ${
+          activeCase.risk.level === 'high'
+            ? 'border-red-100 bg-red-50/70'
+            : activeCase.risk.level === 'medium'
+              ? 'border-amber-100 bg-amber-50/70'
+              : 'border-emerald-100 bg-emerald-50/70'
+        }`}>
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-[180px]">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="text-xs font-black text-brand-dark">{activeCase.risk.score}%</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Smart Risk Score</span>
+              </div>
+              <div className="h-2.5 overflow-hidden rounded-full bg-white shadow-inner">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ${
+                    activeCase.risk.level === 'high'
+                      ? 'bg-red-500'
+                      : activeCase.risk.level === 'medium'
+                        ? 'bg-amber-500'
+                        : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${activeCase.risk.score}%` }}
+                ></div>
+              </div>
+            </div>
+            <div className="flex-1">
+              <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">مؤشر مخاطر القضية</p>
+              <h3 className="mt-1 text-lg font-black text-brand-dark">{activeCase.risk.label}</h3>
+              <p className="mt-2 text-xs font-bold leading-6 text-slate-600">{activeCase.risk.nextAction}</p>
+            </div>
+          </div>
+          {activeCase.risk.reasons.length > 0 && (
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
+              {activeCase.risk.reasons.slice(0, 4).map((reason) => (
+                <span key={reason} className="rounded-full bg-white px-3 py-1.5 text-[10px] font-black text-slate-600 shadow-sm">
+                  {reason}
+                </span>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {activeCase.smartAlerts?.length ? (
         <section className="rounded-[2rem] border border-brand-gold/20 bg-[#fffaf0] p-5 text-right shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1603,6 +1661,52 @@ export default function MyCases() {
   const [reviewText, setReviewText] = useState('');
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
   const [reviewStatus, setReviewStatus] = useState('');
+  const closeCaseAssistantChecks = useMemo(() => {
+    if (!activeCase) return [];
+    const pendingDocs = isConsultationCase(activeCase) ? [] : activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt);
+    const remainingBalance = Math.max(0, activeCase.financials.totalAgreed - activeCase.financials.paid);
+    const unreadMessages = activeCase.unreadCount ?? 0;
+    const summaryWords = closeCaseSummary.trim().split(/\s+/).filter(Boolean).length;
+    const canReviewAfterClose = activeCase.status === 'closed' || isConsultationCase(activeCase);
+
+    return [
+      {
+        label: 'الوثائق',
+        value: pendingDocs.length ? `${pendingDocs.length.toLocaleString('ar-IQ')} معلقة` : 'جاهزة',
+        done: pendingDocs.length === 0,
+        detail: pendingDocs[0] ? `راجع ${pendingDocs[0].name}` : 'لا توجد وثائق تحتاج إجراء قبل الإغلاق.',
+        icon: 'fa-file-circle-check',
+      },
+      {
+        label: 'المدفوعات',
+        value: remainingBalance > 0 ? `${remainingBalance.toLocaleString('ar-IQ')} د.ع` : 'مكتملة',
+        done: remainingBalance === 0,
+        detail: remainingBalance > 0 ? 'يوجد رصيد يجب توضيحه أو سداده.' : 'لا يظهر مبلغ متبق على الملف.',
+        icon: 'fa-wallet',
+      },
+      {
+        label: 'الرسائل',
+        value: unreadMessages > 0 ? `${unreadMessages.toLocaleString('ar-IQ')} غير مقروءة` : 'مقروءة',
+        done: unreadMessages === 0,
+        detail: unreadMessages > 0 ? 'اقرأ آخر الرسائل قبل الإغلاق.' : 'لا توجد رسائل غير مقروءة ظاهرة.',
+        icon: 'fa-comments',
+      },
+      {
+        label: 'التقييم',
+        value: canReviewAfterClose ? 'سيطلب بعد الإغلاق' : 'جاهز للطلب',
+        done: true,
+        detail: 'بعد الإغلاق يستطيع العميل تقييم التجربة، خصوصاً بعد الاستشارة.',
+        icon: 'fa-star',
+      },
+      {
+        label: 'جودة الخلاصة',
+        value: summaryWords >= 10 ? 'واضحة' : 'قصيرة',
+        done: summaryWords >= 10,
+        detail: summaryWords >= 10 ? 'الخلاصة تتضمن سياقاً كافياً للتوثيق.' : 'أضف ما تم إنجازه والخطوة النهائية قبل الاعتماد.',
+        icon: 'fa-clipboard-check',
+      },
+    ];
+  }, [activeCase, closeCaseSummary]);
 
   const mergeCasesWithPendingMessages = useCallback((serverCases: LegalCase[], localCases: LegalCase[]) => {
     return serverCases.map((serverCase) => {
@@ -4012,17 +4116,32 @@ export default function MyCases() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                {[
-                  { label: 'الدفع', value: activeCase.financials.totalAgreed === 0 || activeCase.financials.paid >= activeCase.financials.totalAgreed ? 'مكتمل' : 'متبقي', done: activeCase.financials.totalAgreed === 0 || activeCase.financials.paid >= activeCase.financials.totalAgreed },
-                  { label: 'الوثائق', value: activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length === 0 ? 'جاهزة' : 'مطلوبة', done: activeCase.documents.filter((doc) => doc.actionRequired || doc.expiresAt).length === 0 },
-                  { label: 'التقدم', value: `${activeCase.progress}%`, done: activeCase.progress >= 80 },
-                ].map((item) => (
-                  <div key={item.label} className={`rounded-2xl border p-4 ${item.done ? 'border-emerald-100 bg-emerald-50 text-emerald-700' : 'border-amber-100 bg-amber-50 text-amber-700'}`}>
-                    <p className="text-[10px] font-black">{item.label}</p>
-                    <p className="mt-1 text-sm font-black">{item.value}</p>
+              <div className="mt-5 rounded-[1.5rem] border border-brand-navy/10 bg-brand-navy/5 p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <span className="rounded-full bg-white px-3 py-1 text-[10px] font-black text-brand-navy shadow-sm">
+                    {closeCaseAssistantChecks.filter((item) => item.done).length.toLocaleString('ar-IQ')} / {closeCaseAssistantChecks.length.toLocaleString('ar-IQ')}
+                  </span>
+                  <div>
+                    <p className="text-sm font-black text-brand-dark">Smart Close Case Assistant</p>
+                    <p className="mt-1 text-[11px] font-bold text-slate-500">يفحص الوثائق، المدفوعات، الرسائل، التقييم، وجودة الخلاصة قبل الاعتماد.</p>
                   </div>
-                ))}
+                </div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {closeCaseAssistantChecks.map((item) => (
+                    <div key={item.label} className={`rounded-2xl border bg-white p-3 ${item.done ? 'border-emerald-100' : 'border-amber-100'}`}>
+                      <div className="flex items-start justify-between gap-3">
+                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${item.done ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
+                          <i className={`fa-solid ${item.icon} text-xs`}></i>
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black text-slate-400">{item.label}</p>
+                          <p className={`mt-0.5 text-sm font-black ${item.done ? 'text-emerald-700' : 'text-amber-700'}`}>{item.value}</p>
+                          <p className="mt-1 line-clamp-2 text-[10px] font-bold leading-5 text-slate-500">{item.detail}</p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <label className="mt-5 block text-xs font-black text-slate-500">خلاصة الإغلاق</label>

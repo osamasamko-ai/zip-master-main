@@ -53,6 +53,21 @@ type CommandResult = {
   aiBrief?: string;
 };
 
+type RouteMemory = Record<string, { count: number; lastSeen: number }>;
+type RouteLearning = {
+  routes: RouteMemory;
+  transitions: Record<string, RouteMemory>;
+};
+
+type NavItem = {
+  name: string;
+  icon: string;
+  path: string;
+  visible?: boolean;
+};
+
+const ROUTE_MEMORY_KEY = 'qistas_route_memory_v2';
+
 const normalizeCommandText = (value: string) =>
   value
     .toLowerCase()
@@ -163,6 +178,26 @@ const pageInsights: Record<string, { title: string; summary: string; icon: strin
   },
 };
 
+const readRouteLearning = (): RouteLearning => {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(ROUTE_MEMORY_KEY) || '{}') as any;
+    if (parsed && typeof parsed === 'object' && 'routes' in parsed && 'transitions' in parsed) {
+      return parsed as RouteLearning;
+    }
+    return { routes: parsed as RouteMemory, transitions: {} };
+  } catch {
+    return { routes: {}, transitions: {} };
+  }
+};
+
+const writeRouteLearning = (learning: RouteLearning) => {
+  try {
+    window.localStorage.setItem(ROUTE_MEMORY_KEY, JSON.stringify(learning));
+  } catch {
+    // Local personalization is optional.
+  }
+};
+
 export default function MainLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -185,10 +220,13 @@ export default function MainLayout() {
   const [notificationsFilter, setNotificationsFilter] = useState<'all' | 'unread'>('unread');
   const notificationsMenuRef = useRef<HTMLDivElement | null>(null);
   const moreNavRef = useRef<HTMLDivElement | null>(null);
+  const previousRouteRef = useRef<string | null>(null);
 
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [commandQuery, setCommandQuery] = useState('');
   const [isScrolled, setIsScrolled] = useState(false);
+  const [routeLearning, setRouteLearning] = useState<RouteLearning>(() => (typeof window === 'undefined' ? { routes: {}, transitions: {} } : readRouteLearning()));
+  const routeMemory = routeLearning.routes;
 
   const headerTransition = prefersReducedMotion
     ? { duration: 0 }
@@ -296,9 +334,16 @@ export default function MainLayout() {
     const loader = routePreloaders[path];
     if (loader) void loader();
     if (!apiClient.getToken()) return;
+    const connection = (navigator as Navigator & { connection?: { saveData?: boolean; effectiveType?: string } }).connection;
+    if (connection?.saveData || connection?.effectiveType === '2g') return;
     const dataLoader = routeDataPreloaders[path];
     if (dataLoader) void dataLoader().catch(() => undefined);
   };
+
+  const getKnownRoute = (path: string) =>
+    Object.keys({ ...routePreloaders, ...pageInsights })
+      .sort((left, right) => right.length - left.length)
+      .find((route) => path === route || path.startsWith(`${route}/`));
 
   const currentPageInsight = useMemo(() => {
     const matchedPath = Object.keys(pageInsights)
@@ -307,11 +352,60 @@ export default function MainLayout() {
     return matchedPath ? pageInsights[matchedPath] : null;
   }, [location.pathname]);
 
-  const commandResults = useMemo(() => {
-    const rawQuery = commandQuery.trim();
-    const query = normalizeCommandText(rawQuery);
+  useEffect(() => {
+    if (!user) return;
+    const route = getKnownRoute(location.pathname);
+    if (!route) return;
 
-    // Common navigation shortcuts
+    setRouteLearning((current) => {
+      const previousRoute = previousRouteRef.current;
+      const next: RouteLearning = {
+        routes: {
+          ...current.routes,
+          [route]: {
+            count: Math.min(999, (current.routes[route]?.count || 0) + 1),
+            lastSeen: Date.now(),
+          },
+        },
+        transitions: { ...current.transitions },
+      };
+
+      if (previousRoute && previousRoute !== route) {
+        next.transitions[previousRoute] = {
+          ...(next.transitions[previousRoute] || {}),
+          [route]: {
+            count: Math.min(999, ((next.transitions[previousRoute] || {})[route]?.count || 0) + 1),
+            lastSeen: Date.now(),
+          },
+        };
+      }
+
+      previousRouteRef.current = route;
+      writeRouteLearning(next);
+      return next;
+    });
+  }, [location.pathname, user]);
+  const navItems = useMemo<NavItem[]>(
+    () =>
+      [
+        { name: 'لوحتي', icon: 'fa-table-columns', path: '/user' },
+        { name: 'ملفاتي', icon: 'fa-folder-open', path: '/cases' },
+        { name: 'ابحث', icon: 'fa-scale-balanced', path: '/lawyers' },
+        { name: 'أنشئ عقداً', icon: 'fa-file-contract', path: '/contracts' },
+        { name: 'خطتي', icon: 'fa-route', path: '/action-plan' },
+        { name: 'المحادثات', icon: 'fa-comments', path: '/messages' },
+        { name: 'المجتمع', icon: 'fa-users-rectangle', path: '/feed' },
+        { name: 'المكتبة', icon: 'fa-book-open', path: '/legal' },
+        { name: 'المساعد', icon: 'fa-robot', path: '/aichat' },
+        { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },
+        { name: 'مكتبي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
+        { name: 'فرص', icon: 'fa-ranking-star', path: '/case-store', visible: user?.role === 'pro' || user?.role === 'admin' },
+        { name: 'تحكم', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
+      ].filter((item) => item.visible !== false),
+    [user?.role]
+  );
+
+  const commandNavItems = useMemo<CommandResult[]>(() => {
     const items: CommandResult[] = [
       { id: 'n1', type: 'ملاحة', title: 'الرئيسية', subtitle: 'أسرع طريق لما يحتاج انتباهك الآن', icon: 'fa-table-columns', path: '/user' },
       { id: 'n2', type: 'ملاحة', title: 'القضايا', subtitle: 'متابعة سير العمل والمهام المطلوبة', icon: 'fa-folder-open', path: '/cases' },
@@ -338,6 +432,59 @@ export default function MainLayout() {
       items.push({ id: 'p2a', type: 'احترافي', title: 'فرص المحامين', subtitle: 'القضايا المرتبة حسب أفضل فرصة لك', icon: 'fa-ranking-star', path: '/case-store' });
     }
 
+    return items;
+  }, [ownProfilePath, user?.role]);
+
+  const learnedRouteCommands = useMemo<CommandResult[]>(() => {
+    return commandNavItems
+      .filter((item) => item.path && routeMemory[item.path])
+      .sort((left, right) => {
+        const leftMemory = routeMemory[left.path!];
+        const rightMemory = routeMemory[right.path!];
+        const leftScore = leftMemory.count * 10 + leftMemory.lastSeen / 100000000000;
+        const rightScore = rightMemory.count * 10 + rightMemory.lastSeen / 100000000000;
+        return rightScore - leftScore;
+      })
+      .slice(0, 4)
+      .map((item) => ({
+        ...item,
+        id: `learned-${item.path}`,
+        type: routeMemory[item.path!]?.count > 2 ? 'معتاد' : 'آخر زيارة',
+        subtitle: routeMemory[item.path!]?.count > 2 ? 'صفحة تستخدمها كثيراً، تم تجهيزها مسبقاً' : item.subtitle,
+      }));
+  }, [commandNavItems, routeMemory]);
+
+  const learnedNextRoute = useMemo(() => {
+    const currentRoute = getKnownRoute(location.pathname);
+    const transitionMatch = currentRoute
+      ? navItems
+          .filter((item) => item.path !== currentRoute && routeLearning.transitions[currentRoute]?.[item.path])
+          .sort((left, right) => {
+            const leftMemory = routeLearning.transitions[currentRoute]?.[left.path];
+            const rightMemory = routeLearning.transitions[currentRoute]?.[right.path];
+            const leftScore = (leftMemory?.count || 0) * 14 + (leftMemory?.lastSeen || 0) / 100000000000;
+            const rightScore = (rightMemory?.count || 0) * 14 + (rightMemory?.lastSeen || 0) / 100000000000;
+            return rightScore - leftScore;
+          })[0]
+      : null;
+
+    if (transitionMatch) return transitionMatch;
+
+    return navItems
+      .filter((item) => item.path !== currentRoute && routeMemory[item.path])
+      .sort((left, right) => {
+        const leftMemory = routeMemory[left.path];
+        const rightMemory = routeMemory[right.path];
+        const leftScore = leftMemory.count * 8 + leftMemory.lastSeen / 100000000000;
+        const rightScore = rightMemory.count * 8 + rightMemory.lastSeen / 100000000000;
+        return rightScore - leftScore;
+      })[0] || null;
+  }, [location.pathname, navItems, routeLearning.transitions, routeMemory]);
+
+  const commandResults = useMemo(() => {
+    const rawQuery = commandQuery.trim();
+    const query = normalizeCommandText(rawQuery);
+
     const smartItems: CommandResult[] = (intelligence?.recommendations || [])
       .filter((item: any) => item?.aiBrief)
       .slice(0, 4)
@@ -349,10 +496,35 @@ export default function MainLayout() {
         icon: item.icon || 'fa-wand-magic-sparkles',
         aiBrief: item.aiBrief,
       }));
+    const pageActionItems: CommandResult[] = currentPageInsight
+      ? [
+          {
+            id: 'page-analysis',
+            type: 'الصفحة الحالية',
+            title: `حلل: ${currentPageInsight.title}`,
+            subtitle: currentPageInsight.summary,
+            icon: currentPageInsight.icon,
+            aiBrief: currentPageInsight.prompt,
+          },
+          ...(learnedNextRoute
+            ? [{
+                id: `continue-${learnedNextRoute.path}`,
+                type: 'تنبؤ',
+                title: `تابع إلى ${learnedNextRoute.name}`,
+                subtitle: 'اقتراح مبني على مسار استخدامك السابق',
+                icon: learnedNextRoute.icon,
+                path: learnedNextRoute.path,
+              }]
+            : []),
+        ]
+      : [];
 
-    if (!query) return smartItems.length > 0 ? smartItems : items.slice(0, 6);
+    if (!query) {
+      const merged = [...smartItems, ...pageActionItems, ...learnedRouteCommands, ...commandNavItems];
+      return merged.filter((item, index, list) => list.findIndex((entry) => entry.id === item.id || entry.path === item.path) === index).slice(0, 8);
+    }
 
-    const scoredItems = [...smartItems, ...items]
+    const scoredItems = [...smartItems, ...pageActionItems, ...learnedRouteCommands, ...commandNavItems]
       .map((item) => {
         const haystack = normalizeCommandText(`${item.title} ${item.subtitle} ${item.type} ${(item.path && commandAliases[item.path]?.join(' ')) || ''}`);
         const tokens = query.split(' ').filter(Boolean);
@@ -375,7 +547,7 @@ export default function MainLayout() {
     };
 
     return [...scoredItems.slice(0, 7), aiFallback];
-  }, [commandQuery, intelligence?.recommendations, ownProfilePath, user?.role]);
+  }, [commandNavItems, commandQuery, currentPageInsight, intelligence?.recommendations, learnedNextRoute, learnedRouteCommands]);
 
   const executeCommand = (result: CommandResult) => {
     if (result.aiBrief) {
@@ -488,25 +660,6 @@ export default function MainLayout() {
     window.localStorage.removeItem('app-theme');
   }, []);
 
-  const navItems = useMemo(
-    () =>
-      [
-        { name: 'لوحتي', icon: 'fa-table-columns', path: '/user' },
-        { name: 'ملفاتي', icon: 'fa-folder-open', path: '/cases' },
-        { name: 'ابحث', icon: 'fa-scale-balanced', path: '/lawyers' },
-        { name: 'أنشئ عقداً', icon: 'fa-file-contract', path: '/contracts' },
-        { name: 'خطتي', icon: 'fa-route', path: '/action-plan' },
-        { name: 'المحادثات', icon: 'fa-comments', path: '/messages' },
-        { name: 'المجتمع', icon: 'fa-users-rectangle', path: '/feed' },
-        { name: 'المكتبة', icon: 'fa-book-open', path: '/legal' },
-        { name: 'المساعد', icon: 'fa-robot', path: '/aichat' },
-        { name: 'المدفوعات', icon: 'fa-wallet', path: '/billing' },
-        { name: 'مكتبي', icon: 'fa-briefcase', path: '/pro', visible: user?.role === 'pro' || user?.role === 'admin' },
-        { name: 'فرص', icon: 'fa-ranking-star', path: '/case-store', visible: user?.role === 'pro' || user?.role === 'admin' },
-        { name: 'تحكم', icon: 'fa-server', path: '/admin', visible: user?.role === 'admin' },
-      ].filter((item) => item.visible !== false),
-    [user?.role]
-  );
   const primaryNavItems = useMemo(() => {
     const priorityPaths = ['/user', '/action-plan', '/cases', '/lawyers'];
     if (user?.role === 'pro' || user?.role === 'admin') {
@@ -516,8 +669,16 @@ export default function MainLayout() {
       priorityPaths.push('/admin');
     }
 
+    learnedRouteCommands
+      .map((item) => item.path)
+      .filter(Boolean)
+      .slice(0, 2)
+      .forEach((path) => {
+        if (path && !priorityPaths.includes(path)) priorityPaths.push(path);
+      });
+
     return navItems.filter((item) => priorityPaths.includes(item.path));
-  }, [navItems, user?.role]);
+  }, [learnedRouteCommands, navItems, user?.role]);
   const overflowNavItems = useMemo(
     () => navItems.filter((item) => !primaryNavItems.some((primaryItem) => primaryItem.path === item.path)),
     [navItems, primaryNavItems]
@@ -532,9 +693,10 @@ export default function MainLayout() {
       null
     );
   }, [intelligence?.recommendations, location.pathname]);
-
+  const predictiveQuickAction = pageRecommendation?.quickAction || null;
   useEffect(() => {
-    const warmRoutes = ['/aichat', ...primaryNavItems.slice(0, 4).map((item) => item.path)];
+    const learnedRoutes = learnedRouteCommands.map((item) => item.path).filter(Boolean) as string[];
+    const warmRoutes = Array.from(new Set(['/aichat', ...primaryNavItems.slice(0, 4).map((item) => item.path), ...learnedRoutes]));
     const warm = () => warmRoutes.forEach(prefetchRoute);
     const hasIdleCallback = typeof window.requestIdleCallback === 'function';
     const idleId = hasIdleCallback
@@ -548,7 +710,7 @@ export default function MainLayout() {
         globalThis.clearTimeout(idleId);
       }
     };
-  }, [primaryNavItems]);
+  }, [learnedRouteCommands, primaryNavItems]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -1039,6 +1201,21 @@ export default function MainLayout() {
               </div>
             </div>
             <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end">
+              {predictiveQuickAction && (
+                <button
+                  type="button"
+                  onMouseEnter={() => prefetchRoute(predictiveQuickAction.target)}
+                  onFocus={() => prefetchRoute(predictiveQuickAction.target)}
+                  onClick={() => {
+                    prefetchRoute(predictiveQuickAction.target);
+                    navigate(predictiveQuickAction.target);
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-brand-gold px-3 py-2.5 text-[10px] font-black text-brand-dark transition hover:bg-amber-300"
+                >
+                  <i className={`fa-solid ${predictiveQuickAction.icon || 'fa-bolt'}`}></i>
+                  {predictiveQuickAction.label}
+                </button>
+              )}
               {pageRecommendation?.aiBrief && (
                 <button
                   type="button"
@@ -1057,6 +1234,21 @@ export default function MainLayout() {
                 <i className="fa-solid fa-brain"></i>
                 تحليل الصفحة
               </button>
+              {learnedNextRoute && (
+                <button
+                  type="button"
+                  onMouseEnter={() => prefetchRoute(learnedNextRoute.path)}
+                  onFocus={() => prefetchRoute(learnedNextRoute.path)}
+                  onClick={() => {
+                    prefetchRoute(learnedNextRoute.path);
+                    navigate(learnedNextRoute.path);
+                  }}
+                  className="hidden items-center justify-center gap-2 rounded-xl border border-brand-gold/30 bg-brand-gold/10 px-3 py-2.5 text-[10px] font-black text-brand-dark transition hover:border-brand-gold hover:bg-brand-gold/20 md:flex"
+                >
+                  <i className={`fa-solid ${learnedNextRoute.icon}`}></i>
+                  تابع: {learnedNextRoute.name}
+                </button>
+              )}
               <button
                 type="button"
                 onClick={() => setIsCommandPaletteOpen(true)}

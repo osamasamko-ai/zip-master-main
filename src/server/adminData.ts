@@ -352,11 +352,89 @@ export interface AdminMetrics {
     suspiciousEvents: number;
     openEscalations: number;
     complianceFlags: number;
+    aiHealth: Array<{
+        id: string;
+        title: string;
+        detail: string;
+        severity: 'high' | 'medium' | 'low';
+        action: string;
+        tab: 'overview' | 'users' | 'cases' | 'resources' | 'roles' | 'financials' | 'contracts' | 'kyc' | 'support' | 'settings' | 'compliance' | 'system';
+        icon: string;
+    }>;
 }
 
 export async function getAdminMetrics(): Promise<AdminMetrics> {
-    const usersCount = await prisma.user.count();
-    const suspiciousCount = 3; // Mocking for now, could query security log table
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const [usersCount, suspiciousCount, escalatedTickets, complianceAlerts, pendingKyc, staleKyc, inactiveLawyers, pages, recentPageEvents] = await Promise.all([
+        prisma.user.count(),
+        prisma.securityAlert.count({ where: { OR: [{ severity: 'high' }, { createdAt: { gte: sevenDaysAgo } }] } }),
+        prisma.supportTicket.count({ where: { status: 'escalated' } }),
+        prisma.auditLog.count({ where: { type: { in: ['security', 'system'] }, createdAt: { gte: sevenDaysAgo } } }),
+        prisma.kycApplication.count({ where: { status: 'pending' } }),
+        prisma.kycApplication.count({ where: { status: 'pending', createdAt: { lt: oneDayAgo } } }),
+        prisma.user.count({
+            where: {
+                role: 'pro',
+                lawyerProfile: {
+                    is: {
+                        isOnline: false,
+                        OR: [
+                            { profileScore: { lt: 60 } },
+                            { licenseStatus: 'pending' },
+                        ],
+                    },
+                },
+            },
+        }),
+        prisma.page.findMany({ where: { status: 'published' }, select: { route: true, title: true }, take: 12 }),
+        prisma.userEvent.groupBy({
+            by: ['page'],
+            where: { createdAt: { gte: sevenDaysAgo } },
+            _count: { page: true },
+        }),
+    ]);
+    const pageEventCounts = new Map(recentPageEvents.map((item) => [item.page, item._count.page]));
+    const lowConversionPages = pages.filter((page) => (pageEventCounts.get(page.route.replace(/^\//, '')) || pageEventCounts.get(page.route) || 0) < 3);
+    const aiHealth = [
+        suspiciousCount > 0 ? {
+            id: 'suspicious-activity',
+            title: 'نشاط مشبوه يحتاج مراجعة',
+            detail: `${suspiciousCount.toLocaleString('ar-IQ')} إشارات أمنية أو تنبيهات حديثة.`,
+            severity: suspiciousCount >= 5 ? 'high' as const : 'medium' as const,
+            action: 'فتح الحوكمة',
+            tab: 'compliance' as const,
+            icon: 'fa-shield-halved',
+        } : null,
+        staleKyc > 0 ? {
+            id: 'kyc-bottleneck',
+            title: 'اختناق في اعتماد KYC',
+            detail: `${staleKyc.toLocaleString('ar-IQ')} طلبات معلقة لأكثر من 24 ساعة من أصل ${pendingKyc.toLocaleString('ar-IQ')}.`,
+            severity: staleKyc >= 5 ? 'high' as const : 'medium' as const,
+            action: 'فتح طابور الاعتماد',
+            tab: 'kyc' as const,
+            icon: 'fa-id-card',
+        } : null,
+        inactiveLawyers > 0 ? {
+            id: 'inactive-lawyers',
+            title: 'محامون غير نشطين',
+            detail: `${inactiveLawyers.toLocaleString('ar-IQ')} ملفات محامين تحتاج تنشيطاً أو إكمال اعتماد.`,
+            severity: 'medium' as const,
+            action: 'مراجعة الحسابات',
+            tab: 'users' as const,
+            icon: 'fa-user-clock',
+        } : null,
+        lowConversionPages.length > 0 ? {
+            id: 'low-conversion-pages',
+            title: 'صفحات منخفضة التفاعل',
+            detail: `${lowConversionPages.length.toLocaleString('ar-IQ')} صفحات منشورة لديها نشاط قليل آخر 7 أيام.`,
+            severity: 'low' as const,
+            action: 'تحسين المحتوى',
+            tab: 'resources' as const,
+            icon: 'fa-chart-line',
+        } : null,
+    ].filter(Boolean) as AdminMetrics['aiHealth'];
+
     return {
         activeUsers: usersCount,
         dailyVolume: 14500000,
@@ -364,8 +442,9 @@ export async function getAdminMetrics(): Promise<AdminMetrics> {
         ragAccuracy: 92,
         docsSynced: 870,
         suspiciousEvents: suspiciousCount,
-        openEscalations: 2,
-        complianceFlags: 5,
+        openEscalations: escalatedTickets,
+        complianceFlags: complianceAlerts,
+        aiHealth,
     };
 }
 

@@ -21,6 +21,8 @@ export default function GlobalIntelligencePanel({ open, onClose }: GlobalIntelli
   const recommendations = data?.recommendations || [];
   const assistant = data?.assistant || null;
   const healthChecks = data?.healthChecks || [];
+  const dailyBrief = data?.dailyBrief || null;
+  const caseRisk = data?.caseRisk || [];
   const topPriority = recommendations[0] || null;
 
   const urgencyLabel = useMemo(() => {
@@ -114,6 +116,58 @@ export default function GlobalIntelligencePanel({ open, onClose }: GlobalIntelli
                   </div>
                 ))}
               </div>
+
+              {dailyBrief && (
+                <section className="mb-4 rounded-[1.35rem] border border-brand-gold/20 bg-brand-gold/10 p-4">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white text-brand-gold shadow-sm">
+                      <i className="fa-solid fa-sun"></i>
+                    </span>
+                    <div>
+                      <p className="text-sm font-black text-brand-dark">{dailyBrief.title}</p>
+                      <p className="mt-1 text-[11px] font-bold leading-5 text-slate-500">{dailyBrief.summary}</p>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {(dailyBrief.items || []).map((item: any) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => openTarget(item.target)}
+                        className="flex w-full items-center justify-between gap-3 rounded-xl bg-white/80 px-3 py-2 text-right transition hover:bg-white hover:shadow-sm"
+                      >
+                        <i className="fa-solid fa-arrow-left text-[10px] text-slate-300"></i>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-xs font-black text-brand-dark">{item.title}</p>
+                          <p className="mt-0.5 truncate text-[10px] font-bold text-slate-500">{item.detail}</p>
+                        </div>
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-brand-navy/5 text-brand-navy">
+                          <i className={`fa-solid ${item.icon || 'fa-sparkles'} text-xs`}></i>
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {caseRisk.length > 0 && (
+                <section className="mb-4 rounded-[1.35rem] border border-slate-100 bg-white p-4 shadow-sm">
+                  <h3 className="text-sm font-black text-brand-dark">مؤشر مخاطر الملفات</h3>
+                  <div className="mt-3 space-y-2">
+                    {caseRisk.slice(0, 3).map((item: any) => (
+                      <div key={item.caseId} className="rounded-xl bg-slate-50 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className={`rounded-full px-2 py-1 text-[9px] font-black ${item.level === 'high' ? 'bg-red-50 text-red-600' : item.level === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                            {item.score}%
+                          </span>
+                          <p className="truncate text-xs font-black text-brand-dark">{item.title}</p>
+                        </div>
+                        <p className="mt-1 truncate text-[10px] font-bold text-slate-500">{item.nextAction}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
 
               <div className="mb-4 flex items-center justify-between gap-3">
                 <button
