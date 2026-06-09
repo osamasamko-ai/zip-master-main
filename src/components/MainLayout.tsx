@@ -3,6 +3,165 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion, useScroll } from 'framer-motion';
 import { useNotifications } from '../context/NotificationContext';
+import GlobalIntelligencePanel from './GlobalIntelligencePanel';
+import { useUserIntelligence } from '../hooks/useIntelligence';
+import apiClient from '../api/client';
+
+const routePreloaders: Record<string, () => Promise<unknown>> = {
+  '/user': () => import('../pages/UserDashboard'),
+  '/cases': () => import('../pages/MyCases'),
+  '/lawyers': () => import('../pages/Lawyers'),
+  '/messages': () => import('../pages/Messages'),
+  '/billing': () => import('../pages/Billing'),
+  '/contracts': () => import('../pages/ContractWizard'),
+  '/contract': () => import('../pages/ContractWizard'),
+  '/action-plan': () => import('../pages/LegalActionPlan'),
+  '/support': () => import('../pages/Support'),
+  '/aichat': () => import('../pages/AiChat'),
+  '/legal': () => import('../pages/LegalDocs'),
+  '/following': () => import('../pages/Following'),
+  '/feed': () => import('../pages/Feed'),
+  '/pro': () => import('../pages/ProDashboard'),
+  '/case-store': () => import('../pages/CaseStore'),
+  '/admin': () => import('../pages/AdminDashboard'),
+  '/settings': () => import('../pages/Settings'),
+};
+
+const routeDataPreloaders: Record<string, () => Promise<unknown>> = {
+  '/user': () => apiClient.getDashboard(),
+  '/cases': () => apiClient.getWorkspaceCases(),
+  '/messages': () => apiClient.getWorkspaceCases(),
+  '/lawyers': () => apiClient.getLawyers(),
+  '/billing': () => apiClient.getDashboard(),
+  '/contracts': () => Promise.all([apiClient.getContractTemplates(), apiClient.getUserContracts()]),
+  '/contract': () => Promise.all([apiClient.getContractTemplates(), apiClient.getUserContracts()]),
+  '/feed': () => Promise.all([apiClient.getFeedPosts('all', { limit: 10, offset: 0 }), apiClient.getFeedStories('active')]),
+  '/following': () => Promise.all([apiClient.getFollowing(), apiClient.getLawyers()]),
+  '/settings': () => apiClient.getSettings(),
+  '/pro': () => apiClient.getProWorkspace(),
+  '/case-store': () => apiClient.getLawyerCaseMarketplaceListings(),
+  '/admin': () => Promise.all([apiClient.getAdminMetrics(), apiClient.getAdminIntelligence()]),
+};
+
+type CommandResult = {
+  id: string;
+  type: string;
+  title: string;
+  subtitle: string;
+  icon: string;
+  path?: string;
+  aiBrief?: string;
+};
+
+const normalizeCommandText = (value: string) =>
+  value
+    .toLowerCase()
+    .replace(/[\u064B-\u0652]/g, '')
+    .replace(/[إأآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي')
+    .replace(/[^\p{Letter}\p{Number}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const commandAliases: Record<string, string[]> = {
+  '/user': ['dashboard', 'home', 'الرئيسيه', 'لوحه', 'لوحتي', 'بدايه'],
+  '/cases': ['case', 'cases', 'mycases', 'قضيه', 'قضايا', 'ملف', 'ملفاتي', 'متابعه'],
+  '/lawyers': ['lawyer', 'lawyers', 'محامي', 'محامون', 'استشاره', 'ابحث'],
+  '/contracts': ['contract', 'contracts', 'عقد', 'عقود', 'صياغه', 'انشاء عقد'],
+  '/action-plan': ['plan', 'action', 'خطه', 'خطتي', 'مشكلتي', 'اجراء'],
+  '/messages': ['message', 'messages', 'chat', 'رساله', 'رسائل', 'محادثه', 'محادثات'],
+  '/feed': ['feed', 'community', 'مجتمع', 'تواصل', 'منشورات'],
+  '/legal': ['legal', 'docs', 'library', 'law', 'مكتبه', 'قانون', 'قوانين', 'مواد'],
+  '/aichat': ['ai', 'chatgpt', 'assistant', 'مساعد', 'ذكاء', 'اسال', 'حلل'],
+  '/billing': ['billing', 'wallet', 'pay', 'دفع', 'مدفوعات', 'رصيد', 'محفظه', 'فاتوره'],
+  '/settings': ['settings', 'اعدادات', 'حساب', 'امان', 'خصوصيه'],
+  '/following': ['saved', 'follow', 'محفوظ', 'المحفوظون', 'متابعه المحامين'],
+  '/pro': ['office', 'pro', 'مكتب', 'مكتبي', 'محامي'],
+  '/case-store': ['store', 'opportunities', 'فرص', 'سوق', 'قضايا متاحه'],
+  '/admin': ['admin', 'اداره', 'تحكم', 'نظام'],
+};
+
+const pageInsights: Record<string, { title: string; summary: string; icon: string; prompt: string; primaryPath?: string; primaryLabel?: string }> = {
+  '/user': {
+    title: 'موجز يومك القانوني',
+    summary: 'رتب الملفات والتنبيهات والرصيد في خطوة واحدة.',
+    icon: 'fa-table-columns',
+    prompt: 'حلل لوحة التحكم الخاصة بي واقترح أهم ثلاث خطوات قانونية أو تشغيلية لهذا اليوم.',
+  },
+  '/cases': {
+    title: 'قائد الملفات الذكي',
+    summary: 'راجع الرسائل والوثائق والإغلاق قبل أن تضيع أي متابعة.',
+    icon: 'fa-folder-open',
+    prompt: 'حلل ملفات القضايا الحالية وحدد ما يحتاج رداً أو وثيقة أو إغلاقاً أو دفعاً.',
+  },
+  '/lawyers': {
+    title: 'مطابقة محامي أذكى',
+    summary: 'حوّل حاجتك القانونية إلى معايير اختيار واضحة.',
+    icon: 'fa-scale-balanced',
+    prompt: 'ساعدني في اختيار محام مناسب حسب نوع القضية والمدينة والميزانية والأسئلة التي يجب طرحها قبل الاستشارة.',
+  },
+  '/messages': {
+    title: 'موجز المحادثات',
+    summary: 'استخرج الردود المهمة ونقاط المتابعة من الرسائل.',
+    icon: 'fa-comments',
+    prompt: 'لخص لي المحادثات القانونية الحالية وحدد الرسائل التي تحتاج رداً سريعاً مع صياغة رد مناسبة.',
+  },
+  '/billing': {
+    title: 'مراقب المدفوعات',
+    summary: 'افهم الرصيد والفواتير والدفعات المتأخرة قبل التصعيد.',
+    icon: 'fa-wallet',
+    prompt: 'حلل وضع المدفوعات والرصيد والفواتير واقترح أفضل خطوة مالية قانونية تالية.',
+  },
+  '/contracts': {
+    title: 'مراجع العقود الذكي',
+    summary: 'جهز شروط العقد ومخاطر التوقيع قبل الإنشاء أو الإرسال.',
+    icon: 'fa-file-contract',
+    prompt: 'ساعدني على إنشاء أو مراجعة عقد واضح: ما الشروط الأساسية، المخاطر، والمستندات المطلوبة؟',
+  },
+  '/action-plan': {
+    title: 'مخطط الإجراءات',
+    summary: 'حوّل المشكلة إلى خطوات قانونية قابلة للتنفيذ.',
+    icon: 'fa-route',
+    prompt: 'حوّل مشكلتي القانونية إلى خطة عمل مرتبة حسب الأولوية: مستندات، مواعيد، رسائل، ومخاطر.',
+  },
+  '/legal': {
+    title: 'باحث قانوني مرافق',
+    summary: 'اسأل عن المادة أو الإجراء واحصل على ملخص عملي.',
+    icon: 'fa-book-open',
+    prompt: 'ساعدني في البحث داخل المكتبة القانونية العراقية: ما النصوص الأقرب وما الإجراء العملي المرتبط بها؟',
+  },
+  '/feed': {
+    title: 'فلتر المعرفة',
+    summary: 'حوّل المنشورات القانونية إلى مواضيع متابعة مفيدة.',
+    icon: 'fa-users-rectangle',
+    prompt: 'استخرج من نشاط المجتمع القانوني أهم موضوعات المتابعة والأسئلة التي تستحق البحث أو الاستشارة.',
+  },
+  '/settings': {
+    title: 'تحسين الحساب',
+    summary: 'أكمل البيانات التي ترفع الثقة ودقة التوصيات.',
+    icon: 'fa-user-gear',
+    prompt: 'راجع إعدادات حسابي واقترح ما يجب إكماله لتحسين الثقة والأمان ودقة التوصيات.',
+  },
+  '/pro': {
+    title: 'مدير مكتب ذكي',
+    summary: 'رتب العملاء والملفات والرسائل حسب الأولوية المهنية.',
+    icon: 'fa-briefcase',
+    prompt: 'حلل مكتب المحامي وحدد الملفات والعملاء والرسائل التي تحتاج متابعة اليوم.',
+  },
+  '/case-store': {
+    title: 'صياد الفرص',
+    summary: 'اختر القضايا الأعلى ملاءمة قبل تقديم عرض.',
+    icon: 'fa-ranking-star',
+    prompt: 'حلل فرص القضايا المتاحة واقترح أيها أنسب لي وكيف أصيغ عرضاً مهنياً.',
+  },
+  '/admin': {
+    title: 'مراقب النظام',
+    summary: 'راقب مؤشرات الإدارة والمخاطر التشغيلية سريعاً.',
+    icon: 'fa-server',
+    prompt: 'حلل لوحة الإدارة وحدد أهم مخاطر النظام والمستخدمين والإجراءات المطلوبة الآن.',
+  },
+};
 
 export default function MainLayout() {
   const { user, logout } = useAuth();
@@ -11,6 +170,7 @@ export default function MainLayout() {
   const prefersReducedMotion = useReducedMotion();
   const { scrollYProgress } = useScroll();
   const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, deleteNotification, clearAllNotifications } = useNotifications();
+  const { data: intelligence } = useUserIntelligence();
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
     announcement: string;
@@ -20,6 +180,7 @@ export default function MainLayout() {
   const [sosOpen, setSosOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [moreNavOpen, setMoreNavOpen] = useState(false);
+  const [intelligenceOpen, setIntelligenceOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [notificationsFilter, setNotificationsFilter] = useState<'all' | 'unread'>('unread');
   const notificationsMenuRef = useRef<HTMLDivElement | null>(null);
@@ -130,12 +291,28 @@ export default function MainLayout() {
   const ownProfilePath = user?.id ? `/profile/${user.id}` : '/settings';
   const ownProfileLabel = user?.role === 'pro' ? 'ملفي العام' : 'الملف الشخصي';
 
+  const prefetchRoute = (path?: string) => {
+    if (!path) return;
+    const loader = routePreloaders[path];
+    if (loader) void loader();
+    if (!apiClient.getToken()) return;
+    const dataLoader = routeDataPreloaders[path];
+    if (dataLoader) void dataLoader().catch(() => undefined);
+  };
+
+  const currentPageInsight = useMemo(() => {
+    const matchedPath = Object.keys(pageInsights)
+      .sort((left, right) => right.length - left.length)
+      .find((path) => location.pathname === path || location.pathname.startsWith(`${path}/`));
+    return matchedPath ? pageInsights[matchedPath] : null;
+  }, [location.pathname]);
+
   const commandResults = useMemo(() => {
-    const query = commandQuery.trim().toLowerCase();
-    if (!query) return [];
+    const rawQuery = commandQuery.trim();
+    const query = normalizeCommandText(rawQuery);
 
     // Common navigation shortcuts
-    const items = [
+    const items: CommandResult[] = [
       { id: 'n1', type: 'ملاحة', title: 'الرئيسية', subtitle: 'أسرع طريق لما يحتاج انتباهك الآن', icon: 'fa-table-columns', path: '/user' },
       { id: 'n2', type: 'ملاحة', title: 'القضايا', subtitle: 'متابعة سير العمل والمهام المطلوبة', icon: 'fa-folder-open', path: '/cases' },
       { id: 'n3', type: 'ملاحة', title: 'المحامون', subtitle: 'ابحث وتواصل وافتح قضية بسرعة', icon: 'fa-scale-balanced', path: '/lawyers' },
@@ -161,13 +338,65 @@ export default function MainLayout() {
       items.push({ id: 'p2a', type: 'احترافي', title: 'فرص المحامين', subtitle: 'القضايا المرتبة حسب أفضل فرصة لك', icon: 'fa-ranking-star', path: '/case-store' });
     }
 
-    return items.filter(
-      (item) =>
-        item.title.toLowerCase().includes(query) ||
-        item.subtitle.toLowerCase().includes(query) ||
-        item.type.toLowerCase().includes(query)
-    );
-  }, [commandQuery, ownProfilePath, user?.role]);
+    const smartItems: CommandResult[] = (intelligence?.recommendations || [])
+      .filter((item: any) => item?.aiBrief)
+      .slice(0, 4)
+      .map((item: any) => ({
+        id: `smart-${item.id}`,
+        type: item.priority === 'high' ? 'أولوية عاجلة' : 'ذكاء',
+        title: item.aiAction || item.title,
+        subtitle: item.description || item.impact || 'تحليل ذكي حسب نشاطك الحالي',
+        icon: item.icon || 'fa-wand-magic-sparkles',
+        aiBrief: item.aiBrief,
+      }));
+
+    if (!query) return smartItems.length > 0 ? smartItems : items.slice(0, 6);
+
+    const scoredItems = [...smartItems, ...items]
+      .map((item) => {
+        const haystack = normalizeCommandText(`${item.title} ${item.subtitle} ${item.type} ${(item.path && commandAliases[item.path]?.join(' ')) || ''}`);
+        const tokens = query.split(' ').filter(Boolean);
+        const exact = haystack.includes(query) ? 20 : 0;
+        const tokenScore = tokens.reduce((score, token) => score + (haystack.includes(token) ? 5 : 0), 0);
+        const smartBoost = item.aiBrief ? 4 : 0;
+        return { item, score: exact + tokenScore + smartBoost };
+      })
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .map((entry) => entry.item);
+
+    const aiFallback: CommandResult = {
+      id: 'ask-ai-query',
+      type: 'ذكاء مباشر',
+      title: `اسأل المساعد: ${rawQuery}`,
+      subtitle: 'حوّل النص المكتوب إلى جلسة تحليل قانوني فورية',
+      icon: 'fa-wand-magic-sparkles',
+      aiBrief: rawQuery,
+    };
+
+    return [...scoredItems.slice(0, 7), aiFallback];
+  }, [commandQuery, intelligence?.recommendations, ownProfilePath, user?.role]);
+
+  const executeCommand = (result: CommandResult) => {
+    if (result.aiBrief) {
+      navigate('/aichat', { state: { initialQuery: result.aiBrief } });
+      prefetchRoute('/aichat');
+    } else if (result.path) {
+      navigate(result.path);
+      prefetchRoute(result.path);
+    }
+    setCommandQuery('');
+    setIsCommandPaletteOpen(false);
+  };
+
+  const runPageAnalysis = (prompt?: string) => {
+    navigate('/aichat', {
+      state: {
+        initialQuery: prompt || currentPageInsight?.prompt || 'حلل الصفحة الحالية واقترح أفضل خطوة تالية.',
+      },
+    });
+    prefetchRoute('/aichat');
+  };
 
   const handleLogout = () => {
     if (!user) {
@@ -246,6 +475,7 @@ export default function MainLayout() {
   useEffect(() => {
     setMobileNavOpen(false);
     setMoreNavOpen(false);
+    setIntelligenceOpen(false);
   }, [location.pathname]);
 
   useEffect(() => {
@@ -294,6 +524,31 @@ export default function MainLayout() {
   );
   const isNavItemActive = (item: { path: string }) => location.pathname === item.path || (item.path !== '/user' && location.pathname.startsWith(item.path));
   const hasActiveOverflowItem = overflowNavItems.some(isNavItemActive);
+  const pageRecommendation = useMemo(() => {
+    const recommendations = intelligence?.recommendations || [];
+    return (
+      recommendations.find((item: any) => item?.target && (location.pathname === item.target || location.pathname.startsWith(`${item.target}/`))) ||
+      recommendations[0] ||
+      null
+    );
+  }, [intelligence?.recommendations, location.pathname]);
+
+  useEffect(() => {
+    const warmRoutes = ['/aichat', ...primaryNavItems.slice(0, 4).map((item) => item.path)];
+    const warm = () => warmRoutes.forEach(prefetchRoute);
+    const hasIdleCallback = typeof window.requestIdleCallback === 'function';
+    const idleId = hasIdleCallback
+      ? window.requestIdleCallback(warm, { timeout: 2500 })
+      : globalThis.setTimeout(warm, 1200);
+
+    return () => {
+      if (hasIdleCallback && typeof window.cancelIdleCallback === 'function') {
+        window.cancelIdleCallback(idleId);
+      } else {
+        globalThis.clearTimeout(idleId);
+      }
+    };
+  }, [primaryNavItems]);
 
   return (
     <div className="flex min-h-screen w-full flex-col">
@@ -383,6 +638,8 @@ export default function MainLayout() {
                 >
                   <Link
                     to={item.path}
+                    onMouseEnter={() => prefetchRoute(item.path)}
+                    onFocus={() => prefetchRoute(item.path)}
                     className={`group relative flex items-center gap-2 overflow-hidden rounded-xl px-3 py-2 text-sm font-bold transition-colors ${isActive
                       ? 'bg-brand-navy/5 text-brand-navy'
                       : 'text-slate-500 hover:text-brand-navy hover:bg-slate-50'
@@ -457,6 +714,8 @@ export default function MainLayout() {
                             <Link
                               key={item.path}
                               to={item.path}
+                              onMouseEnter={() => prefetchRoute(item.path)}
+                              onFocus={() => prefetchRoute(item.path)}
                               onClick={() => setMoreNavOpen(false)}
                               className={`flex items-center justify-between gap-3 rounded-xl px-3 py-3 transition ${isActive ? 'bg-brand-navy text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-brand-navy'}`}
                             >
@@ -478,6 +737,20 @@ export default function MainLayout() {
 
           {/* Right Actions */}
           <div className="flex items-center justify-end gap-2 lg:w-64">
+            {user && (
+              <motion.button
+                onClick={() => setIntelligenceOpen(true)}
+                whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
+                animate={{ height: isScrolled ? 36 : 40, width: isScrolled ? 36 : 40 }}
+                transition={headerTransition}
+                className={`relative flex items-center justify-center rounded-xl border border-brand-navy/10 bg-brand-navy text-brand-gold shadow-lg shadow-brand-navy/15 transition-all hover:bg-brand-dark ${isScrolled ? 'h-9 w-9' : 'h-10 w-10'}`}
+                title="مساعد الموقع الذكي"
+                aria-label="فتح مساعد الموقع الذكي"
+              >
+                <i className="fa-solid fa-wand-magic-sparkles text-xs"></i>
+                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-white"></span>
+              </motion.button>
+            )}
             <motion.button
               onClick={() => setIsCommandPaletteOpen(true)}
               whileTap={prefersReducedMotion ? undefined : { scale: 0.94 }}
@@ -677,6 +950,8 @@ export default function MainLayout() {
                   <Link
                     key={item.path}
                     to={item.path}
+                    onMouseEnter={() => prefetchRoute(item.path)}
+                    onFocus={() => prefetchRoute(item.path)}
                     onClick={() => setMobileNavOpen(false)}
                     className={`flex items-center gap-4 rounded-2xl p-4 transition-all ${isActive
                       ? 'bg-brand-navy text-white shadow-lg shadow-brand-navy/20'
@@ -751,9 +1026,55 @@ export default function MainLayout() {
         </div>
       )}
 
+      {user && currentPageInsight && (
+        <section className="mx-auto mt-3 w-full max-w-[1400px] px-4 md:px-6 lg:px-8">
+          <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-right shadow-sm lg:grid-cols-[1fr_auto] lg:items-center">
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-brand-navy/5 text-brand-navy">
+                <i className={`fa-solid ${currentPageInsight.icon} text-sm`}></i>
+              </span>
+              <div className="min-w-0">
+                <p className="text-sm font-black text-brand-dark">{currentPageInsight.title}</p>
+                <p className="mt-1 line-clamp-1 text-xs font-bold text-slate-500">{currentPageInsight.summary}</p>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center sm:justify-end">
+              {pageRecommendation?.aiBrief && (
+                <button
+                  type="button"
+                  onClick={() => runPageAnalysis(pageRecommendation.aiBrief)}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-brand-navy px-3 py-2.5 text-[10px] font-black text-white transition hover:bg-brand-dark"
+                >
+                  <i className="fa-solid fa-wand-magic-sparkles"></i>
+                  {pageRecommendation.aiAction || 'حلل الأولوية'}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => runPageAnalysis()}
+                className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 text-[10px] font-black text-brand-navy transition hover:border-brand-navy hover:bg-white"
+              >
+                <i className="fa-solid fa-brain"></i>
+                تحليل الصفحة
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsCommandPaletteOpen(true)}
+                className="hidden items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-[10px] font-black text-slate-500 transition hover:border-brand-navy hover:text-brand-navy sm:flex"
+              >
+                <i className="fa-solid fa-magnifying-glass"></i>
+                أوامر ذكية
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
       <main className="relative mx-auto flex min-h-0 w-full max-w-[1400px] flex-1 p-4 md:p-6 lg:p-8">
         <Outlet context={{ setSosOpen }} />
       </main>
+
+      <GlobalIntelligencePanel open={intelligenceOpen} onClose={() => setIntelligenceOpen(false)} />
 
       {sosOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-brand-dark/80 p-4 backdrop-blur-sm fade-in">
@@ -814,17 +1135,27 @@ export default function MainLayout() {
                   className="w-full bg-transparent pr-12 text-lg font-bold text-brand-dark outline-none placeholder:text-slate-300 text-right"
                   value={commandQuery}
                   onChange={(e) => setCommandQuery(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && commandResults[0]) {
+                      event.preventDefault();
+                      executeCommand(commandResults[0]);
+                    }
+                  }}
                 />
               </div>
 
               <div className="max-h-[60vh] overflow-y-auto p-4 custom-scrollbar">
                 {commandResults.length > 0 ? (
                   <div className="space-y-2">
-                    <p className="mb-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">التنقل السريع</p>
+                    <p className="mb-2 pr-4 text-[10px] font-bold uppercase tracking-widest text-slate-400">
+                      {commandQuery ? 'أفضل النتائج' : 'اقتراحات ذكية الآن'}
+                    </p>
                     {commandResults.map((res) => (
                       <button
                         key={res.id}
-                        onClick={() => { navigate(res.path); setIsCommandPaletteOpen(false); }}
+                        onMouseEnter={() => prefetchRoute(res.path)}
+                        onFocus={() => prefetchRoute(res.path)}
+                        onClick={() => executeCommand(res)}
                         className="flex w-full items-center justify-between rounded-2xl p-4 text-right transition hover:bg-slate-50"
                       >
                         <span className="rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">{res.type}</span>

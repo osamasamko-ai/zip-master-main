@@ -250,6 +250,10 @@ export default function AIChat() {
     trackEvent('ai_conversation_exported', { messageCount: messages.length });
   };
 
+  const smartPrompts = (intelligence?.recommendations || [])
+    .filter((item: any) => item?.aiBrief)
+    .slice(0, 3);
+
   return (
     <div className="flex h-[calc(100vh-120px)] flex-col bg-slate-50 overflow-hidden rounded-[2.5rem] border border-slate-200 shadow-premium text-right">
       {/* Chat Header */}
@@ -363,7 +367,7 @@ export default function AIChat() {
             </AnimatePresence>
 
             {messages.length === 0 && (
-              <div className="flex flex-col items-center justify-center h-full text-center space-y-6 max-w-md mx-auto">
+              <div className="flex min-h-full flex-col items-center justify-center text-center space-y-5 max-w-2xl mx-auto py-8">
                 <div className="w-20 h-20 bg-brand-navy/5 rounded-[2rem] flex items-center justify-center text-brand-navy text-3xl">
                   <i className="fa-solid fa-robot animate-bounce"></i>
                 </div>
@@ -371,6 +375,56 @@ export default function AIChat() {
                   <h3 className="text-xl font-black text-brand-dark">كيف يمكنني مساعدتك قانونياً اليوم؟</h3>
                   <p className="text-sm text-slate-500 mt-2 font-bold leading-relaxed">اسأل عن أي مادة قانونية عراقية، أو اطلب تلخيصاً لقضيتك الحالية.</p>
                 </div>
+
+                {intelligence?.assistant && (
+                  <div className="w-full rounded-[1.5rem] border border-brand-navy/10 bg-white p-4 text-right shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-brand-gold/15 text-brand-gold">
+                        <i className="fa-solid fa-sparkles"></i>
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[10px] font-black uppercase tracking-widest text-brand-gold">تحليل ذكي من نشاطك</p>
+                        <h4 className="mt-1 text-sm font-black text-brand-dark">{intelligence.assistant.headline}</h4>
+                        <p className="mt-1 text-xs font-bold leading-6 text-slate-500">{intelligence.assistant.summary}</p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        trackEvent('ai_assistant_brief_clicked', { headline: intelligence.assistant.headline });
+                        handleSend(intelligence.assistant.aiBrief);
+                      }}
+                      className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl bg-brand-navy px-4 py-3 text-xs font-black text-white transition hover:bg-brand-dark disabled:opacity-40"
+                      disabled={isLoading || !intelligence.assistant.aiBrief}
+                    >
+                      <i className="fa-solid fa-wand-magic-sparkles"></i>
+                      {intelligence.assistant.aiAction || 'ابدأ تحليل ذكي'}
+                    </button>
+                  </div>
+                )}
+
+                {smartPrompts.length > 0 && (
+                  <div className="grid w-full gap-2 md:grid-cols-3">
+                    {smartPrompts.map((item: any) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          trackEvent('ai_smart_prompt_clicked', { id: item.id, title: item.title });
+                          handleSend(item.aiBrief);
+                        }}
+                        className="rounded-2xl border border-slate-100 bg-white p-4 text-right transition hover:border-brand-navy/30 hover:shadow-md"
+                      >
+                        <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-brand-navy/5 text-brand-navy">
+                          <i className={`fa-solid ${item.icon || 'fa-sparkles'} text-xs`}></i>
+                        </span>
+                        <p className="line-clamp-1 text-xs font-black text-brand-dark">{item.aiAction || item.title}</p>
+                        <p className="mt-1 line-clamp-2 text-[11px] font-bold leading-5 text-slate-500">{item.description}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 gap-2 w-full">
                   {intelligence?.topSearches?.slice(0, 2).map((item: any) => (
                     <button

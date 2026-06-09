@@ -91,8 +91,7 @@ class ApiClient {
     }
 
     async getUsers(): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/users');
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]>>('/api/users');
     }
 
     async updateUserProfile(id: string, data: any): Promise<ApiResponse<any>> {
@@ -101,20 +100,15 @@ class ApiClient {
     }
 
     async getAdminMetrics(): Promise<ApiResponse<any>> {
-        const response = await this.client.get('/api/admin/metrics');
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>('/api/admin/metrics');
     }
 
     async getAdminIntelligence(): Promise<ApiResponse<any>> {
-        const response = await this.client.get('/api/admin/intelligence');
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>('/api/admin/intelligence');
     }
 
     async getKycApplications(search?: string, status?: string): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/kyc/applications', {
-            params: { search, status },
-        });
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]>>('/api/kyc/applications', { search, status });
     }
 
     async updateKycApplication(id: string, status: string): Promise<ApiResponse<any>> {
@@ -123,8 +117,7 @@ class ApiClient {
     }
 
     async getCurrentUser(): Promise<ApiResponse<any>> {
-        const response = await this.client.get('/api/me');
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>('/api/me');
     }
 
     async getDashboard(): Promise<ApiResponse<any>> {
@@ -213,8 +206,7 @@ class ApiClient {
     }
 
     async getWorkspaceCases(): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/app/workspace/cases');
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]>>('/api/app/workspace/cases');
     }
 
     async createWorkspaceCase(data: any): Promise<ApiResponse<any>> {
@@ -285,8 +277,7 @@ class ApiClient {
     }
 
     async getCaseMarketplaceNegotiation(id: string): Promise<ApiResponse<any>> {
-        const response = await this.client.get(`/api/app/case-marketplace/${id}/negotiation`);
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>(`/api/app/case-marketplace/${id}/negotiation`);
     }
 
     async sendCaseMarketplaceNegotiationMessage(id: string, text: string): Promise<ApiResponse<any>> {
@@ -335,8 +326,7 @@ class ApiClient {
     }
 
     async getProWorkspace(): Promise<ApiResponse<any>> {
-        const response = await this.client.get('/api/app/pro/workspace');
-        return response.data;
+        return this.cachedGet<ApiResponse<any>>('/api/app/pro/workspace');
     }
 
     async requestProWithdrawal(data: { amount: number; payoutMethod?: string }): Promise<ApiResponse<any>> {
@@ -385,8 +375,7 @@ class ApiClient {
     }
 
     async getContractTemplates(): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/app/contract-templates');
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]>>('/api/app/contract-templates');
     }
 
     async saveContractTemplate(data: { name: string; text: string }): Promise<ApiResponse<any[]>> {
@@ -410,8 +399,7 @@ class ApiClient {
     }
 
     async getUserContracts(): Promise<ApiResponse<any[]>> {
-        const response = await this.client.get('/api/legal/contracts');
-        return response.data;
+        return this.cachedGet<ApiResponse<any[]>>('/api/legal/contracts');
     }
 
     async requestContractReview(data: { lawyerId: string; contractId?: string; notes?: string }): Promise<ApiResponse<any>> {

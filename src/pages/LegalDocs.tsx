@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import html2pdf from 'html2pdf.js';
 import ActionButton from '../components/ui/ActionButton';
 import EmptyState from '../components/ui/EmptyState';
 import { useTrackEvent, useUserIntelligence } from '../hooks/useIntelligence';
@@ -483,6 +482,7 @@ export default function LegalDocs() {
     };
 
     try {
+      const html2pdf = (await import('html2pdf.js')).default;
       await html2pdf().from(element).set(opt).save();
       trackEvent('legal_pdf_exported', { title: selectedDoc.title, category: selectedDoc.category }, selectedDoc.id);
       showToast('تم تصدير الوثيقة كـ PDF بنجاح', 'success');

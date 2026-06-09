@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import ActionButton from '../components/ui/ActionButton';
-import html2pdf from 'html2pdf.js';
 import apiClient from '../api/client';
 
 // Re-using the SignaturePad component logic for consistency
@@ -330,6 +329,7 @@ export default function ExternalSignature() {
             };
 
             // 2. توليد الـ PDF كـ Blob ورفعه للخادم
+            const html2pdf = (await import('html2pdf.js')).default;
             const pdfBlob = await html2pdf().from(element).set(opt).output('blob');
             const uploadRes = await apiClient.uploadContractPdf(pdfBlob);
             const pdfUrl = uploadRes.data.url;

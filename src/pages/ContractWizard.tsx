@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import ActionButton from '../components/ui/ActionButton';
 import apiClient from '../api/client';
-import html2pdf from 'html2pdf.js';
 import { motion, AnimatePresence } from 'framer-motion';
 import StatusBadge from '../components/ui/StatusBadge';
 import { useAuth } from '../context/AuthContext';
@@ -650,6 +649,7 @@ export default function ContractWizard() {
             // 1. توليد الـ PDF كـ Blob
             const element = document.createElement('div');
             element.innerHTML = `<h1>عقد بيع مركبة</h1><p>${generatedContractText.replace(/\n/g, '<br>')}</p>`;
+            const html2pdf = (await import('html2pdf.js')).default;
             const worker = html2pdf().from(element).set({ margin: 10, filename: 'contract.pdf' });
             const pdfBlob = await worker.output('blob');
 
@@ -726,7 +726,7 @@ export default function ContractWizard() {
         }
     };
 
-    const handleDownloadPdf = () => {
+    const handleDownloadPdf = async () => {
         if (!generatedContractText) return;
 
         const element = document.createElement('div');
@@ -780,7 +780,8 @@ export default function ContractWizard() {
             jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' as const },
         };
 
-        html2pdf().from(element).set(opt).save();
+        const html2pdf = (await import('html2pdf.js')).default;
+        await html2pdf().from(element).set(opt).save();
         clearDraft(); // Clear draft after successful download/finalization
     };
 
