@@ -231,12 +231,7 @@ export default function Auth() {
       };
     }
 
-    return {
-      icon: 'fa-wand-magic-sparkles',
-      title: 'دخول ذكي',
-      text: 'اكتب بريدك، وسنحدد وجهتك تلقائياً بعد الدخول: عميل، محامي، أو إدارة.',
-      tone: 'bg-brand-gold/10 text-brand-dark border-brand-gold/20',
-    };
+    return null;
   }, [emailPreview, isRegisterMode, recentAccounts, selectedRole]);
 
   const getFieldError = (fieldName: string) => {
@@ -571,7 +566,7 @@ export default function Auth() {
                 </button>
               </div>
 
-              {authUtilityTab === 'account' && (
+              {authUtilityTab === 'account' && smartAuthInsight && (
                 <motion.div
                   key={smartAuthInsight.title}
                   variants={authPanelVariants}
@@ -958,13 +953,6 @@ export default function Auth() {
                     onSubmit={handleLogin}
                     className="space-y-4"
                   >
-                    <div className="rounded-[1.35rem] border border-brand-navy/10 bg-brand-navy/[0.03] px-4 py-3 text-right">
-                      <p className="text-xs font-black text-brand-navy">تسجيل أسرع وأوضح</p>
-                      <p className="mt-1 text-xs font-bold leading-6 text-slate-600">
-                        أدخل بريدك وكلمة المرور، وسنعيدك مباشرة إلى لوحة التحكم المناسبة لدورك.
-                      </p>
-                    </div>
-
                     {recentAccounts.length > 0 && (
                       <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
                         <div className="mb-3 flex items-center justify-between gap-3">
