@@ -6,7 +6,7 @@ type AuthContextValue = {
   token: string | null;
   isLoading: boolean;
   error: string;
-  login: (email: string, password: string) => Promise<AuthUser>;
+  login: (identifier: string, password: string) => Promise<AuthUser>;
   register: (email: string, password: string, name: string, role?: Role) => Promise<AuthUser>;
   logout: () => void;
 };
@@ -25,11 +25,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     apiClient.setToken(nextToken);
   };
 
-  const login = async (email: string, password: string) => {
+  const login = async (identifier: string, password: string) => {
     setIsLoading(true);
     setError('');
     try {
-      const response = await apiClient.login(email, password);
+      const response = await apiClient.login(identifier, password);
       applySession(response.data.token, response.data.user);
       return response.data.user;
     } catch (err) {

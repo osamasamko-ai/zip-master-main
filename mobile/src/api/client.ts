@@ -111,10 +111,10 @@ class ApiClient {
     this.inflight.clear();
   }
 
-  login(email: string, password: string) {
+  login(identifier: string, password: string) {
     return this.request<{ token: string; user: AuthUser }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, email: identifier, password }),
     });
   }
 

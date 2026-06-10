@@ -40,6 +40,15 @@ function normalizeEmail(value: string) {
   return value.trim().toLowerCase();
 }
 
+function normalizeLoginIdentifier(value: string) {
+  const trimmed = value.trim();
+  return trimmed.includes('@') ? trimmed.toLowerCase() : trimmed;
+}
+
+function normalizePhone(value: string) {
+  return value.replace(/\D/g, '');
+}
+
 function isProfessionalRole(role?: string | null) {
   return role === 'pro' || role === 'lawyer';
 }
@@ -120,7 +129,10 @@ export function AuthScreen() {
   }, []);
 
   const emailValue = normalizeEmail(email);
+  const loginIdentifierValue = normalizeLoginIdentifier(email);
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue);
+  const phoneValid = normalizePhone(email).length >= 7;
+  const loginIdentifierValid = emailValid || phoneValid;
   const passwordScore = useMemo(() => {
     if (!password) return 0;
     return [
@@ -133,7 +145,7 @@ export function AuthScreen() {
   const isRegister = mode === 'register';
   const canSubmit = isRegister
     ? name.trim().length > 1 && emailValid && passwordScore >= 2 && password === confirmPassword
-    : emailValid && password.length > 0;
+    : loginIdentifierValid && password.length > 0;
   const authInsight = useMemo(() => {
     if (isRegister) {
       if (role === 'pro') {
@@ -152,7 +164,7 @@ export function AuthScreen() {
       };
     }
 
-    const matchedAccount = recentAccounts.find((account) => account.email === emailValue);
+    const matchedAccount = recentAccounts.find((account) => account.email === loginIdentifierValue);
     if (matchedAccount) {
       return {
         icon: 'time-outline' as const,
@@ -165,10 +177,10 @@ export function AuthScreen() {
     return {
       icon: 'sparkles-outline' as const,
       title: 'دخول ذكي',
-      text: 'اختر حساباً محفوظاً أو اكتب بريدك، وسنوجهك تلقائياً حسب دورك بعد الدخول.',
+      text: 'اختر حساباً محفوظاً أو اكتب بريدك أو رقم موبايلك للمتابعة.',
       tone: 'gold' as const,
     };
-  }, [emailValue, isRegister, recentAccounts, role]);
+  }, [isRegister, loginIdentifierValue, recentAccounts, role]);
 
   const switchMode = (nextMode: Mode) => {
     setMode(nextMode);
@@ -204,7 +216,7 @@ export function AuthScreen() {
   const submit = async () => {
     setLocalError('');
     if (!canSubmit) {
-      setLocalError(isRegister ? 'أكمل البيانات الأساسية وتأكد من تطابق كلمة المرور.' : 'أدخل بريدك وكلمة المرور.');
+      setLocalError(isRegister ? 'أكمل البيانات الأساسية وتأكد من تطابق كلمة المرور.' : 'أدخل بريدك أو رقم الموبايل وكلمة المرور.');
       return;
     }
 
@@ -219,9 +231,9 @@ export function AuthScreen() {
     }
 
     try {
-      const loggedInUser = await login(emailValue, password);
-      setRecentAccounts(await writeRecentAccount(toRecentAccount(loggedInUser, emailValue)));
-      await AsyncStorage.setItem(REMEMBERED_EMAIL_KEY, loggedInUser.email || emailValue);
+      const loggedInUser = await login(loginIdentifierValue, password);
+      setRecentAccounts(await writeRecentAccount(toRecentAccount(loggedInUser, loginIdentifierValue)));
+      await AsyncStorage.setItem(REMEMBERED_EMAIL_KEY, loggedInUser.email || loginIdentifierValue);
     } catch (err) {
       setLocalError(err instanceof Error ? err.message : 'تعذر تسجيل الدخول.');
     }
@@ -315,7 +327,15 @@ export function AuthScreen() {
               <Field label="الاسم الكامل" value={name} onChangeText={setName} placeholder="اسمك الكامل" icon="person-outline" />
             ) : null}
 
-            <Field label="البريد الإلكتروني" value={email} onChangeText={setEmail} placeholder="name@example.com" icon="mail-outline" keyboardType="email-address" ltr />
+            <Field
+              label={isRegister ? 'البريد الإلكتروني' : 'البريد الإلكتروني أو رقم الموبايل'}
+              value={email}
+              onChangeText={setEmail}
+              placeholder={isRegister ? 'name@example.com' : 'name@example.com أو 07xxxxxxxxx'}
+              icon={!isRegister && phoneValid && !emailValid ? 'call-outline' : 'mail-outline'}
+              keyboardType={isRegister ? 'email-address' : 'default'}
+              ltr
+            />
 
             <Field
               label="كلمة المرور"

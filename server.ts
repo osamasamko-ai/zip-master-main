@@ -667,28 +667,52 @@ async function startServer() {
 
   app.post('/api/auth/login', async (req, res) => {
     try {
-      const { email, password } = req.body;
+      const { password } = req.body;
+      const rawIdentifier = req.body.identifier ?? req.body.email;
+      const identifier = typeof rawIdentifier === 'string' ? rawIdentifier.trim() : '';
+      const normalizedIdentifier = identifier.toLowerCase();
 
-      if (!email || !password) {
-        return res.status(400).json({ error: 'Email and password are required' });
+      if (!identifier || !password) {
+        return res.status(400).json({ error: 'البريد الإلكتروني أو رقم الموبايل وكلمة المرور مطلوبة.' });
       }
 
-      const user = await prisma.user.findUnique({
-        where: { email },
-        include: { lawyerProfile: true },
-      });
+      const isEmailIdentifier = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedIdentifier);
+      const normalizedPhoneIdentifier = identifier.replace(/\D/g, '');
+      let user = null;
+
+      if (isEmailIdentifier) {
+        user = await prisma.user.findUnique({
+          where: { email: normalizedIdentifier },
+          include: { lawyerProfile: true },
+        });
+      } else if (normalizedPhoneIdentifier.length >= 7) {
+        const phoneMatches = await prisma.user.findMany({
+          where: { phone: { not: null } },
+          include: { lawyerProfile: true },
+        });
+        const matchedUsers = phoneMatches.filter((candidate) => {
+          const candidatePhone = String(candidate.phone || '').replace(/\D/g, '');
+          return candidatePhone === normalizedPhoneIdentifier || candidatePhone.endsWith(normalizedPhoneIdentifier) || normalizedPhoneIdentifier.endsWith(candidatePhone);
+        });
+
+        if (matchedUsers.length > 1) {
+          return res.status(409).json({ error: 'هذا الرقم مرتبط بأكثر من حساب. يرجى استخدام البريد الإلكتروني.' });
+        }
+
+        user = matchedUsers[0] || null;
+      }
 
       if (!user) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: 'بيانات الدخول غير صحيحة.' });
       }
 
       const passwordValid = await verifyPassword(password, user.passwordHash);
       if (!passwordValid) {
-        return res.status(401).json({ error: 'Invalid credentials' });
+        return res.status(401).json({ error: 'بيانات الدخول غير صحيحة.' });
       }
 
       if (user.blocked) {
-        return res.status(403).json({ error: 'Account is blocked' });
+        return res.status(403).json({ error: 'الحساب محظور حالياً.' });
       }
 
       const token = generateToken({

@@ -4,14 +4,9 @@ import { AnimatePresence, Variants, motion } from 'framer-motion';
 import { Role, useAuth } from '../context/AuthContext';
 
 const VALUE_POINTS = [
-  'محامون يفهمون الواقع القانوني العراقي.',
-  'متابعة أوضح للقضية والمستندات.',
-  'تواصل أسرع وأكثر مهنية.',
-];
-
-const TRUST_SIGNALS = [
-  { icon: 'fa-landmark', title: 'للقانون العراقي', text: 'تجربة مصممة لطبيعة الإجراءات المحلية.' },
-  { icon: 'fa-user-shield', title: 'خصوصية مهنية', text: 'ملفات ورسائل قانونية في مساحة واضحة.' },
+  'اختر محامياً مناسباً خلال دقائق.',
+  'تابع القضية والرسائل من مكان واحد.',
+  'احفظ مستنداتك القانونية بشكل منظم.',
 ];
 
 const DEMO_ACCOUNTS = [
@@ -124,6 +119,11 @@ export default function Auth() {
   const isRegisterMode = authMode === 'register';
 
   const normalizeEmail = (value: string) => value.trim().toLowerCase();
+  const normalizeLoginIdentifier = (value: string) => {
+    const trimmed = value.trim();
+    return trimmed.includes('@') ? trimmed.toLowerCase() : trimmed;
+  };
+  const normalizePhone = (value: string) => value.replace(/\D/g, '');
 
   const markFieldTouched = (fieldName: string) => {
     setTouchedFields((prev) => new Set([...prev, fieldName]));
@@ -165,8 +165,11 @@ export default function Auth() {
   };
 
   const emailPreview = normalizeEmail(email);
+  const loginIdentifierPreview = normalizeLoginIdentifier(email);
   const forgotEmailPreview = normalizeEmail(forgotEmail);
   const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailPreview);
+  const phoneLooksValid = normalizePhone(email).length >= 7;
+  const loginIdentifierLooksValid = emailLooksValid || phoneLooksValid;
   const forgotEmailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forgotEmailPreview);
   const passwordsMatch = confirmPassword !== '' && password === confirmPassword;
   const passwordsMismatch = confirmPassword !== '' && password !== confirmPassword;
@@ -198,7 +201,7 @@ export default function Auth() {
     { label: 'تأكيد مطابق', met: passwordsMatch },
   ];
 
-  const canSubmitLogin = emailLooksValid && password.length > 0 && !loading;
+  const canSubmitLogin = loginIdentifierLooksValid && password.length > 0 && !loading;
   const canSubmitRegister = registerChecklist.every((item) => item.met) && !loading;
   const destinationPreview = isRegisterMode
     ? selectedRole === 'pro' ? 'سيتم توجيهك إلى لوحة المحامي بعد إنشاء الحساب.' : 'سيتم توجيهك إلى لوحة العميل بعد إنشاء الحساب.'
@@ -221,7 +224,7 @@ export default function Auth() {
       };
     }
 
-    const matchedAccount = recentAccounts.find((account) => account.email === emailPreview);
+    const matchedAccount = recentAccounts.find((account) => account.email === loginIdentifierPreview);
     if (matchedAccount) {
       return {
         icon: 'fa-clock-rotate-left',
@@ -232,7 +235,7 @@ export default function Auth() {
     }
 
     return null;
-  }, [emailPreview, isRegisterMode, recentAccounts, selectedRole]);
+  }, [isRegisterMode, loginIdentifierPreview, recentAccounts, selectedRole]);
 
   const getFieldError = (fieldName: string) => {
     if (!error) return false;
@@ -243,10 +246,11 @@ export default function Auth() {
       (lowerError.includes('credentials') ||
         lowerError.includes('failed') ||
         error.includes('التحقق') ||
+        error.includes('بيانات الدخول') ||
         error.includes('خطأ'));
 
     if (fieldName === 'name') return error.includes('الاسم');
-    if (fieldName === 'email') return error.includes('البريد') || isLoginError;
+    if (fieldName === 'email') return error.includes('البريد') || error.includes('رقم') || isLoginError;
     if (fieldName === 'password') return (error.includes('كلمة المرور') && !error.includes('تأكيد')) || isLoginError;
     if (fieldName === 'confirmPassword') return error.includes('تأكيد');
     return false;
@@ -270,7 +274,7 @@ export default function Auth() {
     setError(null);
 
     try {
-      const loggedInUser = await login(normalizeEmail(email), password);
+      const loggedInUser = await login(normalizeLoginIdentifier(email), password);
       writeRecentAccount({
         email: loggedInUser.email || normalizeEmail(email),
         name: loggedInUser.name || normalizeEmail(email),
@@ -378,33 +382,30 @@ export default function Auth() {
   const strengthUi = getPasswordStrengthLabel(passwordStrength);
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[linear-gradient(180deg,#f7f2e8_0%,#edf3fb_44%,#f8fbff_100%)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(197,160,89,0.22),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(27,54,93,0.12),transparent_32%)]" />
+    <div className="relative min-h-screen overflow-hidden bg-[#f0f2f5]">
+      <div className="absolute inset-x-0 top-0 h-72 bg-[linear-gradient(180deg,rgba(255,255,255,0.9)_0%,rgba(240,242,245,0)_100%)]" />
 
-      <div className="relative z-10 mx-auto flex min-h-screen max-w-[1600px] flex-col lg:flex-row">
-        <section className="relative order-2 flex w-full overflow-hidden px-6 py-10 sm:px-8 lg:order-1 lg:w-[54%] lg:px-12 lg:py-16">
-          <div className="absolute inset-0 bg-[linear-gradient(160deg,#091224_0%,#0c1730_38%,#16345c_100%)]" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.08),transparent_32%)]" />
-
-          <div className="relative z-10 flex w-full flex-col justify-center gap-8 lg:gap-10">
+      <div className="relative z-10 mx-auto flex min-h-screen max-w-[1180px] flex-col items-center gap-8 px-5 py-8 lg:flex-row lg:justify-between lg:px-8 lg:py-12">
+        <section className="relative order-2 flex w-full px-0 py-4 sm:px-2 lg:order-1 lg:w-[52%] lg:py-0">
+          <div className="relative z-10 flex w-full flex-col justify-center gap-7 lg:gap-8">
             <motion.div
               initial={{ opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.45 }}
               className="flex items-center justify-between"
             >
-              <div className="inline-flex items-center gap-3 rounded-2xl border border-white/12 bg-white/8 px-4 py-3 backdrop-blur-xl">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white/10 text-brand-gold shadow-gold-glow">
+              <div className="inline-flex items-center gap-3">
+                <div className="flex h-[52px] w-[52px] items-center justify-center rounded-2xl bg-brand-navy text-brand-gold shadow-lg shadow-brand-navy/15">
                   <i className="fa-solid fa-scale-balanced text-2xl" />
                 </div>
-                <div className="text-right text-white">
-                  <p className="text-lg font-black leading-none">القسطاس</p>
-                  <p className="mt-1 text-[11px] font-bold text-slate-300">منصة قانونية عراقية رقمية</p>
+                <div className="text-right">
+                  <p className="text-2xl font-black leading-none text-brand-navy">القسطاس</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">منصة قانونية عراقية رقمية</p>
                 </div>
               </div>
-              <div className="hidden rounded-full border border-white/10 bg-white/8 px-4 py-2 text-xs font-bold text-slate-200 backdrop-blur-xl md:flex md:items-center md:gap-2">
-                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,0.8)]" />
-                مصممة لاحتياجات القانون العراقي
+              <div className="hidden rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-bold text-slate-600 shadow-sm md:flex md:items-center md:gap-2">
+                <span className="inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                موثوق وسهل الاستخدام
               </div>
             </motion.div>
 
@@ -412,100 +413,56 @@ export default function Auth() {
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5, delay: 0.05 }}
-              className="max-w-xl text-right text-white"
+              className="max-w-xl text-right"
             >
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-brand-gold/30 bg-brand-gold/10 px-4 py-2 text-[11px] font-black text-brand-lightgold backdrop-blur">
-                <i className="fa-solid fa-sparkles text-[10px]" />
-                منصة ذكية لخدمات قانونية تناسب الواقع العراقي
-              </div>
-              <h1 className="max-w-lg text-3xl font-black leading-[1.15] sm:text-4xl lg:text-[3.1rem]">
-                خدمات قانونية عراقية
-                <span className="mt-2 block text-brand-gold">تنظيم أدق، تواصل أسهل، ومتابعة أوضح.</span>
+              <h1 className="max-w-xl text-4xl font-black leading-[1.12] text-brand-navy sm:text-5xl lg:text-[3.65rem]">
+                مكان واحد لكل ما يخصك قانونياً.
               </h1>
-              <p className="mt-5 max-w-md text-sm font-bold leading-7 text-slate-200 sm:text-[15px]">
-                القسطاس تسهّل الاستشارة، تنظيم الملفات، ومتابعة القضية داخل تجربة رقمية مصممة للمستخدم العراقي.
+              <p className="mt-5 max-w-lg text-xl font-bold leading-9 text-slate-700 sm:text-2xl">
+                تواصل مع محام، تابع قضاياك، واحفظ مستنداتك القانونية بسهولة ووضوح.
               </p>
             </motion.div>
 
-            <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)] xl:items-start">
+            <div className="grid max-w-2xl gap-3 sm:grid-cols-3">
               <motion.div
                 initial={{ opacity: 0, y: 24 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.5, delay: 0.12 }}
-                className="rounded-2xl border border-white/12 bg-white/8 p-5 text-right shadow-2xl backdrop-blur-2xl"
+                className="sm:col-span-3"
               >
-                <div className="flex items-center justify-between gap-4 border-b border-white/10 pb-4">
-                  <p className="text-xs font-black text-brand-lightgold">لماذا القسطاس؟</p>
-                  <p className="text-[11px] font-bold text-slate-300">مزايا عملية مباشرة</p>
-                </div>
-                <div className="mt-5 space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
                   {VALUE_POINTS.map((point, index) => (
-                    <div key={point} className="flex flex-row-reverse items-start gap-4 rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-4">
-                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-gold/16 text-brand-gold">
+                    <div key={point} className="rounded-2xl border border-slate-200 bg-white px-4 py-4 text-right shadow-sm">
+                      <div className="mb-3 mr-auto flex h-9 w-9 items-center justify-center rounded-xl bg-brand-navy/5 text-brand-navy">
                         <span className="text-sm font-black">{index + 1}</span>
                       </div>
-                      <p className="pt-1 text-sm font-bold leading-6 text-slate-100">{point}</p>
+                      <p className="text-sm font-bold leading-6 text-slate-700">{point}</p>
                     </div>
                   ))}
                 </div>
-              </motion.div>
-
-              <motion.div
-                initial={{ opacity: 0, y: 24 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.18 }}
-                className="grid gap-3"
-              >
-                {TRUST_SIGNALS.map((item) => (
-                  <div
-                    key={item.title}
-                    className="rounded-2xl border border-white/10 bg-slate-950/20 p-5 text-right backdrop-blur-xl"
-                  >
-                    <div className="flex flex-row-reverse items-start gap-3">
-                      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-white/10 text-brand-gold">
-                        <i className={`fa-solid ${item.icon}`} />
-                      </div>
-                      <div className="pt-0.5">
-                        <p className="text-[13px] font-black text-white">{item.title}</p>
-                        <p className="mt-1 text-[11px] font-bold leading-5 text-slate-300">{item.text}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
               </motion.div>
             </div>
           </div>
         </section>
 
-        <section className="relative order-1 flex w-full items-center justify-center px-5 py-6 sm:px-8 sm:py-8 lg:order-2 lg:w-[46%] lg:px-10 lg:py-14">
+        <section className="relative order-1 flex w-full items-center justify-center px-0 py-4 lg:order-2 lg:w-[420px] lg:py-0">
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.08 }}
-            className="w-full max-w-xl rounded-[2rem] border border-white/70 bg-white/85 p-4 shadow-[0_30px_90px_-45px_rgba(15,23,42,0.45)] backdrop-blur-2xl sm:p-6 lg:p-7"
+            className="w-full max-w-[420px]"
           >
-            <div className="rounded-[1.6rem] border border-slate-100 bg-[linear-gradient(180deg,rgba(255,255,255,0.96)_0%,rgba(248,250,252,0.92)_100%)] p-5 sm:p-6">
-              <div className="mb-6 flex items-start justify-between gap-4">
-                <div className="text-right">
-                  <div className="inline-flex items-center gap-2 rounded-full bg-brand-navy/5 px-3 py-1.5 text-[11px] font-black text-brand-navy">
-                    <i className={`fa-solid ${isRegisterMode ? 'fa-user-plus' : 'fa-right-to-bracket'} text-[10px]`} />
-                    {isRegisterMode ? 'فتح حساب جديد' : 'تسجيل الدخول'}
-                  </div>
-                  <h2 className="mt-3 text-2xl font-black text-brand-dark sm:text-[2rem]">
-                    {isRegisterMode ? 'ابدأ رحلتك القانونية الآن' : 'مرحباً بعودتك'}
-                  </h2>
-                  <p className="mt-2 text-sm font-bold leading-7 text-slate-500">
-                    {isRegisterMode
-                      ? 'أدخل بياناتك مرة واحدة، وسنجهز لك مساحة تناسب دورك مباشرة.'
-                      : 'سجّل دخولك بسرعة، ثم تابع قضاياك ورسائلك من نفس المكان.'}
-                  </p>
-                </div>
-                <div className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] text-brand-gold shadow-xl shadow-brand-navy/15 sm:flex">
-                  <i className={`fa-solid ${isRegisterMode ? 'fa-user-shield' : 'fa-fingerprint'} text-xl`} />
-                </div>
+            <div className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_12px_32px_rgba(15,23,42,0.14)] sm:p-5">
+              <div className="mb-5 text-center">
+                <h2 className="text-xl font-black text-slate-900">
+                  {isRegisterMode ? 'إنشاء حساب جديد' : 'تسجيل الدخول'}
+                </h2>
+                <p className="mt-1 text-sm font-bold leading-6 text-slate-500">
+                  {isRegisterMode ? 'ابدأ حسابك خلال دقيقة.' : 'تابع قضاياك ورسائلك بسهولة.'}
+                </p>
               </div>
 
-              <div className="mb-6 rounded-[1.4rem] bg-slate-100/80 p-1">
+              <div className="mb-4 rounded-lg bg-slate-100 p-1">
                 <div className="grid grid-cols-2 gap-1">
                   <button
                     type="button"
@@ -513,16 +470,19 @@ export default function Auth() {
                       setAuthUtilityTab('account');
                       switchMode('login');
                     }}
-                    className={`relative rounded-[1.1rem] px-4 py-3 text-sm font-black transition ${!isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
+                    className={`relative overflow-hidden rounded-md px-4 py-3 text-sm font-black transition ${!isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
                       }`}
                   >
                     {!isRegisterMode && (
                       <motion.span
                         layoutId="auth-mode-pill"
-                        className="absolute inset-0 rounded-[1.1rem] bg-white shadow-sm"
+                        className="absolute inset-0 rounded-md bg-white shadow-sm"
                       />
                     )}
-                    <span className="relative z-10">تسجيل الدخول</span>
+                    <span className="relative z-10 inline-flex items-center gap-2">
+                      <i className="fa-solid fa-right-to-bracket text-[12px]" />
+                      تسجيل الدخول
+                    </span>
                   </button>
                   <button
                     type="button"
@@ -530,25 +490,28 @@ export default function Auth() {
                       setAuthUtilityTab('account');
                       switchMode('register');
                     }}
-                    className={`relative rounded-[1.1rem] px-4 py-3 text-sm font-black transition ${isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
+                    className={`relative overflow-hidden rounded-md px-4 py-3 text-sm font-black transition ${isRegisterMode ? 'text-brand-navy' : 'text-slate-500 hover:text-slate-700'
                       }`}
                   >
                     {isRegisterMode && (
                       <motion.span
                         layoutId="auth-mode-pill"
-                        className="absolute inset-0 rounded-[1.1rem] bg-white shadow-sm"
+                        className="absolute inset-0 rounded-md bg-white shadow-sm"
                       />
                     )}
-                    <span className="relative z-10">حساب جديد</span>
+                    <span className="relative z-10 inline-flex items-center gap-2">
+                      <i className="fa-solid fa-user-plus text-[12px]" />
+                      حساب جديد
+                    </span>
                   </button>
                 </div>
               </div>
 
-              <div className="mb-5 grid grid-cols-2 gap-2 rounded-2xl border border-slate-100 bg-white p-1">
+              <div className="mb-4 grid grid-cols-2 gap-2 rounded-lg border border-slate-100 bg-white p-1">
                 <button
                   type="button"
                   onClick={() => setAuthUtilityTab('account')}
-                  className={`rounded-xl px-3 py-2 text-xs font-black transition ${authUtilityTab === 'account' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'}`}
+                  className={`rounded-md px-3 py-2 text-xs font-black transition ${authUtilityTab === 'account' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'}`}
                 >
                   <i className="fa-solid fa-user-lock ml-2"></i>
                   الحساب
@@ -559,7 +522,7 @@ export default function Auth() {
                     setAuthUtilityTab('verify');
                     setError(null);
                   }}
-                  className={`rounded-xl px-3 py-2 text-xs font-black transition ${authUtilityTab === 'verify' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'}`}
+                  className={`rounded-md px-3 py-2 text-xs font-black transition ${authUtilityTab === 'verify' ? 'bg-brand-navy text-white shadow-sm' : 'text-slate-500 hover:bg-slate-50 hover:text-brand-navy'}`}
                 >
                   <i className="fa-solid fa-qrcode ml-2"></i>
                   تحقق مستند
@@ -572,10 +535,10 @@ export default function Auth() {
                   variants={authPanelVariants}
                   initial="hidden"
                   animate="visible"
-                  className={`mb-5 rounded-[1.35rem] border px-4 py-3 text-right ${smartAuthInsight.tone}`}
+                  className={`mb-4 rounded-lg border px-4 py-3 text-right ${smartAuthInsight.tone}`}
                 >
                   <div className="flex flex-row-reverse items-start gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-white/80 shadow-sm">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/80 shadow-sm">
                       <i className={`fa-solid ${smartAuthInsight.icon}`} />
                     </span>
                     <div>
@@ -595,7 +558,7 @@ export default function Auth() {
                     initial="hidden"
                     animate="visible"
                     exit="exit"
-                    className="mb-5 flex items-start gap-3 rounded-[1.3rem] border border-rose-200 bg-rose-50 px-4 py-3 text-right"
+                    className="mb-4 flex items-start gap-3 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-right"
                   >
                     <button
                       type="button"
@@ -933,9 +896,8 @@ export default function Auth() {
                     <button
                       type="submit"
                       disabled={!canSubmitRegister}
-                      className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] px-4 py-4 text-sm font-black text-white shadow-xl shadow-brand-navy/20 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-brand-navy/25 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-md bg-brand-navy px-4 py-3.5 text-sm font-black text-white shadow-sm transition hover:bg-[#10284a] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent_15%,rgba(255,255,255,0.24)_50%,transparent_85%)] opacity-0 transition group-hover:translate-x-full group-hover:opacity-100" />
                       <span className="relative z-10 flex items-center gap-2">
                         <i className="fa-solid fa-user-plus" />
                         فتح الحساب
@@ -954,17 +916,18 @@ export default function Auth() {
                     className="space-y-4"
                   >
                     {recentAccounts.length > 0 && (
-                      <div className="rounded-2xl border border-slate-100 bg-white p-3 shadow-sm">
+                      <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
                         <div className="mb-3 flex items-center justify-between gap-3">
-                          <span className="text-[10px] font-black text-slate-400">مثل فيسبوك</span>
-                          <span className="text-[10px] font-black text-brand-navy">العودة لحساب محفوظ</span>
+                          <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">آمن</span>
+                          <span className="text-[11px] font-black text-brand-navy">العودة لحساب محفوظ</span>
                         </div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {recentAccounts.map((account) => (
                             <div
                               key={account.email}
-                              className="group relative rounded-[1.15rem] border border-slate-200 bg-slate-50/80 p-2 transition hover:border-brand-navy/25 hover:bg-white hover:shadow-sm"
+                              className="group relative overflow-hidden rounded-lg border border-slate-200 bg-white p-2 transition hover:border-brand-navy/25 hover:shadow-md"
                             >
+                              <span className="absolute inset-y-0 right-0 w-1 bg-brand-navy opacity-0 transition group-hover:opacity-100" />
                               <button
                                 type="button"
                                 onClick={() => forgetRecentAccount(account.email)}
@@ -1006,7 +969,7 @@ export default function Auth() {
                       </div>
                     )}
 
-                    <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-3">
+                    <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
                       <div className="mb-2 flex items-center justify-between">
                         <span className="text-[10px] font-black text-slate-400">للتجربة السريعة</span>
                         <span className="text-[10px] font-black text-brand-navy">حسابات جاهزة</span>
@@ -1017,7 +980,7 @@ export default function Auth() {
                             key={demo.email}
                             type="button"
                             onClick={() => handleDemoLogin(demo)}
-                            className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-600 transition hover:border-brand-navy/30 hover:text-brand-navy"
+                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-[11px] font-black text-slate-600 transition hover:border-brand-navy/30 hover:text-brand-navy"
                           >
                             <i className={`fa-solid ${demo.icon} ml-1.5`}></i>
                             {demo.label}
@@ -1028,30 +991,30 @@ export default function Auth() {
 
                     <div>
                       <label className={`mb-2 block text-right text-[11px] font-black tracking-widest ${getFieldError('email') ? 'text-rose-500' : 'text-slate-500'}`}>
-                        البريد الإلكتروني
+                        البريد الإلكتروني أو رقم الموبايل
                       </label>
                       <div className="relative">
                         <input
-                          type="email"
-                          placeholder="your@email.com"
+                          type="text"
+                          placeholder="your@email.com أو 07xxxxxxxxx"
                           value={email}
                           onChange={(e) => handleEmailChange(e.target.value)}
                           onBlur={() => markFieldTouched('email')}
-                          autoComplete="email"
+                          autoComplete="username"
                           required
                           dir="ltr"
-                          className={`w-full rounded-[1.2rem] border px-4 py-4 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('email')
+                          className={`w-full rounded-md border px-4 py-3.5 text-left text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('email')
                             ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
                             : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
                             }`}
                         />
                         <div className="pointer-events-none absolute inset-y-0 right-4 flex items-center text-slate-300">
-                          <i className="fa-solid fa-envelope" />
+                          <i className={`fa-solid ${phoneLooksValid && !emailLooksValid ? 'fa-mobile-screen-button' : 'fa-envelope'}`} />
                         </div>
                       </div>
                       {!getFieldError('email') && touchedFields.has('email') && email && (
-                        <p className={`mt-2 text-right text-[11px] font-bold ${emailLooksValid ? 'text-emerald-600' : 'text-amber-600'}`}>
-                          {emailLooksValid ? 'صيغة البريد تبدو سليمة.' : 'قد تحتاج إلى مراجعة صيغة البريد الإلكتروني.'}
+                        <p className={`mt-2 text-right text-[11px] font-bold ${loginIdentifierLooksValid ? 'text-emerald-600' : 'text-amber-600'}`}>
+                          {loginIdentifierLooksValid ? 'بيانات الدخول تبدو سليمة.' : 'أدخل بريداً صحيحاً أو رقم موبايل صالحاً.'}
                         </p>
                       )}
                     </div>
@@ -1070,7 +1033,7 @@ export default function Auth() {
                           onBlur={() => markFieldTouched('password')}
                           autoComplete="current-password"
                           required
-                          className={`w-full rounded-[1.2rem] border pl-12 pr-4 py-4 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('password')
+                          className={`w-full rounded-md border pl-12 pr-4 py-3.5 text-right text-sm font-bold text-slate-700 outline-none transition placeholder:text-slate-400 focus:bg-white focus:ring-4 ${getFieldError('password')
                             ? 'border-rose-300 bg-rose-50/70 focus:border-rose-500 focus:ring-rose-500/10'
                             : 'border-slate-200 bg-slate-50/80 focus:border-brand-navy focus:ring-brand-navy/10'
                             }`}
@@ -1086,7 +1049,7 @@ export default function Auth() {
                       </div>
                     </div>
 
-                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-[1.2rem] bg-slate-50/80 px-4 py-3">
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-slate-100 bg-white px-4 py-3">
                       <label className="flex cursor-pointer items-center gap-2 text-sm font-bold text-slate-600">
                         <input
                           type="checkbox"
@@ -1108,9 +1071,8 @@ export default function Auth() {
                     <button
                       type="submit"
                       disabled={!canSubmitLogin}
-                      className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-[1.3rem] bg-[linear-gradient(135deg,#1B365D_0%,#0d2a59_100%)] px-4 py-4 text-sm font-black text-white shadow-xl shadow-brand-navy/20 transition hover:-translate-y-0.5 hover:shadow-2xl hover:shadow-brand-navy/25 disabled:cursor-not-allowed disabled:opacity-60"
+                      className="group relative flex w-full items-center justify-center gap-2 overflow-hidden rounded-md bg-brand-navy px-4 py-3.5 text-sm font-black text-white shadow-sm transition hover:bg-[#10284a] disabled:cursor-not-allowed disabled:opacity-60"
                     >
-                      <span className="absolute inset-0 bg-[linear-gradient(120deg,transparent_15%,rgba(255,255,255,0.24)_50%,transparent_85%)] opacity-0 transition group-hover:translate-x-full group-hover:opacity-100" />
                       <span className="relative z-10 flex items-center gap-2">
                         <i className="fa-solid fa-right-to-bracket" />
                         دخول للمنصة
