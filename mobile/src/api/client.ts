@@ -456,6 +456,13 @@ class ApiClient {
     });
   }
 
+  trackEvent(event: { name: string; page: string; resourceId?: string | null; metadata?: any }) {
+    return this.request<any>('/api/app/events', {
+      method: 'POST',
+      body: JSON.stringify(event),
+    });
+  }
+
   sendSupportRequest(data: { name: string; phone: string; subject: string; message: string }) {
     return this.request<any>('/api/support/request', {
       method: 'POST',

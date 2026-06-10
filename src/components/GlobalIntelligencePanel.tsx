@@ -23,6 +23,10 @@ export default function GlobalIntelligencePanel({ open, onClose }: GlobalIntelli
   const healthChecks = data?.healthChecks || [];
   const dailyBrief = data?.dailyBrief || null;
   const caseRisk = data?.caseRisk || [];
+  const nextBestAction = data?.nextBestAction || null;
+  const sessionMemory = data?.sessionMemory || null;
+  const behavior = data?.behavior || null;
+  const journeyScore = data?.journeyScore || null;
   const topPriority = recommendations[0] || null;
 
   const urgencyLabel = useMemo(() => {
@@ -105,9 +109,62 @@ export default function GlobalIntelligencePanel({ open, onClose }: GlobalIntelli
                   {assistant?.aiAction || 'ابدأ تحليل ذكي'}
                 </button>
               </div>
+
+              {nextBestAction && (
+                <button
+                  type="button"
+                  onClick={() => openTarget(nextBestAction.target)}
+                  className="mt-3 flex w-full items-center justify-between gap-3 rounded-[1.25rem] border border-brand-gold/20 bg-brand-gold/10 px-4 py-3 text-right transition hover:bg-brand-gold/15"
+                >
+                  <i className="fa-solid fa-arrow-left text-xs text-brand-gold"></i>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[10px] font-black text-brand-gold">أفضل إجراء الآن</p>
+                    <p className="mt-1 truncate text-sm font-black text-brand-dark">{nextBestAction.label}</p>
+                  </div>
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white text-brand-navy shadow-sm">
+                    <i className={`fa-solid ${nextBestAction.icon || 'fa-sparkles'} text-xs`}></i>
+                  </span>
+                </button>
+              )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 custom-scrollbar">
+              {(sessionMemory || behavior || journeyScore) && (
+                <section className="mb-4 rounded-[1.35rem] border border-slate-100 bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="rounded-full bg-brand-navy/5 px-3 py-1 text-[10px] font-black text-brand-navy">
+                      ذاكرة الجلسة
+                    </span>
+                    <h3 className="text-sm font-black text-brand-dark">ذكاء التفاعل</h3>
+                  </div>
+                  {sessionMemory?.message && (
+                    <button
+                      type="button"
+                      onClick={() => openTarget(sessionMemory.resumeTarget)}
+                      className="mb-3 flex w-full items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-3 text-right transition hover:bg-slate-100"
+                    >
+                      <i className="fa-solid fa-arrow-left text-xs text-slate-400"></i>
+                      <p className="flex-1 text-xs font-bold leading-5 text-slate-600">{sessionMemory.message}</p>
+                      <i className="fa-solid fa-clock-rotate-left text-brand-navy"></i>
+                    </button>
+                  )}
+                  {behavior?.profile && (
+                    <p className="rounded-xl bg-brand-navy/5 px-3 py-2 text-xs font-bold leading-6 text-brand-navy">{behavior.profile}</p>
+                  )}
+                  {journeyScore && (
+                    <div className="mt-3">
+                      <div className="mb-2 flex items-center justify-between text-[10px] font-black">
+                        <span className="text-brand-navy">{journeyScore.score}%</span>
+                        <span className="text-slate-500">{journeyScore.label}</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-brand-navy" style={{ width: `${journeyScore.score}%` }} />
+                      </div>
+                    </div>
+                  )}
+                </section>
+              )}
+
               <div className="mb-4 grid grid-cols-2 gap-3">
                 {healthChecks.map((item: any) => (
                   <div key={item.label} className="rounded-2xl border border-slate-100 bg-slate-50 p-3">

@@ -111,6 +111,7 @@ function Shell() {
   const [activeRoute, setActiveRoute] = useState<RouteKey>('home');
   const [chromeHidden, setChromeHidden] = useState(false);
   const touchStartY = useRef(0);
+  const previousRouteRef = useRef<RouteKey | null>(null);
   const chromeProgress = useRef(new Animated.Value(0)).current;
   const primaryRoutes = useMemo(() => (user ? getPrimaryRoutesForRole(user.role) : []), [user?.role]);
   const tabs = useMemo(() => [...primaryRoutes.map((route) => primaryTabConfig[route]), moreTab], [primaryRoutes]);
@@ -148,6 +149,19 @@ function Shell() {
   useEffect(() => {
     setChromeVisibility(false);
   }, [activeRoute]);
+
+  useEffect(() => {
+    if (!user) return;
+    void apiClient.trackEvent({
+      name: 'route_changed',
+      page: 'mobile',
+      metadata: {
+        route: activeRoute,
+        previousRoute: previousRouteRef.current,
+      },
+    }).catch(() => undefined);
+    previousRouteRef.current = activeRoute;
+  }, [activeRoute, user?.id]);
 
   if (!user) return <AuthScreen />;
 

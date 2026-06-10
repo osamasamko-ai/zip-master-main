@@ -4,7 +4,7 @@ import { useNavigate, Outlet, Link, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion, useReducedMotion, useScroll } from 'framer-motion';
 import { useNotifications } from '../context/NotificationContext';
 import GlobalIntelligencePanel from './GlobalIntelligencePanel';
-import { useUserIntelligence } from '../hooks/useIntelligence';
+import { useTrackEvent, useUserIntelligence } from '../hooks/useIntelligence';
 import apiClient from '../api/client';
 
 const routePreloaders: Record<string, () => Promise<unknown>> = {
@@ -208,6 +208,7 @@ export default function MainLayout() {
   const { scrollYProgress } = useScroll();
   const { NotificationBell, notifications, isNotificationsOpen, setIsNotificationsOpen, markAsRead, deleteNotification, clearAllNotifications } = useNotifications();
   const { data: intelligence } = useUserIntelligence();
+  const { trackEvent: trackAppEvent } = useTrackEvent('app');
   const [systemSettings, setSystemSettings] = useState<{
     maintenanceMode: boolean;
     announcement: string;
@@ -651,6 +652,13 @@ export default function MainLayout() {
     setMoreNavOpen(false);
     setIntelligenceOpen(false);
   }, [location.pathname]);
+
+  useEffect(() => {
+    trackAppEvent('route_changed', {
+      path: location.pathname,
+      previousPath: previousRouteRef.current,
+    });
+  }, [location.pathname, trackAppEvent]);
 
   useEffect(() => {
     const root = document.documentElement;

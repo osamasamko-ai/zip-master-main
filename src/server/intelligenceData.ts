@@ -225,6 +225,11 @@ export const getUserIntelligence = async (userId: string) => {
     .sort((left, right) => right[1].count - left[1].count)
     .slice(0, 8)
     .map(([id, value]) => ({ id, label: value.label, count: value.count }));
+  const latestEvent = events[0] || null;
+  const latestEventMetadata = latestEvent ? parseMetadata(latestEvent.metadata) : {};
+  const repeatPage = topPages[0] || null;
+  const repeatSearch = topSearches[0] || null;
+  const repeatCategory = topCategories[0] || null;
 
   const isProfessional = isProfessionalUser(user?.role);
   const ownedCases = isProfessional || user?.role === 'admin' ? lawyerCases : clientCases;
@@ -514,6 +519,79 @@ export const getUserIntelligence = async (userId: string) => {
     { label: 'رسائل جديدة', value: unreadCases.reduce((total, item) => total + item.unreadCount, 0) },
     { label: 'تنبيهات غير مقروءة', value: notifications.length },
   ];
+  const nextBestAction = recommendations[0]
+    ? {
+        id: recommendations[0].id,
+        label: recommendations[0].quickAction?.label || recommendations[0].action || recommendations[0].title,
+        title: recommendations[0].title,
+        description: recommendations[0].description,
+        target: recommendations[0].quickAction?.target || recommendations[0].target,
+        icon: recommendations[0].quickAction?.icon || recommendations[0].icon || 'fa-sparkles',
+        priority: recommendations[0].priority || 'low',
+        aiBrief: recommendations[0].aiBrief,
+      }
+    : {
+        id: 'open-ai',
+        label: 'اسأل المساعد الذكي',
+        title: 'كل شيء مستقر حالياً',
+        description: 'لا توجد أولوية عاجلة، ويمكن للمساعد تحليل أي سؤال قانوني لديك.',
+        target: '/aichat',
+        icon: 'fa-robot',
+        priority: 'low',
+        aiBrief: makeAiBrief({
+          title: 'تحليل جلسة عامة',
+          context: 'لا توجد أولوية عاجلة حالياً، لكن المستخدم يريد متابعة ذكية.',
+          nextStep: 'اقترح أفضل سؤال أو إجراء قانوني تال.',
+        }),
+      };
+  const journeyCompleted = [
+    Boolean(user?.phone),
+    Boolean(user?.img),
+    allCases.length > 0,
+    pendingDocuments.length === 0,
+    unreadCases.length === 0,
+    pendingInvoices.length === 0,
+  ].filter(Boolean).length;
+  const journeyScore = {
+    score: Math.round((journeyCompleted / 6) * 100),
+    label: journeyCompleted >= 5 ? 'جاهزية عالية' : journeyCompleted >= 3 ? 'جاهزية متوسطة' : 'يحتاج إكمال',
+    missing: [
+      !user?.phone ? 'إضافة رقم الموبايل' : null,
+      !user?.img ? 'إضافة صورة شخصية' : null,
+      allCases.length === 0 ? 'فتح أو متابعة أول ملف' : null,
+      pendingDocuments.length > 0 ? 'إكمال الوثائق المطلوبة' : null,
+      unreadCases.length > 0 ? 'قراءة الرسائل الجديدة' : null,
+      pendingInvoices.length > 0 ? 'مراجعة المدفوعات' : null,
+    ].filter(Boolean),
+  };
+  const behavior = {
+    profile: repeatCategory
+      ? `اهتمامك الأوضح حالياً هو ${repeatCategory.label}.`
+      : repeatSearch
+        ? `تكرر بحثك عن ${repeatSearch.label}.`
+        : repeatPage
+          ? `أكثر صفحة تزورها حالياً: ${repeatPage.label}.`
+          : 'لا توجد بيانات تفاعل كافية بعد.',
+    signals: [
+      repeatPage ? { label: 'أكثر صفحة', value: repeatPage.label, count: repeatPage.count } : null,
+      repeatSearch ? { label: 'أكثر بحث', value: repeatSearch.label, count: repeatSearch.count } : null,
+      repeatCategory ? { label: 'أكثر اهتمام', value: repeatCategory.label, count: repeatCategory.count } : null,
+      latestEvent ? { label: 'آخر تفاعل', value: latestEvent.name, count: 1 } : null,
+    ].filter(Boolean),
+    suggestedNudge: nextBestAction.label,
+  };
+  const sessionMemory = {
+    lastPage: latestEvent?.page || '',
+    lastAction: latestEvent?.name || '',
+    lastLabel: cleanText(latestEventMetadata.title || latestEventMetadata.label || latestEventMetadata.query || latestEvent?.resourceId || ''),
+    resumeLabel: recentResources[0]?.label || repeatSearch?.label || repeatCategory?.label || '',
+    resumeTarget: recentResources[0]?.page === 'legalDocs' ? '/legal' : latestEvent?.page === 'aiChat' ? '/aichat' : nextBestAction.target,
+    message: recentResources[0]
+      ? `يمكنك المتابعة من "${recentResources[0].label}".`
+      : repeatSearch
+        ? `يمكنك متابعة بحث "${repeatSearch.label}".`
+        : 'سنحفظ آخر تفاعلاتك لنقترح العودة إليها لاحقاً.',
+  };
 
   return {
     totals: {
@@ -532,6 +610,10 @@ export const getUserIntelligence = async (userId: string) => {
     topPages,
     recentResources: recentResources.slice(0, 6),
     recommendations,
+    behavior,
+    sessionMemory,
+    nextBestAction,
+    journeyScore,
     healthChecks,
     caseRisk,
     dailyBrief: {

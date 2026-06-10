@@ -97,6 +97,10 @@ export function IntelligenceScreen({ onOpen }: IntelligenceScreenProps) {
   const caseRisk = data?.caseRisk || [];
   const healthChecks = data?.healthChecks || [];
   const assistant = data?.assistant;
+  const nextBestAction = data?.nextBestAction;
+  const sessionMemory = data?.sessionMemory;
+  const behavior = data?.behavior;
+  const journeyScore = data?.journeyScore;
   const quickActions = useMemo(() => {
     return recommendations
       .map((item: any) => item.quickAction ? { ...item.quickAction, source: item } : null)
@@ -145,6 +149,50 @@ export function IntelligenceScreen({ onOpen }: IntelligenceScreenProps) {
               <Ionicons name="arrow-back-outline" size={17} color="#fff" />
               <Text style={styles.primaryActionText}>{assistant.nextAction || assistant.aiAction || 'افتح الإجراء'}</Text>
             </Pressable>
+          </Card>
+        ) : null}
+
+        {nextBestAction ? (
+          <Card>
+            <View style={styles.sectionHeader}>
+              <Pill label="Next Best Action" tone={toneForPriority(nextBestAction.priority)} />
+              <Text style={styles.sectionTitle}>أفضل إجراء الآن</Text>
+            </View>
+            <Pressable onPress={() => openTarget(nextBestAction.target)} style={styles.nextActionCard}>
+              <Ionicons name={iconFromServer(nextBestAction.icon)} size={20} color={colors.blue} />
+              <View style={styles.flex}>
+                <Text style={styles.itemTitle}>{nextBestAction.label}</Text>
+                <Text style={styles.itemNote}>{nextBestAction.description || nextBestAction.title}</Text>
+              </View>
+              <Ionicons name="chevron-back-outline" size={18} color={colors.muted} />
+            </Pressable>
+          </Card>
+        ) : null}
+
+        {(sessionMemory || behavior || journeyScore) ? (
+          <Card>
+            <View style={styles.sectionHeader}>
+              <Pill label="Memory" tone="blue" />
+              <Text style={styles.sectionTitle}>ذاكرة التفاعل</Text>
+            </View>
+            {sessionMemory?.message ? (
+              <Pressable onPress={() => openTarget(sessionMemory.resumeTarget)} style={styles.memoryBox}>
+                <Ionicons name="time-outline" size={18} color={colors.blue} />
+                <Text style={styles.memoryText}>{sessionMemory.message}</Text>
+              </Pressable>
+            ) : null}
+            {behavior?.profile ? <Text style={styles.behaviorText}>{behavior.profile}</Text> : null}
+            {journeyScore ? (
+              <View style={styles.journeyBox}>
+                <View style={styles.sectionHeader}>
+                  <Text style={styles.confidenceText}>{journeyScore.score}%</Text>
+                  <Text style={styles.itemTitle}>{journeyScore.label}</Text>
+                </View>
+                <View style={styles.journeyTrack}>
+                  <View style={[styles.journeyFill, { width: `${Math.min(100, Math.max(0, journeyScore.score || 0))}%` }]} />
+                </View>
+              </View>
+            ) : null}
           </Card>
         ) : null}
 
@@ -354,6 +402,17 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     textAlign: 'right',
   },
+  behaviorText: {
+    backgroundColor: colors.blueTint,
+    borderRadius: 8,
+    color: colors.blue,
+    fontSize: 12,
+    fontWeight: '900',
+    lineHeight: 20,
+    marginTop: 10,
+    padding: 10,
+    textAlign: 'right',
+  },
   heroCard: {
     backgroundColor: colors.navySoft,
   },
@@ -421,6 +480,49 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     marginTop: 8,
     textAlign: 'right',
+  },
+  journeyBox: {
+    marginTop: 10,
+  },
+  journeyFill: {
+    backgroundColor: colors.blue,
+    borderRadius: 999,
+    height: 7,
+  },
+  journeyTrack: {
+    backgroundColor: colors.tint,
+    borderRadius: 999,
+    height: 7,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  memoryBox: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: 8,
+    flexDirection: 'row-reverse',
+    gap: 8,
+    marginTop: 10,
+    padding: 10,
+  },
+  memoryText: {
+    color: colors.muted,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '800',
+    lineHeight: 20,
+    textAlign: 'right',
+  },
+  nextActionCard: {
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderColor: colors.line,
+    borderRadius: 8,
+    borderWidth: 1,
+    flexDirection: 'row-reverse',
+    gap: 10,
+    marginTop: 10,
+    padding: 11,
   },
   primaryAction: {
     alignItems: 'center',
